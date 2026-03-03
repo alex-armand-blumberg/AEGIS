@@ -55,7 +55,7 @@ AEGIS aims to bridge that gap.
 
 Rolling 30-day fatalities with escalation detection:
 
-![AEGIS Example](images/example_plot.png)
+![AEGIS Example](download.png)
 
 
 
