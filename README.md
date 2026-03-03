@@ -40,11 +40,15 @@ AEGIS aims to bridge that gap.
  5. GDELT
 
 # Roadmap
-• Weeks 1–2: Data acquisition and normalization
+  Weeks 1–2: Data acquisition and normalization
 
-• Weeks 3–4: Indicator definition and time-window modeling
-• Weeks 5–6: Historical case testing
-• Weeks 7–8: Risk scoring framework
-• Weeks 9–10: Visualization and documentation
+  Weeks 3–4: Indicator definition and time-window modeling
+
+  Weeks 5–6: Historical case testing
+ 
+  Weeks 7–8: Risk scoring framework
+ 
+  Weeks 9–10: Visualization and documentation
+
 
 
