@@ -27,10 +27,10 @@ AEGIS aims to bridge that gap.
  4. Produce explainable risk outputs for decision-makers
 
 # Success Metrics
- • Percentage of historical escalations preceded by identified indicators
- • Average lead-time before escalation
- • False positive rate
- • Correlation strength between signal clusters and escalation onset
+ 1. Percentage of historical escalations preceded by identified indicators
+ 2. Average lead-time before escalation
+ 3. False positive rate
+ 4. Correlation strength between signal clusters and escalation onset
 
  # Data Sources (Planned)
  1. UCDP Armed Conflict Dataset
