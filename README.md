@@ -7,21 +7,21 @@ AEGIS is a structured early-warning framework designed to identify measurable in
 The system integrates open-source datasets on conflicts and political events to generate explainable risk assessments that support operational decision-making.
 
 # Problem Statement
-Conflict escalation often appears sudden in public discourse, but historical cases show measurable precursor signals — including diplomatic deterioration, protest activity, military movements, and alliance shifts.
+Conflict escalation often appears sudden in public discourse, but historical cases show measurable precursor signals, including diplomatic deterioration, protest activity, military movements, and alliance shifts.
 
 These signals exist in fragmented datasets and are rarely structured into decision-ready risk visibility tools.
 
 AEGIS aims to bridge that gap.
 
 # Intended Users
-  • Policy researchers
+    • Policy researchers
 	•	National security analysts
 	•	Congressional staff
 	•	Risk assessment teams
 	•	NGOs operating in fragile states
 
 # Core Objectives
-  1. Identify recurring measurable indicators preceding escalation events
+    1. Identify recurring measurable indicators preceding escalation events
 	2. Define quantifiable lead-time windows (30/60/90 days)
 	3. Develop a structured escalation risk scoring framework
 	4. Produce explainable risk outputs for decision-makers
