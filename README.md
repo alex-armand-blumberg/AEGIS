@@ -14,17 +14,17 @@ These signals exist in fragmented datasets and are rarely structured into decisi
 AEGIS aims to bridge that gap.
 
 # Intended Users
-    • Policy researchers
-	•	National security analysts
-	•	Congressional staff
-	•	Risk assessment teams
-	•	NGOs operating in fragile states
+ 1. Policy researchers
+ 2. National security analysts
+ 3. Congressional staff
+ 4. Risk assessment teams
+ 5. NGOs operating in fragile states
 
 # Core Objectives
-    1. Identify recurring measurable indicators preceding escalation events
-	2. Define quantifiable lead-time windows (30/60/90 days)
-	3. Develop a structured escalation risk scoring framework
-	4. Produce explainable risk outputs for decision-makers
+ 1. Identify recurring measurable indicators preceding escalation events
+ 2. Define quantifiable lead-time windows (30/60/90 days)
+ 3. Develop a structured escalation risk scoring framework
+ 4. Produce explainable risk outputs for decision-makers
 
 # Success Metrics
  • Percentage of historical escalations preceded by identified indicators
