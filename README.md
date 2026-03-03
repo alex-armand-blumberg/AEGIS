@@ -51,4 +51,11 @@ AEGIS aims to bridge that gap.
   Weeks 9–10: Visualization and documentation
 
 
+  ## Example Output
+
+Rolling 30-day fatalities with escalation detection:
+
+![AEGIS Example](images/example_plot.png)
+
+
 
