@@ -88,6 +88,6 @@ plt.xlabel("Date")
 plt.ylabel("Rolling 30-Day Fatalities")
 plt.tight_layout()
 
-plt.savefig("ukraine_escalation_plot.png", dpi=300, bbox_inches="tight")
+plt.savefig("download.png", dpi=300, bbox_inches="tight")
 
 plt.show()
