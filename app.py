@@ -315,13 +315,14 @@ if show_map:
 
             # Choropleth: locationmode=country names (works for many common names)
             fig = px.choropleth(
-                by_country,
-                locations="country",
-                locationmode="country names",
-                color="fatalities",
-                hover_name="country",
-                title="Fatalities by country (selected date range)"
-            )
+    by_country,
+    locations="country",
+    locationmode="country names",
+    color="fatalities",
+    hover_name="country",
+    title="Fatalities by country (selected date range)",
+    color_continuous_scale="Blues_r"
+)
             fig.update_layout(margin=dict(l=0, r=0, t=60, b=0))
             st.plotly_chart(fig, use_container_width=True)
 
