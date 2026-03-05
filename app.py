@@ -189,6 +189,7 @@ country_name = st.sidebar.text_input(
 # ----------------------------
 # Advanced settings
 # ----------------------------
+st.write("")
 with st.sidebar.expander("Advanced settings"):
 
     country_col = st.text_input(
