@@ -2,6 +2,7 @@ import io
 import os
 from pathlib import Path
 from datetime import date
+import base64
 
 import numpy as np
 import pandas as pd
