@@ -235,7 +235,13 @@ override_map_dates = st.sidebar.checkbox(
 # ----------------------------
 # Main header
 # ----------------------------
-st.title("AEGIS — Escalation Detection Demo")
+col1, col2 = st.columns([1, 12])
+
+with col1:
+    st.image("logo.png", width=60)
+
+with col2:
+    st.title("AEGIS — Escalation Detection Demo")
 st.caption("Upload a dataset (CSV) and choose a country to generate the rolling fatalities plot and escalation-start markers.")
 
 # ----------------------------
