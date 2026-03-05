@@ -362,6 +362,14 @@ with st.sidebar.expander("Advanced Settings"):
     
 run_btn = st.sidebar.button("Generate plot")
 
+st.sidebar.markdown("---")
+    "<div style='opacity:0.6; font-size:13px;'>"
+    "Data sources: UCDP GED (1989–present) via HuggingFace. "
+    "News headlines via Google News RSS."
+    "</div>",
+    unsafe_allow_html=True
+)
+
 # Map controls
 st.sidebar.markdown("---")
 show_map = st.sidebar.checkbox(
@@ -416,15 +424,6 @@ with st.sidebar.expander("Limitations"):
 
 - Improved fatality normalization across datasets
 """)
-
-st.markdown("---")
-st.markdown(
-    "<div style='opacity:0.6; font-size:13px;'>"
-    "Data sources: UCDP GED (1989–present) via HuggingFace. "
-    "News headlines via Google News RSS."
-    "</div>",
-    unsafe_allow_html=True
-)
 
 
 # ----------------------------
