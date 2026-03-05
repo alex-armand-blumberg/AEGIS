@@ -451,7 +451,7 @@ def load_world_dataset_for_map() -> pd.DataFrame:
 # ----------------------------
 if show_map:
     st.markdown("## Interactive map")
-    st.caption("Data source: HuggingFace hosted https://UCDP.uu.se/ world dataset")
+    st.caption("Data source: HuggingFace hosted UCDP world dataset")
 
     if not _HAS_PLOTLY:
         st.info("Interactive map requires Plotly. Add `plotly` to requirements.txt to enable it.")
