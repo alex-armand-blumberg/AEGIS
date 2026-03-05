@@ -21,7 +21,7 @@ except Exception:
 # ----------------------------
 st.set_page_config(
     page_title="AEGIS — Escalation Detection Demo",
-    page_icon="logo.png",
+    page_icon="ZoomedLogo.png",
     layout="wide"
 )
 
