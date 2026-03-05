@@ -195,13 +195,13 @@ country_col = st.sidebar.text_input(
 date_col = st.sidebar.text_input(
     "Name of Date Column",
     "date_start",
-    help="Column name that contains the event date (parsable as a date/time)."
+    help="Column name that contains the event date."
 )
 
 fatalities_col = st.sidebar.text_input(
     "Name of Fatalities Column",
     "best",
-    help="Column name that contains fatalities (numeric)."
+    help="Column name that contains fatalities #."
 )
 
 rolling_window = st.sidebar.number_input(
@@ -211,13 +211,13 @@ rolling_window = st.sidebar.number_input(
 
 thresholds_raw = st.sidebar.text_input(
     "Escalation threshold(s) (comma-separated)",
-    "25",
+    "25,1000",
     help="One or two thresholds. Example: 25 or 25,50"
 )
 
 persistence_days = st.sidebar.number_input(
     "Persistence (consecutive days above threshold)",
-    min_value=1, max_value=60, value=3, step=1
+    min_value=1, max_value=60, value=7, step=1
 )
 
 run_btn = st.sidebar.button("Generate plot")
@@ -233,7 +233,7 @@ show_map = st.sidebar.checkbox(
 override_map_dates = st.sidebar.checkbox(
     "Override map date range",
     value=False,
-    help="If off, the map automatically uses the min/max dates in the data."
+    help="If off, the map automatically uses the min/max dates in your dataset."
 )
 
 st.sidebar.markdown("---")
@@ -242,16 +242,23 @@ with st.sidebar.expander("Limitations"):
     st.markdown("""
 **Current limitations of AEGIS**
 
-• Fatality totals aggregate all events since 1989  
-• Some conflicts may be overcounted due to event duplication  
-• Escalation detection currently uses simple rolling thresholds  
-• Geographic precision is limited to country-level aggregation  
+• Fatality totals aggregate all events since 1989.
+
+• Some conflicts may be overcounted due to event duplication.
+
+• Escalation detection currently uses simple rolling thresholds.
+
+• Geographic precision is limited to country-level aggregation.  
+
 
 **Planned improvements**
 
-• Subnational geolocation mapping  
-• Actor-level escalation detection  
+• Subnational geolocation mapping 
+
+• Actor-level escalation detection
+
 • Real-time conflict ingestion  
+
 • Improved fatality normalization across datasets
 """)
 
