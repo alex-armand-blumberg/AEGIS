@@ -5,7 +5,13 @@ from pathlib import Path
 
 st.set_page_config(page_title="AEGIS Escalation Detection", layout="wide")
 
-logo = "logo1.mp4"  # put your logo file in the repo
+video_html = """
+<video autoplay loop muted width="100%">
+  <source src="logo1.mp4" type="video/mp4">
+</video>
+"""
+
+st.markdown(video_html, unsafe_allow_html=True)
 
 col1, col2 = st.columns([1,6])
 
