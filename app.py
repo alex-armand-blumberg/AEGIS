@@ -19,6 +19,16 @@ except Exception:
 # ----------------------------
 # Config
 # ----------------------------
+
+import feedparser
+
+st.subheader("Current Conflict News")
+
+feed = feedparser.parse("https://news.google.com/rss/search?q=conflict+war+geopolitics")
+
+for entry in feed.entries[:5]:
+    st.markdown(f"• [{entry.title}]({entry.link})")
+
 st.set_page_config(
     page_title="AEGIS — Escalation Detection Demo",
     page_icon="ZoomedLogo.png",
