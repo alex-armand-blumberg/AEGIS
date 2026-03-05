@@ -133,7 +133,7 @@ daily = daily.set_index("date").reindex(full_range).fillna({"fatalities": 0.0})
 daily.index.name = "date"
 daily = daily.reset_index()
 
-return daily
+    return daily
 
 
 def detect_escalation(
