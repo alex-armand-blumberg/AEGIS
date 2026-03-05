@@ -450,12 +450,16 @@ def load_world_dataset_for_map() -> pd.DataFrame:
 # Interactive map
 # -------------------------------
 
+# -------------------------------
+# Interactive map
+# -------------------------------
+
 st.markdown("## Interactive map")
 st.caption("Data source: HuggingFace hosted world dataset")
 
 try:
 
-    # Filter data to selected date range
+    # Use the dataset already loaded in the app
     world_slice = df_raw_plot.copy()
 
     # Aggregate fatalities by country
@@ -465,7 +469,6 @@ try:
         .sort_values("fatalities", ascending=False)
     )
 
-    # Create choropleth
     fig = px.choropleth(
         by_country,
         locations="country",
@@ -480,15 +483,12 @@ try:
         color_continuous_scale="Blues_r"
     )
 
-    # Clean layout
     fig.update_layout(
         margin=dict(l=0, r=0, t=60, b=0)
     )
 
-    # Render map
     st.plotly_chart(fig, use_container_width=True)
 
-    # Help text
     st.caption(
         "To change the date range, check the 'Override map data range' box in the sidebar."
     )
