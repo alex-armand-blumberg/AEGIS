@@ -37,7 +37,7 @@ use_sample = st.sidebar.checkbox(
 
 uploaded = None
 if not use_sample:
-    uploaded = st.sidebar.file_uploader("Upload CSV", type=["csv"])
+    uploaded = st.sidebar.file_uploader("Upload CSV", type=["csv"], help="Upload Your Conflict Data Here")
 
 country_name = st.sidebar.text_input(
     "Country",
