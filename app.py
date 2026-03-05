@@ -31,7 +31,9 @@ UKRAINE_SAMPLE_PATH = Path("ukraine_sample.csv")
 # HuggingFace-hosted world dataset (direct "resolve" link)
 HF_WORLD_CSV_URL = "https://huggingface.co/datasets/alex-armand-blumberg/UCDP/resolve/main/GEDEvent_v25_1%203.csv"
 
-# Sidebar video (optional; if missing, it won't crash)
+# Sidebar video (optional
+
+if missing, it won't crash)
 SIDEBAR_VIDEO_PATH = Path("logo1.mp4")
 
 
@@ -93,11 +95,11 @@ def read_csv_upload(uploaded_file) -> pd.DataFrame:
 def download_world_csv_bytes(url: str) -> bytes:
     """
     Download the world dataset once (cached).
-    NOTE: Large file; caching helps avoid re-downloading.
+    NOTE: Large file, caching helps avoid re-downloading.
     """
     r = requests.get(url, stream=True, timeout=120)
     r.raise_for_status()
-    # Some hosts compress; requests handles decoding automatically.
+    # Some hosts compress requests handles decoding automatically.
     return r.content
 
 
@@ -397,7 +399,7 @@ with st.sidebar:
 
     st.divider()
 
-    # Map date range controls (default auto; advanced edit in sidebar)
+    # Map date range controls (default auto advanced edit in sidebar)
     edit_map_range = st.checkbox(
         "Edit map date range",
         value=False,
@@ -473,7 +475,7 @@ else:
         if pd.isna(dmin) or pd.isna(dmax):
             raise ValueError("Map couldn't determine date range (date parsing failed).")
 
-        # Default: automatic full range; optional edit in sidebar
+        # Default: automatic full range optional edit in sidebar
         if edit_map_range:
             start_date, end_date = st.sidebar.date_input(
                 "Map date range",
