@@ -1,7 +1,7 @@
 import io
 import csv
 from pathlib import Path
-from datetime import date
+from datetime import date, timedelta
 
 import pandas as pd
 import streamlit as st
@@ -36,10 +36,6 @@ def _looks_like_html(b: bytes) -> bool:
 
 
 def _sniff_delimiter(text_sample: str) -> str | None:
-    """
-    Try to detect delimiter (comma, tab, semicolon, pipe).
-    Returns a delimiter or None if unsure.
-    """
     try:
         sniffer = csv.Sniffer()
         dialect = sniffer.sniff(text_sample, delimiters=[",", "\t", ";", "|"])
@@ -49,13 +45,6 @@ def _sniff_delimiter(text_sample: str) -> str | None:
 
 
 def safe_read_csv_bytes(data: bytes) -> pd.DataFrame:
-    """
-    Read CSV bytes robustly:
-    - Detect & reject HTML (common when downloads are blocked)
-    - Try multiple encodings
-    - Sniff delimiter
-    - Use python engine fallback + on_bad_lines skip
-    """
     if not data or len(data) < 5:
         raise ValueError("File is empty or too small to be a CSV.")
 
@@ -64,7 +53,6 @@ def safe_read_csv_bytes(data: bytes) -> pd.DataFrame:
             "This file looks like HTML (not a CSV). If this came from a host, it may be a blocked download page."
         )
 
-    # Try decoding a small sample for delimiter sniffing
     encodings_to_try = ["utf-8", "utf-8-sig", "cp1252", "latin1"]
     sample_text = None
     used_encoding = None
@@ -77,41 +65,24 @@ def safe_read_csv_bytes(data: bytes) -> pd.DataFrame:
             continue
 
     if sample_text is None:
-        # last resort: decode replacing errors
         sample_text = data[:200_000].decode("utf-8", errors="replace")
         used_encoding = "utf-8 (errors=replace)"
 
     delim = _sniff_delimiter(sample_text)
 
-    # Try a "normal" read first (fast C engine)
-    # If delimiter sniff failed, let pandas infer with sep=None on python engine.
     read_attempts = []
-
     if delim is not None:
-        read_attempts.append(
-            dict(encoding=used_encoding, sep=delim, engine="c", on_bad_lines="skip")
-        )
-        # Sometimes the C engine is stricter; try python too
-        read_attempts.append(
-            dict(encoding=used_encoding, sep=delim, engine="python", on_bad_lines="skip")
-        )
+        read_attempts.append(dict(encoding=used_encoding, sep=delim, engine="c", on_bad_lines="skip"))
+        read_attempts.append(dict(encoding=used_encoding, sep=delim, engine="python", on_bad_lines="skip"))
     else:
-        # Let pandas infer delimiter
-        read_attempts.append(
-            dict(encoding=used_encoding, sep=None, engine="python", on_bad_lines="skip")
-        )
+        read_attempts.append(dict(encoding=used_encoding, sep=None, engine="python", on_bad_lines="skip"))
 
-    # Also try alternate encodings if parse fails
     for enc in ["utf-8", "utf-8-sig", "cp1252", "latin1"]:
         if enc != used_encoding:
             if delim is not None:
-                read_attempts.append(
-                    dict(encoding=enc, sep=delim, engine="python", on_bad_lines="skip")
-                )
+                read_attempts.append(dict(encoding=enc, sep=delim, engine="python", on_bad_lines="skip"))
             else:
-                read_attempts.append(
-                    dict(encoding=enc, sep=None, engine="python", on_bad_lines="skip")
-                )
+                read_attempts.append(dict(encoding=enc, sep=None, engine="python", on_bad_lines="skip"))
 
     last_err = None
     for kwargs in read_attempts:
@@ -137,13 +108,58 @@ def read_csv_uploaded(uploaded_file) -> pd.DataFrame:
 
 
 # =============================
+# Column auto-detection (fixes demo missing 'country')
+# =============================
+def _normalize_col(s: str) -> str:
+    return "".join(ch.lower() for ch in s if ch.isalnum() or ch == "_")
+
+
+def guess_columns(df: pd.DataFrame) -> dict:
+    """
+    Return best guesses for country/date/fatalities using common aliases.
+    """
+    cols = list(df.columns)
+    norm = {c: _normalize_col(str(c)) for c in cols}
+
+    country_aliases = {"country", "countryname", "cntry", "location", "state", "iso3", "iso"}
+    date_aliases = {"date", "datestart", "date_start", "startdate", "eventdate", "time", "timestamp"}
+    fat_aliases = {"best", "fatalities", "deaths", "killed", "fatality", "totfatalities"}
+
+    def find_one(aliases: set[str]) -> str | None:
+        # exact normalized match first
+        for c, n in norm.items():
+            if n in aliases:
+                return c
+        # contains match second (e.g., "date_start_utc")
+        for c, n in norm.items():
+            for a in aliases:
+                if a in n:
+                    return c
+        return None
+
+    return {
+        "country": find_one(country_aliases),
+        "date": find_one(date_aliases),
+        "fatalities": find_one(fat_aliases),
+    }
+
+
+def ensure_country_column(df: pd.DataFrame, country_col: str | None, fill_country: str) -> tuple[pd.DataFrame, str]:
+    """
+    If country_col missing/None, create a 'country' column filled with fill_country.
+    """
+    out = df.copy()
+    if country_col is None or country_col not in out.columns:
+        out["country"] = fill_country
+        return out, "country"
+    return out, country_col
+
+
+# =============================
 # World dataset (HF) download & map aggregation
 # =============================
 @st.cache_data(show_spinner=False)
 def download_hf_world_csv(url: str) -> bytes:
-    """
-    Download the HF CSV bytes once (cached by Streamlit).
-    """
     resp = requests.get(url, stream=True, timeout=120)
     resp.raise_for_status()
     return resp.content
@@ -157,13 +173,6 @@ def aggregate_country_fatalities_from_bytes(
     start_d: date,
     end_d: date,
 ) -> pd.DataFrame:
-    """
-    Efficient-enough aggregation:
-    - Read only needed columns
-    - Convert date, filter range
-    - Group by country sum fatalities
-    """
-    # Try a direct pandas read with minimal cols; if that fails, fall back to safe reader then subset.
     try:
         df = pd.read_csv(
             io.BytesIO(csv_bytes),
@@ -174,16 +183,16 @@ def aggregate_country_fatalities_from_bytes(
         df_full = safe_read_csv_bytes(csv_bytes)
         missing = [c for c in [country_col, date_col, fatalities_col] if c not in df_full.columns]
         if missing:
-            raise ValueError(f"HF dataset missing required columns: {missing}. Found: {list(df_full.columns)[:20]} ...")
+            raise ValueError(
+                f"HF dataset missing required columns: {missing}. Found: {list(df_full.columns)[:20]} ..."
+            )
         df = df_full[[country_col, date_col, fatalities_col]].copy()
 
     df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
     df = df.dropna(subset=[date_col])
 
-    # inclusive date range
     start_ts = pd.Timestamp(start_d)
     end_ts = pd.Timestamp(end_d) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-
     df = df[(df[date_col] >= start_ts) & (df[date_col] <= end_ts)]
 
     df[fatalities_col] = pd.to_numeric(df[fatalities_col], errors="coerce").fillna(0)
@@ -193,7 +202,6 @@ def aggregate_country_fatalities_from_bytes(
         .sum()
         .rename(columns={country_col: "country", fatalities_col: "fatalities"})
     )
-
     return out
 
 
@@ -206,7 +214,7 @@ def parse_thresholds(raw: str) -> list[float]:
     if len(vals) == 0:
         raise ValueError("Please enter at least one threshold (e.g., 25 or 25,1000).")
     if len(vals) > 2:
-        vals = vals[:2]  # keep UI promise: up to 2
+        vals = vals[:2]
     return vals
 
 
@@ -244,8 +252,6 @@ def detect_escalations(daily: pd.DataFrame, rolling_window: int, thresholds: lis
     starts_all = []
     for threshold in thresholds:
         above = df["rolling"] >= threshold
-
-        # streak counts consecutive Trues
         streak = above.astype(int).groupby((~above).cumsum()).cumsum()
         persistent = streak >= persistence
         start = persistent & (~persistent.shift(1).fillna(False))
@@ -259,18 +265,18 @@ def detect_escalations(daily: pd.DataFrame, rolling_window: int, thresholds: lis
 
 
 # =============================
-# UI: Title/header (keep your vibe)
+# Header
 # =============================
 st.title("AEGIS — Escalation Detection Demo")
 st.write("Upload a dataset (CSV) and choose a country to generate the rolling fatalities plot and escalation-start markers.")
 
 
 # =============================
-# Sidebar: Video + Inputs
+# Sidebar
 # =============================
 st.sidebar.header("Inputs")
 
-# Sidebar video (HTML makes it loop cleanly; Streamlit's st.video does not always loop seamlessly)
+# Sidebar video (looping HTML)
 if SIDEBAR_VIDEO_PATH.exists():
     st.sidebar.markdown(
         f"""
@@ -280,8 +286,6 @@ if SIDEBAR_VIDEO_PATH.exists():
         """,
         unsafe_allow_html=True,
     )
-else:
-    st.sidebar.caption("Tip: add 'logo1.mp4' next to app.py for the sidebar video.")
 
 use_sample = st.sidebar.checkbox(
     "Use built-in Ukraine example (recommended demo)",
@@ -343,96 +347,107 @@ persistence = st.sidebar.number_input(
     step=1,
 )
 
+# ---- Map controls (requested behavior) ----
+show_map = st.sidebar.checkbox(
+    "Show interactive map",
+    value=True,  # starts ON
+    help="Turn off if you want the page to load faster.",
+)
+
+# default map range: last 365 days ending today (automatic)
+today = date.today()
+default_map_start = today - timedelta(days=365)
+map_start, map_end = st.sidebar.date_input(
+    "Map date range",
+    value=(default_map_start, today),
+    help="Defaults automatically; you can edit it here if you want.",
+)
+
 run_btn = st.sidebar.button("Generate plot")
 
 
 # =============================
-# Decide which dataset powers the plot
+# Load dataset for plot (upload or demo)
 # =============================
 plot_df = None
-plot_source = None
 
 if use_sample:
     st.info("Using built-in demo file: ukraine_sample.csv")
     if not UKRAINE_SAMPLE_PATH.exists():
         st.error("Demo file not found: ukraine_sample.csv must be in the repo next to app.py.")
         st.stop()
-    try:
-        plot_df = read_csv_path(str(UKRAINE_SAMPLE_PATH))
-        plot_source = "demo"
-    except Exception as e:
-        st.error(f"Could not load ukraine_sample.csv. {e}")
-        st.stop()
+
+    df_demo = read_csv_path(str(UKRAINE_SAMPLE_PATH))
+
+    # Auto-detect columns / fix missing country column
+    guessed = guess_columns(df_demo)
+    df_demo, demo_country_col = ensure_country_column(df_demo, guessed["country"], fill_country=country_name)
+
+    demo_date_col = guessed["date"] or date_col
+    demo_fat_col = guessed["fatalities"] or fatalities_col
+
+    # Override sidebar defaults ONLY for the demo dataset if needed
+    # (keeps your setup smooth: demo just works)
+    country_col = demo_country_col
+    date_col = demo_date_col
+    fatalities_col = demo_fat_col
+
+    plot_df = df_demo
+
 else:
     if uploaded is not None:
-        try:
-            plot_df = read_csv_uploaded(uploaded)
-            plot_source = "upload"
-        except Exception as e:
-            st.error(f"Could not parse uploaded CSV. {e}")
-            st.stop()
+        plot_df = read_csv_uploaded(uploaded)
 
 
 # =============================
-# Interactive map section (shows even when plot isn't generated)
+# Interactive Map (under header; can be turned off)
 # =============================
 st.subheader("Interactive map")
 st.caption("Data source: HuggingFace hosted world dataset")
 
-# Date range for map
-# (Default: last 365 days ending today; easy + fast enough)
-today = date.today()
-default_start = date(today.year - 1, today.month, min(today.day, 28))
-map_start, map_end = st.date_input(
-    "Map date range",
-    value=(default_start, today),
-    help="Aggregates fatalities by country across this date range.",
-)
-
-if isinstance(map_start, (list, tuple)) and len(map_start) == 2:
-    map_start, map_end = map_start[0], map_start[1]
-
-if map_start > map_end:
-    st.warning("Map date range invalid: start is after end.")
+if not show_map:
+    st.info("Map is turned off in the sidebar.")
 else:
-    with st.spinner("Loading world dataset for the map (Hugging Face)…"):
-        try:
-            world_bytes = download_hf_world_csv(HF_WORLD_CSV_URL)
-            # The HF file columns should match your GED columns: country/date_start/best
-            map_agg = aggregate_country_fatalities_from_bytes(
-                world_bytes,
-                country_col="country",
-                date_col="date_start",
-                fatalities_col="best",
-                start_d=map_start,
-                end_d=map_end,
-            )
+    # Streamlit date_input can sometimes return a single date; normalize
+    if isinstance(map_start, (list, tuple)) and len(map_start) == 2:
+        map_start, map_end = map_start[0], map_start[1]
 
-            # Plotly choropleth (interactive)
-            fig_map = px.choropleth(
-                map_agg,
-                locations="country",
-                locationmode="country names",
-                color="fatalities",
-                hover_name="country",
-                color_continuous_scale="Blues",
-                title="Fatalities by country (selected date range)",
-            )
-            fig_map.update_layout(margin=dict(l=0, r=0, t=60, b=0))
-            st.plotly_chart(fig_map, use_container_width=True)
+    if map_start > map_end:
+        st.warning("Map date range invalid: start is after end.")
+    else:
+        with st.spinner("Loading world dataset for the map (Hugging Face)…"):
+            try:
+                world_bytes = download_hf_world_csv(HF_WORLD_CSV_URL)
 
-        except Exception as e:
-            st.error(
-                "Map load failed. "
-                f"{e}"
-            )
+                map_agg = aggregate_country_fatalities_from_bytes(
+                    world_bytes,
+                    country_col="country",
+                    date_col="date_start",
+                    fatalities_col="best",
+                    start_d=map_start,
+                    end_d=map_end,
+                )
 
+                fig_map = px.choropleth(
+                    map_agg,
+                    locations="country",
+                    locationmode="country names",
+                    color="fatalities",
+                    hover_name="country",
+                    color_continuous_scale="Blues",
+                    title="Fatalities by country (selected date range)",
+                )
+                fig_map.update_layout(margin=dict(l=0, r=0, t=60, b=0))
+                st.plotly_chart(fig_map, use_container_width=True)
+
+            except Exception as e:
+                st.error(f"Map load failed. {e}")
 
 st.divider()
 
 
 # =============================
-# Escalation plot section
+# Escalation plot
 # =============================
 st.subheader("Escalation plot")
 
@@ -444,7 +459,6 @@ if not run_btn:
     st.info("Data loaded — now click **Generate plot**.")
     st.stop()
 
-# Prepare + compute
 try:
     thresholds = parse_thresholds(thresholds_raw)
     daily = build_daily_series(plot_df, country_col, date_col, fatalities_col, country_name)
@@ -453,7 +467,6 @@ except Exception as e:
     st.error(str(e))
     st.stop()
 
-# Plot (matplotlib)
 fig, ax = plt.subplots(figsize=(12, 5))
 ax.plot(daily2["date"], daily2["rolling"])
 
@@ -466,23 +479,15 @@ if not starts.empty:
 ax.set_title(f"AEGIS Escalation Detection — {country_name} (rolling={rolling_window}d, thresholds={thresholds})")
 ax.set_xlabel("Date")
 ax.set_ylabel("Rolling fatalities")
-
 st.pyplot(fig)
 
-# Summary (right column)
-left, right = st.columns([3, 1])
-
+_, right = st.columns([3, 1])
 with right:
     st.subheader("Summary")
     st.write(f"Rows (daily): {len(daily2)}")
-
     for t in thresholds:
-        days_above = int((daily2["rolling"] >= t).sum())
-        st.write(f"Days above threshold {t}: {days_above}")
-
-    st.write(f"Days persistent (>= {persistence}): {int((daily2['rolling'] >= min(thresholds)).sum())}")
+        st.write(f"Days above threshold {t}: {int((daily2['rolling'] >= t).sum())}")
     st.write(f"Escalation starts detected: {len(starts)}")
-
     if not starts.empty:
         st.write("First escalation starts:")
         st.dataframe(starts[["date", "rolling", "threshold"]].head(10), use_container_width=True)
