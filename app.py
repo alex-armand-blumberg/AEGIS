@@ -219,12 +219,27 @@ def parse_thresholds(raw: str) -> list[float]:
 
 
 def build_daily_series(df: pd.DataFrame, country_col: str, date_col: str, fatalities_col: str, country_name: str) -> pd.DataFrame:
+    # If user-provided columns don't exist, try auto-detect
+    if country_col not in df.columns or date_col not in df.columns or fatalities_col not in df.columns:
+        guessed = guess_columns(df)
+
+        # If Ukraine-only sample has no country column, add it
+        if country_col not in df.columns:
+            df, country_col = ensure_country_column(df, guessed["country"], fill_country=country_name)
+
+        # Auto-fix date/fatalities if missing
+        if date_col not in df.columns and guessed["date"] is not None:
+            date_col = guessed["date"]
+        if fatalities_col not in df.columns and guessed["fatalities"] is not None:
+            fatalities_col = guessed["fatalities"]
+
+    # Hard fail only if still missing after guessing
     if country_col not in df.columns:
-        raise ValueError(f"Missing column '{country_col}'")
+        raise ValueError(f"Missing column '{country_col}'. Available columns: {list(df.columns)}")
     if date_col not in df.columns:
-        raise ValueError(f"Missing column '{date_col}'")
+        raise ValueError(f"Missing column '{date_col}'. Available columns: {list(df.columns)}")
     if fatalities_col not in df.columns:
-        raise ValueError(f"Missing column '{fatalities_col}'")
+        raise ValueError(f"Missing column '{fatalities_col}'. Available columns: {list(df.columns)}")
 
     sub = df[df[country_col] == country_name].copy()
     if sub.empty:
