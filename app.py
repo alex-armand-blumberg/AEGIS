@@ -394,24 +394,24 @@ with st.sidebar.expander("Limitations"):
     st.markdown("""
 **Current limitations of AEGIS**
 
-• Fatality totals aggregate all events since 1989.
+- Fatality totals aggregate all events since 1989.
 
-• Some conflicts may be overcounted due to event duplication.
+- Some conflicts may be overcounted due to event duplication.
 
-• Escalation detection currently uses simple rolling thresholds.
+- Escalation detection currently uses simple rolling thresholds.
 
-• Geographic precision is limited to country-level aggregation.  
+- Geographic precision is limited to country-level aggregation.
 
 
 **Planned improvements**
 
-• Subnational geolocation mapping 
+- Subnational geolocation mapping
 
-• Actor-level escalation detection
+- Actor-level escalation detection
 
-• Real-time conflict ingestion  
+- Real-time conflict ingestion
 
-• Improved fatality normalization across datasets
+- Improved fatality normalization across datasets
 """)
 
 
