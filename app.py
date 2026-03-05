@@ -36,10 +36,23 @@ country_name = st.sidebar.text_input(
     help="Name must match the dataset exactly (e.g., 'Ukraine', 'Mexico', 'Syria')."
 )
 
-country_col = st.sidebar.text_input("Name of Country Column", "country", help="Name of your dataset's column with countries listed.)
+country_col = st.sidebar.text_input(
+    "Name of Country Column",
+    "country",
+    help="Name of your dataset's column with countries listed."
+)
 
-date_col = st.sidebar.text_input("Name of Date Column", "date_start", help="Name of your dataset's column with dates listed.)
-fatalities_col = st.sidebar.text_input("Name of Fatalities Column", "best", help="Name of your dataset's column with # of fatalities listed.)
+date_col = st.sidebar.text_input(
+    "Name of Date Column",
+    "date_start",
+    help="Name of your dataset's column with dates listed."
+)
+
+fatalities_col = st.sidebar.text_input(
+    "Name of Fatalities Column",
+    "best",
+    help="Name of your dataset's column with number of fatalities."
+)
 
 rolling_window = st.sidebar.number_input(
     "Rolling window (days)", min_value=1, max_value=365, value=30
