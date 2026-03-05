@@ -207,6 +207,8 @@ st.write("Upload a dataset (CSV) and choose a country to generate the rolling fa
 with st.sidebar:
     st.header("Inputs")
 
+    use_example = st.button("Use built-in Ukraine example dataset")
+    
     uploaded = st.file_uploader("Upload CSV", type=["csv"])
 
     country_col = st.text_input("Country column", value="country")
@@ -226,7 +228,13 @@ with st.sidebar:
     run_btn = st.button("Generate plot")
 
 
-if uploaded is None:
+use_example = st.sidebar.button("Use built-in Ukraine example dataset")
+
+if use_example:
+    df = pd.read_csv("data/ukraine_sample.csv")
+    st.sidebar.success("Loaded built-in Ukraine example dataset.")
+
+elif uploaded is None:
     st.info("Upload a CSV in the sidebar, then click **Generate plot**.")
     st.stop()
 
