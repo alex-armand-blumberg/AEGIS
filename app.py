@@ -61,8 +61,8 @@ rolling_window = st.sidebar.number_input(
 # Two thresholds allowed
 thresholds_raw = st.sidebar.text_input(
     "Escalation Thresholds",
-    "25,1000",
-    help="For multiple thresholds, separate values with a comma, no space."
+    "1000",
+    help="For multiple thresholds, separate values with a comma, no space. (25,1000)"
 )
 
 persistence = st.sidebar.number_input(
