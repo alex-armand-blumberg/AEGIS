@@ -463,6 +463,95 @@ def load_primary_dataset_for_plot():
     df_up = read_csv_bytes_robust(uploaded.getvalue())
     return df_up, "Uploaded CSV"
 
+# ----------------------------
+# Escalation plot section
+# ----------------------------
+st.subheader("Escalation plot")
+
+df_raw_plot, plot_source = (None, None)
+try:
+    df_raw_plot, plot_source = load_primary_dataset_for_plot()
+except Exception as e:
+    st.error(str(e))
+
+if df_raw_plot is None:
+    st.info("Upload a CSV (or enable the demo), then click **Generate plot**. The interactive map appears above.")
+    st.stop()
+
+st.caption(f"Plot dataset source: {plot_source}")
+
+
+st.caption("Source: Uppsala Conflict Data Program (UCDP) Georeferenced Event Dataset via HuggingFace.")
+
+# Validate columns for plot dataset
+try:
+    require_columns(df_raw_plot, [country_col, date_col, fatalities_col], "Plot dataset")
+except Exception as e:
+    st.error(str(e))
+    st.stop()
+
+if not run_btn:
+    st.info("CSV loaded — now click **Generate plot**.")
+    st.stop()
+
+# Build daily series for selected country
+try:
+    daily = build_country_daily(df_raw_plot, country_col, date_col, fatalities_col)
+    c_daily = daily[daily["country"] == country_name].copy()
+
+    if c_daily.empty:
+        st.warning(f"No rows found for country='{country_name}'. Check spelling/case or your country column.")
+        st.stop()
+
+    c_daily = c_daily.set_index("date").sort_index()
+    c_daily["rolling"] = c_daily["fatalities"].rolling(int(rolling_window), min_periods=1).sum()
+
+    thresholds = parse_thresholds(thresholds_raw)
+    if not thresholds:
+        st.error("Please provide at least one threshold (e.g., 25 or 25,50).")
+        st.stop()
+
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots()
+    ax.plot(c_daily.index, c_daily["rolling"], label="Rolling fatalities")
+
+    # Draw thresholds + starts
+    for i, thr in enumerate(thresholds):
+        ax.axhline(thr, linestyle="--", linewidth=1, label=f"Threshold {i+1}: {thr:g}")
+        starts = compute_escalation_starts(c_daily["rolling"], thr, int(persistence_days))
+        ax.scatter(
+            c_daily.index[starts],
+            c_daily["rolling"][starts],
+            s=40,
+            label=f"Escalation starts (thr={thr:g})"
+        )
+
+    ax.set_title(f"AEGIS Escalation Detection — {country_name} (rolling={int(rolling_window)}d)")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Rolling fatalities")
+    ax.legend()
+
+    st.pyplot(fig, clear_figure=True)
+
+    # Summary table of first few starts
+    st.markdown("### Summary")
+    for thr in thresholds:
+        starts = compute_escalation_starts(c_daily["rolling"], thr, int(persistence_days))
+        starts_df = (
+            c_daily.loc[starts, ["rolling"]]
+            .reset_index()
+            .rename(columns={"index": "date"})
+            .assign(threshold=thr)
+            .sort_values("date")
+        )
+        st.write(f"**Threshold {thr:g}: escalation starts detected = {len(starts_df)}**")
+        st.dataframe(starts_df.head(10), use_container_width=True)
+
+except Exception as e:
+    st.error(str(e))
+
+
 
 # ----------------------------
 # Load world dataset for map (HF hosted)
@@ -559,91 +648,3 @@ if show_map:
 
         except Exception as e:
             st.error(f"Map error: {e}")
-
-# ----------------------------
-# Escalation plot section
-# ----------------------------
-st.subheader("Escalation plot")
-
-df_raw_plot, plot_source = (None, None)
-try:
-    df_raw_plot, plot_source = load_primary_dataset_for_plot()
-except Exception as e:
-    st.error(str(e))
-
-if df_raw_plot is None:
-    st.info("Upload a CSV (or enable the demo), then click **Generate plot**. The interactive map appears above.")
-    st.stop()
-
-st.caption(f"Plot dataset source: {plot_source}")
-
-
-st.caption("Source: Uppsala Conflict Data Program (UCDP) Georeferenced Event Dataset via HuggingFace.")
-
-# Validate columns for plot dataset
-try:
-    require_columns(df_raw_plot, [country_col, date_col, fatalities_col], "Plot dataset")
-except Exception as e:
-    st.error(str(e))
-    st.stop()
-
-if not run_btn:
-    st.info("CSV loaded — now click **Generate plot**.")
-    st.stop()
-
-# Build daily series for selected country
-try:
-    daily = build_country_daily(df_raw_plot, country_col, date_col, fatalities_col)
-    c_daily = daily[daily["country"] == country_name].copy()
-
-    if c_daily.empty:
-        st.warning(f"No rows found for country='{country_name}'. Check spelling/case or your country column.")
-        st.stop()
-
-    c_daily = c_daily.set_index("date").sort_index()
-    c_daily["rolling"] = c_daily["fatalities"].rolling(int(rolling_window), min_periods=1).sum()
-
-    thresholds = parse_thresholds(thresholds_raw)
-    if not thresholds:
-        st.error("Please provide at least one threshold (e.g., 25 or 25,50).")
-        st.stop()
-
-    import matplotlib.pyplot as plt
-
-    fig, ax = plt.subplots()
-    ax.plot(c_daily.index, c_daily["rolling"], label="Rolling fatalities")
-
-    # Draw thresholds + starts
-    for i, thr in enumerate(thresholds):
-        ax.axhline(thr, linestyle="--", linewidth=1, label=f"Threshold {i+1}: {thr:g}")
-        starts = compute_escalation_starts(c_daily["rolling"], thr, int(persistence_days))
-        ax.scatter(
-            c_daily.index[starts],
-            c_daily["rolling"][starts],
-            s=40,
-            label=f"Escalation starts (thr={thr:g})"
-        )
-
-    ax.set_title(f"AEGIS Escalation Detection — {country_name} (rolling={int(rolling_window)}d)")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Rolling fatalities")
-    ax.legend()
-
-    st.pyplot(fig, clear_figure=True)
-
-    # Summary table of first few starts
-    st.markdown("### Summary")
-    for thr in thresholds:
-        starts = compute_escalation_starts(c_daily["rolling"], thr, int(persistence_days))
-        starts_df = (
-            c_daily.loc[starts, ["rolling"]]
-            .reset_index()
-            .rename(columns={"index": "date"})
-            .assign(threshold=thr)
-            .sort_values("date")
-        )
-        st.write(f"**Threshold {thr:g}: escalation starts detected = {len(starts_df)}**")
-        st.dataframe(starts_df.head(10), use_container_width=True)
-
-except Exception as e:
-    st.error(str(e))
