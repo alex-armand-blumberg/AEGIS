@@ -456,7 +456,7 @@ st.caption("Data source: HuggingFace hosted world dataset")
 try:
 
     # Filter data to selected date range
-    world_slice = df_world.copy()
+    world_slice = df_raw_plot.copy()
 
     # Aggregate fatalities by country
     by_country = (
