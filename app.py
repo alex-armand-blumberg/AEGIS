@@ -36,15 +36,16 @@ SIDEBAR_LOGO_PATH = Path("logo.png")    # optional static logo if you ever add o
 # HELPERS
 # -----------------------------
 def _safe_read_csv_bytes(data: bytes) -> pd.DataFrame:
-    """Read CSV from raw bytes with a couple of fallbacks."""
-    # Try utf-8 first, then latin-1
-    for enc in ("utf-8", "latin-1"):
+    import io
+    import pandas as pd
+    
+    try:
+        return pd.read_csv(io.BytesIO(data), encoding="utf-8")
+    except:
         try:
-            return pd.read_csv(io.BytesIO(data), encoding=enc)
-        except Exception:
-            continue
-    # Last attempt: let pandas guess
-    return pd.read_csv(io.BytesIO(data))
+            return pd.read_csv(io.BytesIO(data), encoding="utf-8-sig")
+        except:
+            return pd.read_csv(io.BytesIO(data), encoding="latin1")
 
 
 @st.cache_data(show_spinner=False)
