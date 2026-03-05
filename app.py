@@ -31,14 +31,82 @@ st.set_page_config(
 # Current conflict news
 # ----------------------------
 
-import feedparser
+import textwrap
+import streamlit as st
 
-st.subheader("Current Conflict News")
+def render_news_panel(items, title="Current Conflict News", default_open=False):
+    """
+    items: list of dicts like [{"title": "...", "url": "...", "source": "CNN", "date": "Mar 5"}]
+    """
+    st.markdown(
+        """
+        <style>
+          .news-wrap { margin: 0.25rem 0 1rem 0; }
+          .news-card {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 14px;
+            padding: 14px 14px;
+            margin: 10px 0;
+          }
+          .news-title {
+            font-size: 0.98rem;
+            line-height: 1.25rem;
+            font-weight: 650;
+            margin: 0 0 6px 0;
+          }
+          .news-meta {
+            opacity: 0.75;
+            font-size: 0.82rem;
+            margin: 0;
+          }
+          .news-link a { text-decoration: none; }
+          .news-link a:hover { text-decoration: underline; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
-feed = feedparser.parse("https://news.google.com/rss/search?q=conflict+war+geopolitics")
+    with st.expander(title, expanded=default_open):
+        st.caption("Lightweight links list (not a live feed unless you wire it to RSS/API).")
 
-for entry in feed.entries[:5]:
-    st.markdown(f"• [{entry.title}]({entry.link})")
+        if not items:
+            st.info("No news items available.")
+            return
+
+        # Optional: limit
+        items = items[:6]
+
+        for it in items:
+            t = (it.get("title") or "").strip()
+            u = (it.get("url") or "").strip()
+            s = (it.get("source") or "").strip()
+            d = (it.get("date") or "").strip()
+
+            # Keep titles tidy
+            t_short = textwrap.shorten(t, width=95, placeholder="…")
+
+            meta_bits = " • ".join([x for x in [s, d] if x])
+            meta_html = f'<p class="news-meta">{meta_bits}</p>' if meta_bits else ""
+
+            st.markdown(
+                f"""
+                <div class="news-card news-wrap">
+                  <div class="news-link">
+                    <p class="news-title"><a href="{u}" target="_blank" rel="noopener noreferrer">{t_short}</a></p>
+                    {meta_html}
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+# Example usage (replace with your real list)
+news_items = [
+    {"title": "Geopolitical conflict and its impact on global markets", "url": "https://example.com", "source": "U.S. Bank"},
+    {"title": "Why stocks are acting weird about a spiraling war", "url": "https://example.com", "source": "CNN"},
+]
+render_news_panel(news_items, default_open=True)
 
 # ----------------------------
 # Dataset paths
