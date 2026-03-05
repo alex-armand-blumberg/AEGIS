@@ -171,7 +171,7 @@ if VIDEO_PATH.exists():
 st.sidebar.header("Inputs")
 
 use_demo = st.sidebar.checkbox(
-    "Use built-in Ukraine example (recommended demo)",
+    "Use built-in Ukraine example (recommended for demo)",
     value=False,
     help="Loads ukraine_sample.csv from the repo (must be present alongside app.py)."
 )
@@ -330,6 +330,10 @@ if show_map:
     locationmode="country names",
     color="fatalities",
     hover_name="country",
+    hover_data={
+        "country": False,
+        "Fatalities": True
+    },
     title="Fatalities by country (selected date range)",
     color_continuous_scale="Blues_r"
 )
