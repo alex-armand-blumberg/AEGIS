@@ -23,7 +23,7 @@ st.sidebar.header("Inputs")
 use_sample = st.sidebar.checkbox(
     "Use built-in Ukraine example (recommended demo)",
     value=False,
-    help="Data from the Uppsala Conflict Data Program (UCDP) Georeferenced Event Dataset (GED): https://ucdp.uu.se/"
+    help="Data from the UCDP Georeferenced Event Dataset (GED): https://ucdp.uu.se/"
 )
 
 uploaded = None
