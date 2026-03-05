@@ -128,12 +128,12 @@ daily.columns = ["date", "fatalities"]
 daily = daily.sort_values("date")
 
     # Fill missing days with 0 (continuous daily index)
-    full_range = pd.date_range(daily["date"].min(), daily["date"].max(), freq="D")
-    daily = daily.set_index("date").reindex(full_range).fillna({"fatalities": 0.0})
-    daily.index.name = "date"
-    daily = daily.reset_index()
+full_range = pd.date_range(daily["date"].min(), daily["date"].max(), freq="D")
+daily = daily.set_index("date").reindex(full_range).fillna({"fatalities": 0.0})
+daily.index.name = "date"
+daily = daily.reset_index()
 
-    return daily
+return daily
 
 
 def detect_escalation(
