@@ -275,7 +275,7 @@ def compute_escalation_starts(series: pd.Series, threshold: float, persistence_d
 # Sidebar: branding + inputs
 # ----------------------------
 
-st.sidebar.header("AEGIS")
+st.sidebar.header("AEGIS Control Bar")
 
 # Sidebar "hero" video (optional)
 # Sidebar "hero" video (optional)
