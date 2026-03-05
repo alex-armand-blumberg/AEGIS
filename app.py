@@ -19,7 +19,11 @@ except Exception:
 # ----------------------------
 # Config
 # ----------------------------
-st.set_page_config(page_title="AEGIS — Escalation Detection Demo", layout="wide")
+st.set_page_config(
+    page_title="AEGIS — Escalation Detection Demo",
+    page_icon="logo.png",
+    layout="wide"
+)
 
 HF_WORLD_CSV_URL = "https://huggingface.co/datasets/alex-armand-blumberg/UCDP/resolve/main/GEDEvent_v25_1%203.csv"
 UKRAINE_SAMPLE_PATH = Path("ukraine_sample.csv")  # must exist in repo root
