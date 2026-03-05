@@ -13,7 +13,7 @@ with col1:
     st.image(logo, width=1000)
 
 with col2:
-    st.title("AEGIS — Escalation Detection Demo")
+    st.title("Escalation Detection Demo")
     
 st.write(
     "Upload a dataset (CSV) and choose a country to generate the rolling fatalities plot and escalation-start markers."
