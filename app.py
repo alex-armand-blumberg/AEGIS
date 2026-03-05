@@ -16,6 +16,116 @@ try:
 except Exception:
     _HAS_PLOTLY = False
 
+
+
+import time
+import xml.etree.ElementTree as ET
+
+import requests
+import streamlit as st
+
+
+@st.cache_data(ttl=900)  # refresh every 15 minutes
+def fetch_rss_items(rss_url: str, max_items: int = 6):
+    r = requests.get(rss_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+    r.raise_for_status()
+
+    root = ET.fromstring(r.content)
+
+    items = []
+    # RSS 2.0 usually: <rss><channel><item>...
+    for item in root.findall(".//item")[:max_items]:
+        title = (item.findtext("title") or "").strip()
+        link = (item.findtext("link") or "").strip()
+        pub_date = (item.findtext("pubDate") or "").strip()
+        source = ""
+        src = item.find("source")
+        if src is not None and src.text:
+            source = src.text.strip()
+
+        if title and link:
+            items.append({"title": title, "link": link, "pub_date": pub_date, "source": source})
+
+    return items
+
+
+import time
+import xml.etree.ElementTree as ET
+
+import requests
+import streamlit as st
+
+
+@st.cache_data(ttl=900)  # refresh every 15 minutes
+def fetch_rss_items(rss_url: str, max_items: int = 6):
+    r = requests.get(rss_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+    r.raise_for_status()
+
+    root = ET.fromstring(r.content)
+
+    items = []
+    # RSS 2.0 usually: <rss><channel><item>...
+    for item in root.findall(".//item")[:max_items]:
+        title = (item.findtext("title") or "").strip()
+        link = (item.findtext("link") or "").strip()
+        pub_date = (item.findtext("pubDate") or "").strip()
+        source = ""
+        src = item.find("source")
+        if src is not None and src.text:
+            source = src.text.strip()
+
+        if title and link:
+            items.append({"title": title, "link": link, "pub_date": pub_date, "source": source})
+
+    return items
+
+
+def render_news():
+    st.markdown("## Current Conflict News")
+
+    # Google News RSS query (easy + reliable)
+    rss_url = (
+        "https://news.google.com/rss/search?"
+        "q=(war+OR+conflict+OR+invasion+OR+insurgency)+when:7d&hl=en-US&gl=US&ceid=US:en"
+    )
+
+    try:
+        items = fetch_rss_items(rss_url, max_items=6)
+        if not items:
+            st.info("No items returned from the news feed right now.")
+            return
+
+        for it in items:
+            # Simple “card” look
+            st.markdown(
+                f"""
+                <div style="
+                    padding:14px 16px;
+                    border:1px solid rgba(255,255,255,0.10);
+                    border-radius:14px;
+                    margin-bottom:10px;
+                    background: rgba(255,255,255,0.03);
+                ">
+                    <div style="font-size:18px; font-weight:700; line-height:1.25;">
+                        <a href="{it['link']}" target="_blank" style="text-decoration:none;">
+                            {it['title']}
+                        </a>
+                    </div>
+                    <div style="opacity:0.7; margin-top:6px; font-size:13px;">
+                        {it['source'] or ""} {("• " + it['pub_date']) if it['pub_date'] else ""}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.caption("Updates automatically ~every 15 minutes (RSS).")
+
+    except Exception as e:
+        st.warning(f"Live news feed failed to load: {e}")
+
+
+
 # ----------------------------
 # Config
 # ----------------------------
@@ -31,82 +141,8 @@ st.set_page_config(
 # Current conflict news
 # ----------------------------
 
-import textwrap
-import streamlit as st
-
-def render_news_panel(items, title="Current Conflict News", default_open=False):
-    """
-    items: list of dicts like [{"title": "...", "url": "...", "source": "CNN", "date": "Mar 5"}]
-    """
-    st.markdown(
-        """
-        <style>
-          .news-wrap { margin: 0.25rem 0 1rem 0; }
-          .news-card {
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 14px;
-            padding: 14px 14px;
-            margin: 10px 0;
-          }
-          .news-title {
-            font-size: 0.98rem;
-            line-height: 1.25rem;
-            font-weight: 650;
-            margin: 0 0 6px 0;
-          }
-          .news-meta {
-            opacity: 0.75;
-            font-size: 0.82rem;
-            margin: 0;
-          }
-          .news-link a { text-decoration: none; }
-          .news-link a:hover { text-decoration: underline; }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    with st.expander(title, expanded=default_open):
-        st.caption("Lightweight links list (not a live feed unless you wire it to RSS/API).")
-
-        if not items:
-            st.info("No news items available.")
-            return
-
-        # Optional: limit
-        items = items[:6]
-
-        for it in items:
-            t = (it.get("title") or "").strip()
-            u = (it.get("url") or "").strip()
-            s = (it.get("source") or "").strip()
-            d = (it.get("date") or "").strip()
-
-            # Keep titles tidy
-            t_short = textwrap.shorten(t, width=95, placeholder="…")
-
-            meta_bits = " • ".join([x for x in [s, d] if x])
-            meta_html = f'<p class="news-meta">{meta_bits}</p>' if meta_bits else ""
-
-            st.markdown(
-                f"""
-                <div class="news-card news-wrap">
-                  <div class="news-link">
-                    <p class="news-title"><a href="{u}" target="_blank" rel="noopener noreferrer">{t_short}</a></p>
-                    {meta_html}
-                  </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-# Example usage (replace with your real list)
-news_items = [
-    {"title": "Geopolitical conflict and its impact on global markets", "url": "https://example.com", "source": "U.S. Bank"},
-    {"title": "Why stocks are acting weird about a spiraling war", "url": "https://example.com", "source": "CNN"},
-]
-render_news_panel(news_items, default_open=True)
+with st.expander("Current Conflict News", expanded=True):
+    render_news()
 
 # ----------------------------
 # Dataset paths
