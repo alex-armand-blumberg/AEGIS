@@ -524,9 +524,8 @@ if show_map:
             )
 
             fig.update_layout(margin=dict(l=0, r=0, t=60, b=0))
-            st.plotly_chart(fig, use_container_width=True)
-
             st.caption("To change the date range, enable **Override map date range** in the sidebar.")
+            st.plotly_chart(fig, use_container_width=True)
 
         except Exception as e:
             st.error(f"Map error: {e}")
