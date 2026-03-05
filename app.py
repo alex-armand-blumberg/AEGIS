@@ -470,7 +470,6 @@ def load_world_dataset_for_map() -> pd.DataFrame:
 # ----------------------------
 if show_map:
     st.markdown("## Interactive map")
-    st.caption("Data source: HuggingFace hosted UCDP world dataset")
 
     if not _HAS_PLOTLY:
         st.info("Interactive map requires Plotly. Add `plotly` to requirements.txt to enable it.")
@@ -633,3 +632,9 @@ try:
 
 except Exception as e:
     st.error(str(e))
+
+
+
+
+
+st.caption("Source: Uppsala Conflict Data Program (UCDP) Georeferenced Event Dataset via HuggingFace.")
