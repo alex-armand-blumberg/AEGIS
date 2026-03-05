@@ -16,7 +16,7 @@ st.markdown(video_html, unsafe_allow_html=True)
 col1, col2 = st.columns([1,6])
 
 with col1:
-    st.image(logo, width=1000)
+    st.image(logo.png, width=1000)
 
 with col2:
     st.write("")
