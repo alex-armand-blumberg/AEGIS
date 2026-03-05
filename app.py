@@ -29,11 +29,12 @@ uploaded = None
 if not use_sample:
     uploaded = st.sidebar.file_uploader("Upload CSV", type=["csv"])
 
-country_col = st.sidebar.text_input("Country column", "country")
 country_name = st.sidebar.text_input("Country (exact match)", "Ukraine")
 
-date_col = st.sidebar.text_input("Date column", "date_start")
-fatalities_col = st.sidebar.text_input("Fatalities column", "best")
+country_col = st.sidebar.text_input("Name of Country Column", "country")
+
+date_col = st.sidebar.text_input("Name of Date Column", "date_start")
+fatalities_col = st.sidebar.text_input("Name of Fatalities Column", "best")
 
 rolling_window = st.sidebar.number_input(
     "Rolling window (days)", min_value=1, max_value=365, value=30
