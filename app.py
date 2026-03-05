@@ -27,8 +27,9 @@ APP_DIR = Path(__file__).resolve().parent
 # Sidebar Inputs
 # -----------------------------
 
-st.sidebar.header("Inputs")
 st.sidebar.image("logo.png", width=140)
+st.sidebar.header("Inputs")
+
 
 # Demo checkbox starts UNCHECKED
 use_sample = st.sidebar.checkbox(
