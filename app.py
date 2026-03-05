@@ -565,6 +565,9 @@ if df_raw_plot is None:
 
 st.caption(f"Plot dataset source: {plot_source}")
 
+
+st.caption("Source: Uppsala Conflict Data Program (UCDP) Georeferenced Event Dataset via HuggingFace.")
+
 # Validate columns for plot dataset
 try:
     require_columns(df_raw_plot, [country_col, date_col, fatalities_col], "Plot dataset")
@@ -633,8 +636,3 @@ try:
 except Exception as e:
     st.error(str(e))
 
-
-
-
-
-st.caption("Source: Uppsala Conflict Data Program (UCDP) Georeferenced Event Dataset via HuggingFace.")
