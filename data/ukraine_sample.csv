@@ -1,7 +1,0 @@
-import pandas as pd
-
-df = pd.read_csv("GEDEvent_v25_1")
-
-ukraine = df[df["country"] == "Ukraine"]
-
-ukraine.to_csv("ukraine_sample.csv", index=False)
