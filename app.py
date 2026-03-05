@@ -240,5 +240,5 @@ with col2:
         st.write("First escalation starts:")
 
         st.dataframe(
-            starts[["Start Date","Rolling Fatalities","Threshold"]].head(10)
+            starts[["Start_Date","Rolling_Fatalities","Threshold"]].head(10)
         )
