@@ -386,7 +386,7 @@ with st.sidebar.expander("Purpose"):
         By aggregating fatalities and applying rolling thresholds, the system highlights periods where violence intensifies beyond normal levels.
 
         The goal is to provide analysts with an intuitive tool for exploring global conflict dynamics and detecting potential escalation signals early. 
-)
+""")
 
 
 
