@@ -5,7 +5,16 @@ from pathlib import Path
 
 st.set_page_config(page_title="AEGIS Escalation Detection", layout="wide")
 
-st.title("AEGIS — Escalation Detection Demo")
+logo = "logo.png"  # put your logo file in the repo
+
+col1, col2 = st.columns([1,6])
+
+with col1:
+    st.image(logo, width=80)
+
+with col2:
+    st.title("AEGIS — Escalation Detection Demo")
+    
 st.write(
     "Upload a dataset (CSV) and choose a country to generate the rolling fatalities plot and escalation-start markers."
 )
