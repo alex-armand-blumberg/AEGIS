@@ -375,6 +375,21 @@ override_map_dates = st.sidebar.checkbox(
 
 st.sidebar.markdown("---")
 
+
+with st.sidebar.expander("Purpose"):
+    st.markdown("""
+
+        ** Made for Palantir© Valley Forge Grants**
+    
+        AEGIS is designed to identify and visualize patterns of conflict escalation using structured event data.
+
+        By aggregating fatalities and applying rolling thresholds, the system highlights periods where violence intensifies beyond normal levels.
+
+        The goal is to provide analysts with an intuitive tool for exploring global conflict dynamics and detecting potential escalation signals early. 
+)
+
+
+
 with st.sidebar.expander("Limitations"):
     st.markdown("""
 **Current limitations of AEGIS**
@@ -398,6 +413,7 @@ with st.sidebar.expander("Limitations"):
 
 • Improved fatality normalization across datasets
 """)
+
 
 # ----------------------------
 # Main header
