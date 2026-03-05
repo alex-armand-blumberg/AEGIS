@@ -14,13 +14,15 @@ APP_DIR = Path(__file__).resolve().parent
 
 
 # -----------------------------
-# Sidebar inputs
+# Sidebar Inputs
 # -----------------------------
 
 st.sidebar.header("Inputs")
 
+# Demo checkbox starts UNCHECKED
 use_sample = st.sidebar.checkbox(
-    "Use built-in Ukraine example (recommended demo)", value=True
+    "Use built-in Ukraine example (recommended demo)",
+    value=False
 )
 
 uploaded = None
@@ -37,8 +39,10 @@ rolling_window = st.sidebar.number_input(
     "Rolling window (days)", min_value=1, max_value=365, value=30
 )
 
-threshold = st.sidebar.number_input(
-    "Escalation threshold", min_value=1, value=25
+# Two thresholds allowed
+thresholds_raw = st.sidebar.text_input(
+    "Escalation thresholds (comma separated)",
+    "25,1000"
 )
 
 persistence = st.sidebar.number_input(
@@ -49,21 +53,34 @@ run_btn = st.sidebar.button("Generate plot")
 
 
 # -----------------------------
-# Load data
+# Helper functions
 # -----------------------------
 
-def load_sample():
-    sample_path = APP_DIR / "ukraine_sample.csv"
+def parse_thresholds(raw):
+    parts = raw.split(",")
+    vals = []
 
-    if not sample_path.exists():
-        st.error(
-            "Built-in demo file `ukraine_sample.csv` not found. "
-            "Upload it to the repo next to `app.py`."
-        )
+    for p in parts:
+        p = p.strip()
+        if p != "":
+            vals.append(float(p))
+
+    return vals
+
+
+def load_sample():
+    path = APP_DIR / "ukraine_sample.csv"
+
+    if not path.exists():
+        st.error("ukraine_sample.csv not found in repo.")
         st.stop()
 
-    return pd.read_csv(sample_path)
+    return pd.read_csv(path)
 
+
+# -----------------------------
+# Load data
+# -----------------------------
 
 if use_sample:
     st.info("Using built-in demo file: ukraine_sample.csv")
@@ -71,7 +88,7 @@ if use_sample:
 
 else:
     if uploaded is None:
-        st.info("Upload a CSV in the sidebar, then click Generate plot.")
+        st.info("Upload a CSV or enable the demo.")
         st.stop()
 
     df = pd.read_csv(uploaded)
@@ -89,29 +106,24 @@ if not run_btn:
 try:
 
     if country_col not in df.columns:
-        st.error(f"Column `{country_col}` not found in dataset.")
+        st.error(f"{country_col} not found in dataset")
         st.stop()
 
     if date_col not in df.columns:
-        st.error(f"Column `{date_col}` not found in dataset.")
+        st.error(f"{date_col} not found in dataset")
         st.stop()
 
     if fatalities_col not in df.columns:
-        st.error(f"Column `{fatalities_col}` not found in dataset.")
+        st.error(f"{fatalities_col} not found in dataset")
         st.stop()
 
     sub = df[df[country_col] == country_name].copy()
-
-    if sub.empty:
-        st.error(f"No rows found for country `{country_name}`.")
-        st.stop()
 
     sub[date_col] = pd.to_datetime(sub[date_col], errors="coerce")
     sub = sub.dropna(subset=[date_col])
 
     sub[fatalities_col] = pd.to_numeric(sub[fatalities_col], errors="coerce").fillna(0)
 
-    # aggregate daily fatalities
     daily = (
         sub.groupby(sub[date_col].dt.floor("D"))[fatalities_col]
         .sum()
@@ -121,12 +133,25 @@ try:
     daily.columns = ["date", "fatalities"]
     daily = daily.sort_values("date")
 
-    # rolling fatalities
     daily["rolling"] = daily["fatalities"].rolling(
         window=int(rolling_window), min_periods=1
     ).sum()
 
-    # threshold detection
+    thresholds = parse_thresholds(thresholds_raw)
+
+except Exception as e:
+    st.error(str(e))
+    st.stop()
+
+
+# -----------------------------
+# Escalation Detection
+# -----------------------------
+
+starts_all = []
+
+for threshold in thresholds:
+
     daily["above"] = daily["rolling"] >= threshold
 
     daily["streak"] = (
@@ -139,28 +164,30 @@ try:
 
     daily["start"] = daily["persistent"] & (~daily["persistent"].shift(1).fillna(False))
 
-    starts = daily[daily["start"]]
+    starts = daily[daily["start"]].copy()
+    starts["threshold"] = threshold
 
-except Exception as e:
-    st.error(str(e))
-    st.stop()
+    starts_all.append(starts)
+
+
+starts = pd.concat(starts_all)
 
 
 # -----------------------------
 # Plot
 # -----------------------------
 
-fig, ax = plt.subplots(figsize=(12, 5))
+fig, ax = plt.subplots(figsize=(12,5))
 
 ax.plot(daily["date"], daily["rolling"])
 
-ax.axhline(threshold, linestyle="--")
+for t in thresholds:
+    ax.axhline(t, linestyle="--")
 
-if not starts.empty:
-    ax.scatter(starts["date"], starts["rolling"], s=80)
+ax.scatter(starts["date"], starts["rolling"], s=80)
 
 ax.set_title(
-    f"AEGIS Escalation Detection — {country_name} (rolling={rolling_window}d, threshold={threshold})"
+    f"AEGIS Escalation Detection — {country_name} (rolling={rolling_window}d, thresholds={thresholds})"
 )
 
 ax.set_xlabel("Date")
@@ -173,7 +200,7 @@ st.pyplot(fig)
 # Summary
 # -----------------------------
 
-col1, col2 = st.columns([3, 1])
+col1, col2 = st.columns([3,1])
 
 with col2:
 
@@ -181,11 +208,11 @@ with col2:
 
     st.write(f"Rows (daily): {len(daily)}")
 
-    days_above = daily["above"].sum()
-    days_persistent = daily["persistent"].sum()
+    for t in thresholds:
 
-    st.write(f"Days above threshold: {days_above}")
-    st.write(f"Days persistent: {days_persistent}")
+        days_above = (daily["rolling"] >= t).sum()
+
+        st.write(f"Days above threshold {t}: {days_above}")
 
     st.write(f"Escalation starts detected: {len(starts)}")
 
@@ -193,5 +220,6 @@ with col2:
 
         st.write("First escalation starts:")
 
-        show = starts[["date", "rolling"]].head(10)
-        st.dataframe(show)
+        st.dataframe(
+            starts[["date","rolling","threshold"]].head(10)
+        )
