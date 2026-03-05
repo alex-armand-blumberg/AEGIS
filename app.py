@@ -186,44 +186,53 @@ country_name = st.sidebar.text_input(
     help="Must match the country values in your dataset exactly (e.g., 'Ukraine')."
 )
 
-with st.sidebar.expander("Advanced"):
-    st.markdown(
+# ----------------------------
+# Advanced settings
+# ----------------------------
+with st.sidebar.expander("Advanced settings"):
 
-        country_col = st.sidebar.text_input(
-            "Name of Country Column",
-            "country",
-            help="Column name that contains the country name for each row."
-        )
-        
-        date_col = st.sidebar.text_input(
-            "Name of Date Column",
-            "date_start",
-            help="Column name that contains the event date."
-        )
-        
-        fatalities_col = st.sidebar.text_input(
-            "Name of Fatalities Column",
-            "best",
-            help="Column name that contains fatalities #."
-        )
-        
-        rolling_window = st.sidebar.number_input(
-            "Rolling window (days)",
-            min_value=1, max_value=365, value=30, step=1
-        )
-        
-        thresholds_raw = st.sidebar.text_input(
-            "Escalation threshold(s) (comma-separated)",
-            "25,1000",
-            help="One or two thresholds. Example: 25 or 25,50"
-        )
-        
-        persistence_days = st.sidebar.number_input(
-            "Persistence (consecutive days above threshold)",
-            min_value=1, max_value=60, value=7, step=1
-        )
-)
+    country_col = st.text_input(
+        "Name of Country Column",
+        "country",
+        help="Column name that contains the country name for each row."
+    )
 
+    date_col = st.text_input(
+        "Name of Date Column",
+        "date_start",
+        help="Column name that contains the event date."
+    )
+
+    fatalities_col = st.text_input(
+        "Name of Fatalities Column",
+        "best",
+        help="Column name that contains fatalities."
+    )
+
+    rolling_window = st.number_input(
+        "Rolling window (days)",
+        min_value=1,
+        max_value=365,
+        value=30,
+        step=1,
+        help="Number of days used to compute rolling fatalities."
+    )
+
+    thresholds_raw = st.text_input(
+        "Escalation threshold(s) (comma-separated)",
+        "25,1000",
+        help="One or two thresholds. Example: 25 or 25,50"
+    )
+
+    persistence_days = st.number_input(
+        "Persistence (consecutive days above threshold)",
+        min_value=1,
+        max_value=60,
+        value=7,
+        step=1,
+        help="How many consecutive days the rolling fatalities must exceed the threshold."
+    )
+    
 run_btn = st.sidebar.button("Generate plot")
 
 # Map controls
