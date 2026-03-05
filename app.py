@@ -474,82 +474,81 @@ try:
 except Exception as e:
     st.error(str(e))
 
+plot_ready = True
+
 if df_raw_plot is None:
-    st.info("Upload a CSV (or enable the demo), then click **Generate plot**. The interactive map appears above.")
-    st.stop()
+    st.info("Upload a CSV (or enable the demo), then click **Generate plot**. The interactive map appears below.")
+    plot_ready = False
+else:
+    st.caption(f"Plot dataset source: {plot_source}")
+    st.caption("Source: Uppsala Conflict Data Program (UCDP) Georeferenced Event Dataset via HuggingFace.")
 
-st.caption(f"Plot dataset source: {plot_source}")
+    # Validate columns for plot dataset
+    try:
+        require_columns(df_raw_plot, [country_col, date_col, fatalities_col], "Plot dataset")
+    except Exception as e:
+        st.error(str(e))
+        plot_ready = False
 
+    if plot_ready and (not run_btn):
+        st.info("CSV loaded — now click **Generate plot**.")
+        plot_ready = False
 
-st.caption("Source: Uppsala Conflict Data Program (UCDP) Georeferenced Event Dataset via HuggingFace.")
+if plot_ready:
+    # Build daily series for selected country
+    try:
+        daily = build_country_daily(df_raw_plot, country_col, date_col, fatalities_col)
+        c_daily = daily[daily["country"] == country_name].copy()
 
-# Validate columns for plot dataset
-try:
-    require_columns(df_raw_plot, [country_col, date_col, fatalities_col], "Plot dataset")
-except Exception as e:
-    st.error(str(e))
-    st.stop()
+        if c_daily.empty:
+            st.warning(f"No rows found for country='{country_name}'. Check spelling/case or your country column.")
+        else:
+            c_daily = c_daily.set_index("date").sort_index()
+            c_daily["rolling"] = c_daily["fatalities"].rolling(int(rolling_window), min_periods=1).sum()
 
-if not run_btn:
-    st.info("CSV loaded — now click **Generate plot**.")
-    st.stop()
+            thresholds = parse_thresholds(thresholds_raw)
+            if not thresholds:
+                st.error("Please provide at least one threshold (e.g., 25 or 25,50).")
+            else:
+                import matplotlib.pyplot as plt
 
-# Build daily series for selected country
-try:
-    daily = build_country_daily(df_raw_plot, country_col, date_col, fatalities_col)
-    c_daily = daily[daily["country"] == country_name].copy()
+                fig, ax = plt.subplots()
+                ax.plot(c_daily.index, c_daily["rolling"], label="Rolling fatalities")
 
-    if c_daily.empty:
-        st.warning(f"No rows found for country='{country_name}'. Check spelling/case or your country column.")
-        st.stop()
+                # Draw thresholds + starts
+                for i, thr in enumerate(thresholds):
+                    ax.axhline(thr, linestyle="--", linewidth=1, label=f"Threshold {i+1}: {thr:g}")
+                    starts = compute_escalation_starts(c_daily["rolling"], thr, int(persistence_days))
+                    ax.scatter(
+                        c_daily.index[starts],
+                        c_daily["rolling"][starts],
+                        s=40,
+                        label=f"Escalation starts (thr={thr:g})"
+                    )
 
-    c_daily = c_daily.set_index("date").sort_index()
-    c_daily["rolling"] = c_daily["fatalities"].rolling(int(rolling_window), min_periods=1).sum()
+                ax.set_title(f"AEGIS Escalation Detection — {country_name} (rolling={int(rolling_window)}d)")
+                ax.set_xlabel("Date")
+                ax.set_ylabel("Rolling fatalities")
+                ax.legend()
 
-    thresholds = parse_thresholds(thresholds_raw)
-    if not thresholds:
-        st.error("Please provide at least one threshold (e.g., 25 or 25,50).")
-        st.stop()
+                st.pyplot(fig, clear_figure=True)
 
-    import matplotlib.pyplot as plt
+                # Summary table of first few starts
+                st.markdown("### Summary")
+                for thr in thresholds:
+                    starts = compute_escalation_starts(c_daily["rolling"], thr, int(persistence_days))
+                    starts_df = (
+                        c_daily.loc[starts, ["rolling"]]
+                        .reset_index()
+                        .rename(columns={"index": "date"})
+                        .assign(threshold=thr)
+                        .sort_values("date")
+                    )
+                    st.write(f"**Threshold {thr:g}: escalation starts detected = {len(starts_df)}**")
+                    st.dataframe(starts_df.head(10), use_container_width=True)
 
-    fig, ax = plt.subplots()
-    ax.plot(c_daily.index, c_daily["rolling"], label="Rolling fatalities")
-
-    # Draw thresholds + starts
-    for i, thr in enumerate(thresholds):
-        ax.axhline(thr, linestyle="--", linewidth=1, label=f"Threshold {i+1}: {thr:g}")
-        starts = compute_escalation_starts(c_daily["rolling"], thr, int(persistence_days))
-        ax.scatter(
-            c_daily.index[starts],
-            c_daily["rolling"][starts],
-            s=40,
-            label=f"Escalation starts (thr={thr:g})"
-        )
-
-    ax.set_title(f"AEGIS Escalation Detection — {country_name} (rolling={int(rolling_window)}d)")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Rolling fatalities")
-    ax.legend()
-
-    st.pyplot(fig, clear_figure=True)
-
-    # Summary table of first few starts
-    st.markdown("### Summary")
-    for thr in thresholds:
-        starts = compute_escalation_starts(c_daily["rolling"], thr, int(persistence_days))
-        starts_df = (
-            c_daily.loc[starts, ["rolling"]]
-            .reset_index()
-            .rename(columns={"index": "date"})
-            .assign(threshold=thr)
-            .sort_values("date")
-        )
-        st.write(f"**Threshold {thr:g}: escalation starts detected = {len(starts_df)}**")
-        st.dataframe(starts_df.head(10), use_container_width=True)
-
-except Exception as e:
-    st.error(str(e))
+    except Exception as e:
+        st.error(str(e))
 
 
 
@@ -616,6 +615,9 @@ if show_map:
                 # Show the auto range (no big control in the main area)
                 start_dt, end_dt = min_dt, max_dt
 
+            st.caption("Data source: HuggingFace hosted UCDP world dataset")
+            st.caption("To change the date range, enable **Override map date range** in the sidebar.")
+
             # Aggregate fatalities by country for the selected range
             by_country = (
                 df_world.groupby(world_country_col, as_index=False)[world_fatal_col]
@@ -643,7 +645,6 @@ if show_map:
             )
 
             fig.update_layout(margin=dict(l=0, r=0, t=60, b=0))
-            st.caption("To change the date range, enable **Override map date range** in the sidebar.")
             st.plotly_chart(fig, use_container_width=True)
 
         except Exception as e:
