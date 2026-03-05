@@ -42,7 +42,7 @@ rolling_window = st.sidebar.number_input(
 
 # Two thresholds allowed
 thresholds_raw = st.sidebar.text_input(
-    "Escalation thresholds (comma separated)",
+    "Escalation Thresholds (comma separated, no space)",
     "25,1000"
 )
 
@@ -50,7 +50,7 @@ persistence = st.sidebar.number_input(
     "Persistence (days above threshold)", min_value=1, value=3
 )
 
-run_btn = st.sidebar.button("Generate plot")
+run_btn = st.sidebar.button("Generate Plot")
 
 
 # -----------------------------
