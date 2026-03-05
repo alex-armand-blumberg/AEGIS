@@ -332,7 +332,7 @@ if show_map:
     hover_name="country",
     hover_data={
         "country": False,
-        "Fatalities": True
+        "fatalities": True
     },
     title="Fatalities by country (selected date range)",
     color_continuous_scale="Blues_r"
