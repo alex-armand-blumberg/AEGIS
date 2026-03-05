@@ -141,7 +141,7 @@ st.set_page_config(
 # Current conflict news
 # ----------------------------
 
-with st.expander("Current Conflict News", expanded=True):
+with st.expander("Current Conflict News", expanded=False):
     render_news()
 
 # ----------------------------
