@@ -231,7 +231,7 @@ with col2:
 
         days_above = (daily["rolling"] >= t).sum()
 
-        st.write(f"Days above threshold {t}: {days_above}")
+        st.write(f"Days above threshold {t}:      {days_above}")
 
     st.write(f"Escalation starts detected: {len(starts)}")
 
@@ -240,5 +240,5 @@ with col2:
         st.write("First escalation starts:")
 
         st.dataframe(
-            starts[["date","rolling","threshold"]].head(10)
+            starts[["Start Date","Rolling Fatalities","Threshold"]].head(10)
         )
