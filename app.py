@@ -379,7 +379,7 @@ st.sidebar.markdown("---")
 with st.sidebar.expander("Purpose"):
     st.markdown("""
 
-        ** Made for Palantir© Valley Forge Grants**
+        **Made as Demo for Palantir© Valley Forge Grants**
     
         AEGIS is designed to identify and visualize patterns of conflict escalation using structured event data.
 
