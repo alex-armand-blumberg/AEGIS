@@ -272,3 +272,6 @@ with col_summary:
     if not starts.empty:
         st.write("First escalation starts:")
         st.dataframe(starts.sort_values("date").head(10), use_container_width=True)
+
+st.markdown("---")
+st.caption("AEGIS Escalation Detection System | Data: UCDP GED")
