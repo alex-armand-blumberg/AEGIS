@@ -148,17 +148,10 @@ def compute_escalation_starts(series: pd.Series, threshold: float, persistence_d
 # ----------------------------
 # Sidebar "hero" video (optional)
 # Sidebar "hero" video (optional)
+# Sidebar "hero" video (optional)
 VIDEO_PATH = Path("logo1.mp4")
 if VIDEO_PATH.exists():
-    video_bytes = open(VIDEO_PATH, "rb").read()
-    st.sidebar.markdown(
-        f"""
-        <video autoplay loop muted playsinline style="width:100%; border-radius:12px;">
-            <source src="data:video/mp4;base64,{video_bytes.encode('base64').decode()}" type="video/mp4">
-        </video>
-        """,
-        unsafe_allow_html=True
-    )
+    st.sidebar.video(str(VIDEO_PATH))
 
 st.sidebar.header("Inputs")
 
