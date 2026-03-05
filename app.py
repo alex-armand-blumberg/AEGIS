@@ -334,7 +334,7 @@ if show_map:
         "country": False,
         "fatalities": True
     },
-    title="Fatalities by country (selected date range)",
+    title="Fatalities by country (1989—2024)",
     color_continuous_scale="Blues_r"
 )
             fig.update_coloraxes(reversescale=True)
