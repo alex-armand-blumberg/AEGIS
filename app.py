@@ -13,6 +13,7 @@ with col1:
     st.image(logo, width=1000)
 
 with col2:
+    st.write("")
     st.title("Escalation Detection Demo")
     
 st.write(
