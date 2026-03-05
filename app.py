@@ -119,11 +119,13 @@ def build_daily_series(
 
     # Aggregate to daily totals
     daily = (
-        sub.groupby(sub[date_col].dt.floor("D"), as_index=False)[fatalities_col]
-        .sum()
-        .rename(columns={date_col: "date", fatalities_col: "fatalities"})
-        .sort_values("date")
-    )
+    sub.groupby(sub[date_col].dt.floor("D"))[fatalities_col]
+    .sum()
+    .reset_index()
+)
+
+daily.columns = ["date", "fatalities"]
+daily = daily.sort_values("date")
 
     # Fill missing days with 0 (continuous daily index)
     full_range = pd.date_range(daily["date"].min(), daily["date"].max(), freq="D")
