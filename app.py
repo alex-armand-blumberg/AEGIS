@@ -167,7 +167,7 @@ if VIDEO_PATH.exists():
         """,
         unsafe_allow_html=True
     )
-
+st.sidebar.markdown("---")
 st.sidebar.header("Inputs")
 
 use_demo = st.sidebar.checkbox(
@@ -190,7 +190,7 @@ country_name = st.sidebar.text_input(
 # Advanced settings
 # ----------------------------
 st.write("")
-with st.sidebar.expander("Advanced settings"):
+with st.sidebar.expander("Advanced Settings"):
 
     country_col = st.text_input(
         "Name of Country Column",
