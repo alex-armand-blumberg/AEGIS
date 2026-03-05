@@ -20,6 +20,17 @@ except Exception:
 # Config
 # ----------------------------
 
+
+st.set_page_config(
+    page_title="AEGIS — Escalation Detection Demo",
+    page_icon="ZoomedLogo.png",
+    layout="wide"
+)
+
+# ----------------------------
+# Current conflict news
+# ----------------------------
+
 import feedparser
 
 st.subheader("Current Conflict News")
@@ -29,11 +40,9 @@ feed = feedparser.parse("https://news.google.com/rss/search?q=conflict+war+geopo
 for entry in feed.entries[:5]:
     st.markdown(f"• [{entry.title}]({entry.link})")
 
-st.set_page_config(
-    page_title="AEGIS — Escalation Detection Demo",
-    page_icon="ZoomedLogo.png",
-    layout="wide"
-)
+# ----------------------------
+# Dataset paths
+# ----------------------------
 
 HF_WORLD_CSV_URL = "https://huggingface.co/datasets/alex-armand-blumberg/UCDP/resolve/main/GEDEvent_v25_1%203.csv"
 UKRAINE_SAMPLE_PATH = Path("ukraine_sample.csv")  # must exist in repo root
