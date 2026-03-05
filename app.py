@@ -33,7 +33,7 @@ HF_WORLD_CSV_URL = "https://huggingface.co/datasets/alex-armand-blumberg/UCDP/re
 
 # Sidebar video (optional
 
-if missing, it won't crash)
+if missing; it won't crash)
 SIDEBAR_VIDEO_PATH = Path("logo1.mp4")
 
 
