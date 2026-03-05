@@ -446,51 +446,90 @@ def load_world_dataset_for_map() -> pd.DataFrame:
 # Map section
 # ----------------------------
 
-# -------------------------------
-# Interactive map
-# -------------------------------
+# ----------------------------
+# Map section
+# ----------------------------
+if show_map:
+    st.markdown("## Interactive map")
+    st.caption("Data source: HuggingFace hosted world dataset")
 
-st.markdown("## Interactive map")
-st.caption("Data source: HuggingFace hosted world dataset")
+    if not _HAS_PLOTLY:
+        st.info("Interactive map requires Plotly. Add `plotly` to requirements.txt to enable it.")
+    else:
+        try:
+            # Load the HF world dataset
+            df_world = load_world_dataset_for_map()
 
-try:
+            # Expected columns in the world dataset
+            world_country_col = "country"
+            world_date_col = "date_start"
+            world_fatal_col = "best"
 
-    world_slice = df_plot.copy()
+            require_columns(df_world, [world_country_col, world_date_col, world_fatal_col], "World map dataset")
 
-    # Ensure fatalities column exists
-    if "best" in world_slice.columns and "fatalities" not in world_slice.columns:
-        world_slice = world_slice.rename(columns={"best": "fatalities"})
+            # Parse dates + numeric fatalities
+            df_world = df_world[[world_country_col, world_date_col, world_fatal_col]].copy()
+            df_world[world_date_col] = pd.to_datetime(df_world[world_date_col], errors="coerce")
+            df_world = df_world.dropna(subset=[world_date_col])
 
-    # Aggregate fatalities by country
-    by_country = (
-        world_slice.groupby("country", as_index=False)["fatalities"]
-        .sum()
-        .sort_values("fatalities", ascending=False)
-    )
+            df_world[world_fatal_col] = pd.to_numeric(df_world[world_fatal_col], errors="coerce").fillna(0)
 
-    fig = px.choropleth(
-        by_country,
-        locations="country",
-        locationmode="country names",
-        color="fatalities",
-        hover_name="country",
-        hover_data={"country": False, "fatalities": ":,"},
-        title="Fatalities by country (1989–2024)",
-        color_continuous_scale="Blues_r"
-    )
+            # Auto date range from the dataset
+            min_dt = df_world[world_date_col].min().date()
+            max_dt = df_world[world_date_col].max().date()
 
-    fig.update_layout(
-        margin=dict(l=0, r=0, t=60, b=0)
-    )
+            # Optional override in the sidebar
+            if override_map_dates:
+                start_dt, end_dt = st.sidebar.date_input(
+                    "Map date range",
+                    value=(min_dt, max_dt),
+                    min_value=min_dt,
+                    max_value=max_dt,
+                    key="map_date_range",
+                )
+                # Streamlit can sometimes return a single date if user clicks weirdly
+                if isinstance(start_dt, date) and isinstance(end_dt, date) and start_dt <= end_dt:
+                    df_world = df_world[
+                        (df_world[world_date_col].dt.date >= start_dt)
+                        & (df_world[world_date_col].dt.date <= end_dt)
+                    ]
+            else:
+                # Show the auto range (no big control in the main area)
+                start_dt, end_dt = min_dt, max_dt
 
-    st.plotly_chart(fig, use_container_width=True)
+            # Aggregate fatalities by country for the selected range
+            by_country = (
+                df_world.groupby(world_country_col, as_index=False)[world_fatal_col]
+                .sum()
+                .rename(columns={world_country_col: "country", world_fatal_col: "fatalities"})
+                .sort_values("fatalities", ascending=False)
+            )
 
-    st.caption(
-        "To change the date range, check the 'Override map data range' box in the sidebar."
-    )
+            # Make higher fatalities darker:
+            # Use "Blues" (NOT Blues_r)
+            fig = px.choropleth(
+                by_country,
+                locations="country",
+                locationmode="country names",
+                color="fatalities",
+                hover_name="country",
+                hover_data={"country": False, "fatalities": ":,"},
+                title=f"Fatalities by country ({start_dt.year}–{end_dt.year})",
+                color_continuous_scale="Blues",
+            )
 
-except Exception as e:
-    st.error(f"Map error: {e}")
+            # Cleaner hover (optional but nicer)
+            fig.update_traces(
+                hovertemplate="<b>%{location}</b><br>fatalities=%{z:,}<extra></extra>"
+            )
+
+            fig.update_layout(margin=dict(l=0, r=0, t=60, b=0))
+            st.plotly_chart(fig, use_container_width=True)
+
+            st.caption("To change the date range, enable **Override map date range** in the sidebar.")
+
+        except Exception as e:
+            st.error(f"Map error: {e}")
 
 # ----------------------------
 # Escalation plot section
