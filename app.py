@@ -450,17 +450,22 @@ def load_world_dataset_for_map() -> pd.DataFrame:
 # Interactive map
 # -------------------------------
 
-# -------------------------------
-# Interactive map
-# -------------------------------
-
 st.markdown("## Interactive map")
 st.caption("Data source: HuggingFace hosted world dataset")
 
 try:
 
-    # Use the dataset already loaded in the app
-    world_slice = df_raw_plot.copy()
+    # Use the dataframe already loaded earlier in the app
+    if 'df_raw_plot' in locals():
+        world_slice = df_raw_plot.copy()
+    elif 'df' in locals():
+        world_slice = df.copy()
+    else:
+        raise ValueError("Dataset not loaded yet")
+
+    # Ensure column name compatibility
+    if "best" in world_slice.columns and "fatalities" not in world_slice.columns:
+        world_slice = world_slice.rename(columns={"best": "fatalities"})
 
     # Aggregate fatalities by country
     by_country = (
@@ -475,10 +480,7 @@ try:
         locationmode="country names",
         color="fatalities",
         hover_name="country",
-        hover_data={
-            "country": False,
-            "fatalities": ":,"
-        },
+        hover_data={"country": False, "fatalities": ":,"},
         title="Fatalities by country (1989–2024)",
         color_continuous_scale="Blues_r"
     )
