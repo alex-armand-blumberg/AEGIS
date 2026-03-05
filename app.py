@@ -22,19 +22,20 @@ st.sidebar.header("Inputs")
 # Demo checkbox starts UNCHECKED
 use_sample = st.sidebar.checkbox(
     "Use built-in Ukraine example (recommended demo)",
-    value=False
+    value=False,
+    help="Data Gathered From UCDP.uu.se
 )
 
 uploaded = None
 if not use_sample:
     uploaded = st.sidebar.file_uploader("Upload CSV", type=["csv"])
 
-country_name = st.sidebar.text_input("Country (exact match)", "Ukraine")
+country_name = st.sidebar.text_input("Country", "Ukraine", help="Name must match the dataset exactly (e.g., 'Ukraine', 'Mexico', 'Syria').)
 
-country_col = st.sidebar.text_input("Name of Country Column", "country")
+country_col = st.sidebar.text_input("Name of Country Column", "country", help="Name of your dataset's column with countries listed.)
 
-date_col = st.sidebar.text_input("Name of Date Column", "date_start")
-fatalities_col = st.sidebar.text_input("Name of Fatalities Column", "best")
+date_col = st.sidebar.text_input("Name of Date Column", "date_start", help="Name of your dataset's column with dates listed.)
+fatalities_col = st.sidebar.text_input("Name of Fatalities Column", "best", help="Name of your dataset's column with # of fatalities listed.)
 
 rolling_window = st.sidebar.number_input(
     "Rolling window (days)", min_value=1, max_value=365, value=30
