@@ -236,6 +236,25 @@ override_map_dates = st.sidebar.checkbox(
     help="If off, the map automatically uses the min/max dates in the data."
 )
 
+st.sidebar.markdown("---")
+
+with st.sidebar.expander("Limitations"):
+    st.markdown("""
+**Current limitations of AEGIS**
+
+• Fatality totals aggregate all events since 1989  
+• Some conflicts may be overcounted due to event duplication  
+• Escalation detection currently uses simple rolling thresholds  
+• Geographic precision is limited to country-level aggregation  
+
+**Planned improvements**
+
+• Subnational geolocation mapping  
+• Actor-level escalation detection  
+• Real-time conflict ingestion  
+• Improved fatality normalization across datasets
+""")
+
 # ----------------------------
 # Main header
 # ----------------------------
@@ -247,23 +266,6 @@ with col1:
 with col2:
     st.title("AEGIS — Escalation Detection Demo")
 st.caption("Upload a dataset (CSV) and choose a country to generate the rolling fatalities plot and escalation-start markers.")
-
-col_title, col_limits = st.columns([10,1])
-
-with col_limits:
-    with st.popover("Limitations"):
-        st.markdown("""
-**Current limitations of AEGIS**
-
-• Fatality totals aggregate all events since 1989  
-• Some conflicts may be overcounted due to event duplication  
-• Escalation detection currently uses simple rolling thresholds  
-• Geographic precision is limited to country level  
-• Future versions should include:
-    - Subnational geolocation
-    - Actor-level escalation detection
-    - Real-time conflict ingestion
-""")
 
 # ----------------------------
 # Load primary dataset for plot (demo or upload)
