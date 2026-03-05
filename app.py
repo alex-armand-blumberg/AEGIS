@@ -447,7 +447,7 @@ def load_world_dataset_for_map() -> pd.DataFrame:
 # ----------------------------
 if show_map:
     st.subheader("Interactive map")
-    st.caption("Data source: HuggingFace hosted world dataset")
+    st.caption("Data source: HuggingFace hosted https://UCDP.uu.se/ world dataset")
 
     if not _HAS_PLOTLY:
         st.info("Plotly isn't available in this environment, so the interactive map is disabled.")
@@ -499,6 +499,7 @@ if show_map:
     },
     title="Fatalities by country (1989—2024)",
     color_continuous_scale="Blues_r"
+    st.caption("To change date range, check the 'Override map data range' box on the sidebar.")
 )
             fig.update_coloraxes(reversescale=True)
             fig.update_layout(margin=dict(l=0, r=0, t=60, b=0))
