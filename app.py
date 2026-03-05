@@ -1,379 +1,440 @@
 # app.py
-# AEGIS — Escalation Detection Demo (Streamlit)
-# - Upload your own CSV OR use built-in Ukraine demo CSV from repo
-# - OR load the worldwide CSV from Google Drive (large file)
-# - Supports 1–2 thresholds (comma-separated)
-# - Shows rolling-window fatalities + escalation-start markers + summary table
-
-import os
-from io import BytesIO
+import io
 from pathlib import Path
-from typing import List, Tuple, Optional
 
-import pandas as pd
-import streamlit as st
 import matplotlib.pyplot as plt
+import pandas as pd
+import plotly.express as px
+import requests
+import streamlit as st
 
-# Google Drive downloader (add `gdown` to requirements.txt)
-import gdown
-
-
-# -----------------------------
+# =========================
 # Config
-# -----------------------------
-st.set_page_config(
-    page_title="AEGIS — Escalation Detection Demo",
-    page_icon="🛡️",
-    layout="wide",
-)
+# =========================
+st.set_page_config(page_title="AEGIS Escalation Detection", layout="wide")
+
+APP_DIR = Path(__file__).resolve().parent
 
 # Your Google Drive file (worldwide dataset)
-WORLD_DRIVE_FILE_ID = "1lg3YUmyxb8aqXCLtnPgGXnoJb8pIAEGF"
-WORLD_LOCAL_PATH = "world_data.csv"  # cached on Streamlit Cloud ephemeral disk
-
-# Built-in demo file expected in repo root
-UKRAINE_DEMO_PATH = Path("ukraine_sample.csv")
+GOOGLE_DRIVE_URL = "https://drive.google.com/file/d/1lg3YUmyxb8aqXCLtnPgGXnoJb8pIAEGF/view?usp=sharing"
+CACHE_FILENAME = "aegis_global.csv"  # saved in Streamlit's working dir
 
 
-# -----------------------------
+# =========================
 # Helpers
-# -----------------------------
-def parse_thresholds(raw: str) -> List[float]:
+# =========================
+def extract_gdrive_file_id(url: str) -> str | None:
+    # Works for /file/d/<ID>/view style URLs
+    try:
+        parts = url.split("/d/")
+        if len(parts) < 2:
+            return None
+        tail = parts[1]
+        file_id = tail.split("/")[0]
+        return file_id.strip()
+    except Exception:
+        return None
+
+
+@st.cache_data(show_spinner=False)
+def download_gdrive_csv(url: str, local_name: str) -> Path:
     """
-    Accepts: "25" or "25,1000" etc. Returns up to 2 floats.
+    Downloads a Google Drive file using the 'uc?export=download&id=' endpoint.
+    Saves locally (so we don't redownload every rerun).
     """
-    parts = [p.strip() for p in (raw or "").split(",") if p.strip() != ""]
-    vals: List[float] = []
-    for p in parts:
-        try:
-            vals.append(float(p))
-        except ValueError:
+    file_id = extract_gdrive_file_id(url)
+    if not file_id:
+        raise ValueError("Could not parse Google Drive file id from the URL.")
+
+    local_path = APP_DIR / local_name
+    if local_path.exists() and local_path.stat().st_size > 0:
+        return local_path
+
+    # Direct download endpoint
+    dl_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+
+    with requests.get(dl_url, stream=True, timeout=60) as r:
+        r.raise_for_status()
+        with open(local_path, "wb") as f:
+            for chunk in r.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    f.write(chunk)
+
+    if local_path.stat().st_size == 0:
+        raise ValueError("Downloaded file is empty. Check sharing permissions (must be accessible via link).")
+
+    return local_path
+
+
+@st.cache_data(show_spinner=False)
+def read_csv_any(source) -> pd.DataFrame:
+    """
+    source can be:
+      - Path
+      - UploadedFile (streamlit)
+      - bytes / BytesIO
+    """
+    if isinstance(source, Path):
+        return pd.read_csv(source)
+    if hasattr(source, "read"):  # UploadedFile or file-like
+        data = source.read()
+        if isinstance(data, str):
+            data = data.encode("utf-8")
+        return pd.read_csv(io.BytesIO(data))
+    if isinstance(source, (bytes, bytearray)):
+        return pd.read_csv(io.BytesIO(source))
+    raise ValueError("Unsupported CSV source type.")
+
+
+def parse_thresholds(raw: str) -> list[float]:
+    vals = []
+    for part in (raw or "").split(","):
+        part = part.strip()
+        if not part:
             continue
-    # Keep only first 2
+        vals.append(float(part))
+    if not vals:
+        raise ValueError("Please enter at least one threshold (e.g., 25 or 25,1000).")
+    # Keep at most 2, as requested
     return vals[:2]
 
 
-@st.cache_data(show_spinner=True)
-def download_world_csv_from_drive(file_id: str, out_path: str) -> str:
-    """
-    Download a large CSV from Google Drive and return local file path.
-    Cached so we don't re-download on every rerun.
-    """
-    url = f"https://drive.google.com/uc?id={file_id}"
-    if not os.path.exists(out_path):
-        gdown.download(url, out_path, quiet=False)
-    return out_path
+def coerce_columns(df: pd.DataFrame, country_col: str, date_col: str, fatalities_col: str) -> pd.DataFrame:
+    missing = [c for c in [country_col, date_col, fatalities_col] if c not in df.columns]
+    if missing:
+        raise KeyError(f"Missing column(s): {missing}. Available columns: {list(df.columns)[:25]}...")
+
+    out = df.copy()
+
+    out[country_col] = out[country_col].astype(str).str.strip()
+    out[date_col] = pd.to_datetime(out[date_col], errors="coerce")
+    out[fatalities_col] = pd.to_numeric(out[fatalities_col], errors="coerce").fillna(0)
+
+    out = out.dropna(subset=[date_col])
+    return out
 
 
-@st.cache_data(show_spinner=True)
-def read_csv_bytes(file_bytes: bytes) -> pd.DataFrame:
-    return pd.read_csv(BytesIO(file_bytes))
-
-
-@st.cache_data(show_spinner=True)
-def read_csv_path(path_str: str) -> pd.DataFrame:
-    return pd.read_csv(path_str)
-
-
-def load_dataframe(
-    uploaded_file,
-    use_ukraine_demo: bool,
-    use_world_drive: bool,
-) -> pd.DataFrame:
-    if use_world_drive:
-        local_path = download_world_csv_from_drive(WORLD_DRIVE_FILE_ID, WORLD_LOCAL_PATH)
-        return read_csv_path(local_path)
-
-    if use_ukraine_demo:
-        if not UKRAINE_DEMO_PATH.exists():
-            raise FileNotFoundError(
-                "Built-in demo file not found. Expected ukraine_sample.csv in the repo root."
-            )
-        return read_csv_path(str(UKRAINE_DEMO_PATH))
-
-    if uploaded_file is None:
-        raise ValueError("No CSV provided.")
-    return read_csv_bytes(uploaded_file.getvalue())
-
-
-def build_daily_series(
+def daily_series_for_country(
     df: pd.DataFrame,
+    country_name: str,
     country_col: str,
-    country_value: str,
     date_col: str,
     fatalities_col: str,
 ) -> pd.DataFrame:
-    """
-    Filters to country, converts date + fatalities, aggregates to daily totals.
-    Returns columns: [date, fatalities]
-    """
-    missing = [c for c in [country_col, date_col, fatalities_col] if c not in df.columns]
-    if missing:
-        raise KeyError(f"Missing column(s) in CSV: {missing}")
-
-    sub = df[df[country_col].astype(str) == str(country_value)].copy()
+    sub = df[df[country_col] == country_name].copy()
     if sub.empty:
-        raise ValueError(
-            f"No rows found for {country_value!r} in column {country_col!r}. "
-            "Make sure the name matches exactly."
-        )
-
-    # Parse date + fatalities robustly
-    sub[date_col] = pd.to_datetime(sub[date_col], errors="coerce")
-    sub = sub.dropna(subset=[date_col])
-
-    sub[fatalities_col] = pd.to_numeric(sub[fatalities_col], errors="coerce").fillna(0)
-    sub[fatalities_col] = sub[fatalities_col].clip(lower=0)
-
-    # daily aggregation
+        raise ValueError(f"No rows found for country='{country_name}'. Check spelling/case.")
     daily = (
-        sub.groupby(sub[date_col].dt.date, as_index=False)[fatalities_col]
+        sub.groupby(pd.Grouper(key=date_col, freq="D"))[fatalities_col]
         .sum()
-        .rename(columns={fatalities_col: "fatalities"})
+        .reset_index()
+        .rename(columns={date_col: "date", fatalities_col: "fatalities"})
+        .sort_values("date")
     )
-    daily["date"] = pd.to_datetime(daily[date_col].astype(str), errors="coerce")
-    daily = daily.drop(columns=[date_col]).sort_values("date")
-
-    # Make a complete daily index (fills missing days with 0)
-    full = pd.DataFrame({"date": pd.date_range(daily["date"].min(), daily["date"].max(), freq="D")})
-    daily = full.merge(daily, on="date", how="left")
-    daily["fatalities"] = daily["fatalities"].fillna(0)
-
     return daily
 
 
-def compute_escalation(
+def detect_escalation_starts(
     daily: pd.DataFrame,
     rolling_days: int,
     threshold: float,
     persistence_days: int,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Adds rolling window + escalation flags.
-    Returns:
-      - df with columns [date, fatalities, rolling, above, persistent, escalation_start]
-      - escalation starts table [date, rolling, threshold]
-    """
-    df = daily.copy()
-    df["rolling"] = df["fatalities"].rolling(window=rolling_days, min_periods=rolling_days).sum()
-    df["rolling"] = df["rolling"].fillna(0)
+) -> pd.DataFrame:
+    d = daily.copy()
+    d["rolling"] = d["fatalities"].rolling(int(rolling_days), min_periods=1).sum()
 
-    df["above"] = df["rolling"] >= threshold
-
-    # persistent: TRUE if last `persistence_days` are all above threshold
-    # (requires consecutive days above threshold)
-    if persistence_days <= 1:
-        df["persistent"] = df["above"]
-    else:
-        df["persistent"] = (
-            df["above"]
-            .rolling(window=persistence_days, min_periods=persistence_days)
-            .apply(lambda x: 1.0 if x.all() else 0.0, raw=False)
-            .fillna(0)
-            .astype(bool)
-        )
-
-    df["escalation_start"] = df["persistent"] & (~df["persistent"].shift(1).fillna(False))
-
-    starts = df.loc[df["escalation_start"], ["date", "rolling"]].copy()
-    starts["threshold"] = threshold
-
-    return df, starts
-
-
-def make_plot(
-    df: pd.DataFrame,
-    starts_all: pd.DataFrame,
-    country: str,
-    rolling_days: int,
-    thresholds: List[float],
-):
-    fig = plt.figure(figsize=(12, 5))
-    ax = fig.add_subplot(111)
-
-    ax.plot(df["date"], df["rolling"], linewidth=2)
-    ax.set_title(
-        f"AEGIS Escalation Detection — {country} (rolling={rolling_days}d, thresholds={','.join(str(t) for t in thresholds)})"
+    d["above"] = d["rolling"] >= float(threshold)
+    # "persistent" means consecutive run of >= persistence_days above threshold
+    # We'll compute rolling sum of True values over the window
+    d["persistent"] = (
+        d["above"].rolling(int(persistence_days), min_periods=int(persistence_days)).sum() == int(persistence_days)
     )
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Rolling window fatalities")
+    d["persistent"] = d["persistent"].fillna(False)
 
-    # Draw threshold lines + markers
-    for t in thresholds:
-        ax.axhline(t, linestyle="--", linewidth=1)
-
-    if not starts_all.empty:
-        ax.scatter(starts_all["date"], starts_all["rolling"], s=70)
-
-    fig.tight_layout()
-    return fig
+    d["escalation_start"] = d["persistent"] & (~d["persistent"].shift(1).fillna(False))
+    return d
 
 
-# -----------------------------
-# UI
-# -----------------------------
+def sidebar_video(file_name: str, height_px: int = 170):
+    """
+    Streamlit's st.video is hard to style/fit. This HTML block gives you:
+    - full width
+    - rounded corners
+    - object-fit: cover
+    - autoplay + loop + muted (required by most browsers)
+    """
+    video_path = APP_DIR / file_name
+    if not video_path.exists():
+        st.sidebar.warning(f"Sidebar video not found: {file_name}")
+        return
+
+    b64 = video_path.read_bytes()
+    # Use base64 to avoid path issues on Streamlit Cloud
+    import base64
+
+    b64vid = base64.b64encode(b64).decode("utf-8")
+    html = f"""
+    <div style="width:100%; overflow:hidden; border-radius:16px; background:#000;">
+      <video
+        style="width:100%; height:{height_px}px; object-fit:cover; display:block;"
+        autoplay
+        muted
+        loop
+        playsinline
+      >
+        <source src="data:video/mp4;base64,{b64vid}" type="video/mp4"/>
+      </video>
+    </div>
+    """
+    st.sidebar.markdown(html, unsafe_allow_html=True)
+
+
+def make_world_map(df: pd.DataFrame, country_col: str, date_col: str, fatalities_col: str):
+    """
+    Interactive choropleth map (Plotly):
+    - Aggregates fatalities per country
+    - Lets user choose a time window from the most recent date
+    """
+    if df.empty:
+        st.info("No data loaded yet.")
+        return
+
+    max_date = pd.to_datetime(df[date_col]).max()
+    if pd.isna(max_date):
+        st.info("Map unavailable: date column could not be parsed.")
+        return
+
+    st.subheader("Global Snapshot")
+    st.caption("Interactive map based on the dataset currently loaded (upload, demo, or Google Drive).")
+
+    days_back = st.slider("Map time window (days back from latest date)", 30, 3650, 365, 30)
+
+    start = max_date - pd.Timedelta(days=int(days_back))
+    dsub = df[(df[date_col] >= start) & (df[date_col] <= max_date)].copy()
+    if dsub.empty:
+        st.info("No rows in the selected map time window.")
+        return
+
+    agg = (
+        dsub.groupby(country_col, as_index=False)[fatalities_col]
+        .sum()
+        .rename(columns={country_col: "country", fatalities_col: "fatalities"})
+    )
+    # Plotly expects country names; your dataset uses country names, so this is fine.
+    fig = px.choropleth(
+        agg,
+        locations="country",
+        locationmode="country names",
+        color="fatalities",
+        hover_name="country",
+        color_continuous_scale="Blues",
+        title=f"Total fatalities by country (last {days_back} days)",
+    )
+    fig.update_layout(margin=dict(l=10, r=10, t=50, b=10))
+    st.plotly_chart(fig, use_container_width=True)
+
+
+# =========================
+# UI Header
+# =========================
 st.title("AEGIS — Escalation Detection Demo")
 st.write(
     "Upload a dataset (CSV) and choose a country to generate the rolling fatalities plot and escalation-start markers."
 )
 
+# =========================
+# Sidebar (video + inputs)
+# =========================
+# If you have logo1.mp4 in your repo, this will show it at the top of the sidebar.
+sidebar_video("logo1.mp4", height_px=170)
+
 st.sidebar.header("Inputs")
 
-# Demo / data source toggles
-use_ukraine_demo = st.sidebar.checkbox(
+# Demo checkbox starts UNCHECKED
+use_sample = st.sidebar.checkbox(
     "Use built-in Ukraine example (recommended demo)",
     value=False,
-    help="Loads ukraine_sample.csv from this repo (small demo file).",
+    help="Loads a small CSV from the repo named 'ukraine_sample.csv'.",
 )
-
-use_world_drive = st.sidebar.checkbox(
-    "Use worldwide dataset from Google Drive (large)",
-    value=False,
-    help="Downloads the large CSV from Google Drive (cached). Turn this off if you want to upload your own file.",
-)
-
-# If both checked, worldwide wins
-if use_ukraine_demo and use_world_drive:
-    st.sidebar.info("Both toggles are on. Using the worldwide Google Drive dataset.")
-    use_ukraine_demo = False
 
 uploaded = None
-if not use_ukraine_demo and not use_world_drive:
-    uploaded = st.sidebar.file_uploader("Upload CSV", type=["csv"])
+if not use_sample:
+    uploaded = st.sidebar.file_uploader("Upload CSV", type=["csv"], help="Upload your dataset as a CSV.")
+
+# Country/column inputs
+country_name = st.sidebar.text_input(
+    "Country (exact match)",
+    "Ukraine",
+    help="Name must match the dataset exactly (e.g., Ukraine, Mexico, Syria).",
+)
 
 country_col = st.sidebar.text_input(
     "Country column",
     "country",
-    help="Name of the column that contains the country name for each row (e.g., 'country').",
-)
-
-country_name = st.sidebar.text_input(
-    "Country (exact match)",
-    "Ukraine",
-    help="Must match the dataset exactly (examples: 'Ukraine', 'Mexico', 'Syria').",
+    help="Column name containing country names.",
 )
 
 date_col = st.sidebar.text_input(
     "Date column",
     "date_start",
-    help="Name of the column that contains dates (e.g., 'date_start').",
+    help="Column name containing dates (will be parsed).",
 )
 
 fatalities_col = st.sidebar.text_input(
     "Fatalities column",
     "best",
-    help="Name of the column with fatalities (numeric). For some datasets this is 'best'.",
+    help="Column name containing fatalities (numeric).",
 )
 
-rolling_days = st.sidebar.number_input(
-    "Rolling window (days)",
-    min_value=1,
-    max_value=365,
-    value=30,
-    step=1,
+rolling_window = st.sidebar.number_input(
+    "Rolling window (days)", min_value=1, max_value=365, value=30, step=1, help="Rolling sum window."
 )
 
 thresholds_raw = st.sidebar.text_input(
-    "Escalation threshold(s) (comma-separated)",
-    "25",
-    help="Enter one or two thresholds, e.g. '25' or '25,1000'.",
+    "Escalation threshold(s) (comma-separated, up to 2)",
+    "25,1000",
+    help="Example: 25 or 25,1000 (two thresholds will be plotted).",
 )
 
-persistence_days = st.sidebar.number_input(
+persistence = st.sidebar.number_input(
     "Persistence (consecutive days above threshold)",
     min_value=1,
     max_value=60,
     value=3,
     step=1,
-    help="Escalation start is flagged when the rolling value stays above threshold for this many consecutive days.",
+    help="How many consecutive days above threshold are required to count as an escalation.",
 )
 
 run_btn = st.sidebar.button("Generate plot")
 
-# Placeholder when nothing is run
-if not run_btn:
-    st.info("Upload a CSV (or enable a demo), then click **Generate plot**.")
-    st.stop()
+# =========================
+# Data loading logic
+# =========================
+df_raw = None
+data_source_label = None
 
-# -----------------------------
-# Run analysis
-# -----------------------------
 try:
-    thresholds = parse_thresholds(thresholds_raw)
-    if len(thresholds) == 0:
-        st.warning("Please enter at least one valid threshold (e.g., 25).")
+    if use_sample:
+        sample_path = APP_DIR / "ukraine_sample.csv"
+        if not sample_path.exists():
+            st.error(
+                "Built-in demo is enabled, but 'ukraine_sample.csv' is not in your repo. "
+                "Add it back to GitHub (small file), then redeploy."
+            )
+        else:
+            df_raw = read_csv_any(sample_path)
+            data_source_label = "Built-in demo (ukraine_sample.csv)"
+    elif uploaded is not None:
+        df_raw = read_csv_any(uploaded)
+        data_source_label = "Uploaded CSV"
+    else:
+        # No upload + no demo: load the Google Drive dataset (for the map + optional plotting)
+        st.info("No upload/demo selected — loading the Google Drive dataset for the map.")
+        local_path = download_gdrive_csv(GOOGLE_DRIVE_URL, CACHE_FILENAME)
+        df_raw = read_csv_any(local_path)
+        data_source_label = "Google Drive dataset"
+except Exception as e:
+    st.error(f"Data loading error: {e}")
+
+if df_raw is not None and data_source_label:
+    st.caption(f"Data source: **{data_source_label}**")
+
+# Clean/coerce (so map + plot both work)
+df = None
+if df_raw is not None:
+    try:
+        df = coerce_columns(df_raw, country_col, date_col, fatalities_col)
+    except Exception as e:
+        st.error(f"Column/parsing error: {e}")
+        df = None
+
+# =========================
+# Placeholder content (map) beneath the banner when no plot yet
+# =========================
+# Show the interactive map ALWAYS when data exists; it fills the empty space nicely.
+if df is not None:
+    make_world_map(df, country_col=country_col, date_col=date_col, fatalities_col=fatalities_col)
+else:
+    st.info("Load data (upload, demo, or Google Drive) to display the interactive map here.")
+
+# =========================
+# Plot section (only when user clicks Generate plot)
+# =========================
+if run_btn:
+    if df is None:
+        st.warning("No usable dataset loaded yet.")
         st.stop()
 
-    df_raw = load_dataframe(
-        uploaded_file=uploaded,
-        use_ukraine_demo=use_ukraine_demo,
-        use_world_drive=use_world_drive,
-    )
+    try:
+        thresholds = parse_thresholds(thresholds_raw)
 
-    daily = build_daily_series(
-        df=df_raw,
-        country_col=country_col,
-        country_value=country_name,
-        date_col=date_col,
-        fatalities_col=fatalities_col,
-    )
-
-    # Compute for each threshold (1–2)
-    df_base = None
-    starts_list = []
-    for t in thresholds:
-        df_t, starts_t = compute_escalation(
-            daily=daily,
-            rolling_days=int(rolling_days),
-            threshold=float(t),
-            persistence_days=int(persistence_days),
+        daily = daily_series_for_country(
+            df,
+            country_name=country_name,
+            country_col=country_col,
+            date_col=date_col,
+            fatalities_col=fatalities_col,
         )
-        # use the first computed df as the plot line (same rolling regardless of threshold)
-        if df_base is None:
-            df_base = df_t
-        starts_list.append(starts_t)
 
-    starts_all = pd.concat(starts_list, ignore_index=True) if starts_list else pd.DataFrame()
-
-    # Layout: plot + summary
-    left, right = st.columns([2, 1], gap="large")
-
-    with left:
-        fig = make_plot(
-            df=df_base,
-            starts_all=starts_all,
-            country=country_name,
-            rolling_days=int(rolling_days),
-            thresholds=thresholds,
-        )
-        st.pyplot(fig, clear_figure=True)
-
-    with right:
-        st.subheader("Summary")
-        st.write(f"Rows (daily): **{len(daily)}**")
-
-        for t in thresholds:
-            # for each threshold, compute counts from df_t by recomputing persistent quickly
-            df_t, starts_t = compute_escalation(
+        # Build detected frames for each threshold
+        detected = []
+        for th in thresholds:
+            dth = detect_escalation_starts(
                 daily=daily,
-                rolling_days=int(rolling_days),
-                threshold=float(t),
-                persistence_days=int(persistence_days),
+                rolling_days=int(rolling_window),
+                threshold=float(th),
+                persistence_days=int(persistence),
             )
-            st.write(f"**Threshold = {t}**")
-            st.write(f"Days above threshold: **{int(df_t['above'].sum())}**")
-            st.write(f"Days persistent: **{int(df_t['persistent'].sum())}**")
-            st.write(f"Escalation starts detected: **{len(starts_t)}**")
-            st.write("---")
+            dth["threshold"] = float(th)
+            detected.append(dth)
 
-        st.subheader("First escalation starts")
-        if starts_all.empty:
-            st.write("None detected with the current settings.")
-        else:
-            show = starts_all.sort_values("date").head(15).copy()
-            show["date"] = show["date"].dt.strftime("%Y-%m-%d")
-            st.dataframe(show, use_container_width=True)
+        # Merge rolling series (same dates) from first threshold frame
+        base = detected[0][["date", "fatalities", "rolling"]].copy()
 
-except Exception as e:
-    st.error(str(e))
-    st.stop()
+        # Plot
+        col1, col2 = st.columns([2, 1], vertical_alignment="top")
+
+        with col1:
+            fig = plt.figure(figsize=(12, 5))
+            plt.plot(base["date"], base["rolling"], label="Rolling fatalities")
+
+            # draw each threshold + markers
+            for dth in detected:
+                th = dth["threshold"].iloc[0]
+                plt.axhline(y=th, linestyle="--", label=f"Threshold {th:g}")
+
+                starts = dth[dth["escalation_start"]]
+                if not starts.empty:
+                    plt.scatter(starts["date"], starts["rolling"], s=60, label=f"Escalation starts (≥{th:g})")
+
+            plt.title(
+                f"AEGIS Escalation Detection — {country_name} "
+                f"(rolling={int(rolling_window)}d, persistence={int(persistence)}d)"
+            )
+            plt.xlabel("Date")
+            plt.ylabel("Rolling window fatalities")
+            plt.tight_layout()
+            plt.legend()
+            st.pyplot(fig)
+
+        with col2:
+            st.subheader("Summary")
+
+            st.write(f"Rows (daily): **{len(base)}**")
+
+            for dth in detected:
+                th = dth["threshold"].iloc[0]
+                starts = dth[dth["escalation_start"]]
+                st.markdown(f"**Threshold {th:g}**")
+                st.write(f"Days above: **{int(dth['above'].sum())}**")
+                st.write(f"Days persistent: **{int(dth['persistent'].sum())}**")
+                st.write(f"Escalation starts: **{int(dth['escalation_start'].sum())}**")
+                if not starts.empty:
+                    st.write("First escalation starts:")
+                    st.dataframe(starts[["date", "rolling"]].head(10), use_container_width=True)
+                st.divider()
+
+    except Exception as e:
+        st.error(str(e))
+else:
+    st.info("Upload a CSV (or enable the demo), then click **Generate plot**.")
