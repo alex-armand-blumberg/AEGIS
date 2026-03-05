@@ -1,5 +1,9 @@
-import io
+# app.py
+from __future__ import annotations
+
+from dataclasses import dataclass
 from pathlib import Path
+from typing import List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -7,326 +11,347 @@ import streamlit as st
 
 
 # -----------------------------
-# Page config
+# Config
 # -----------------------------
-st.set_page_config(page_title="AEGIS", layout="wide")
-st.title("AEGIS — Escalation Detection Demo")
-st.write(
-    "Upload a dataset (CSV) and choose a country to generate the rolling fatalities plot and escalation-start markers."
+APP_DIR = Path(__file__).resolve().parent
+DEFAULT_SAMPLE_FILENAME = "ukraine_sample.csv"
+
+st.set_page_config(
+    page_title="AEGIS — Escalation Detection Demo",
+    page_icon="📈",
+    layout="wide",
 )
 
 
 # -----------------------------
 # Helpers
 # -----------------------------
-def parse_thresholds(text: str) -> list[float]:
+def parse_thresholds(raw: str) -> List[float]:
     """
-    Accepts:
-      "25"
-      "25,1000"
-      "25 1000"
-    Returns a sorted unique list of floats.
+    Parse comma-separated thresholds like:
+    "25" or "25,1000" (spaces allowed)
     """
-    if text is None:
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    if not parts:
         return []
-    parts = (
-        text.replace(";", ",")
-        .replace("|", ",")
-        .replace(" ", ",")
-        .split(",")
-    )
-    vals: list[float] = []
+    out: List[float] = []
     for p in parts:
-        p = p.strip()
-        if not p:
-            continue
-        try:
-            vals.append(float(p))
-        except ValueError:
-            # ignore garbage tokens
-            pass
-    # unique, stable order
-    seen = set()
-    out = []
-    for v in vals:
-        if v not in seen:
-            seen.add(v)
-            out.append(v)
+        out.append(float(p))
     return out
+
+
+def consecutive_true_streak(mask: pd.Series) -> pd.Series:
+    """
+    For a boolean series, return the length of the current consecutive True streak at each row.
+    Example: [F,T,T,F,T] -> [0,1,2,0,1]
+    """
+    mask = mask.fillna(False).astype(bool)
+    grp = (~mask).cumsum()
+    streak = mask.groupby(grp).cumcount() + 1
+    streak = streak.where(mask, 0)
+    return streak
+
+
+@dataclass
+class EscalationResult:
+    df_daily: pd.DataFrame  # columns: date, fatalities, rolling
+    start_events: pd.DataFrame  # columns: date, rolling, threshold
+    days_above: int
+    days_persistent: int
+    num_starts: int
+
+
+def validate_columns(df: pd.DataFrame, needed: List[str]) -> None:
+    missing = [c for c in needed if c not in df.columns]
+    if missing:
+        raise KeyError(f"Missing column(s): {missing}. Found columns: {list(df.columns)[:50]}...")
+
+
+def load_csv_from_repo(sample_filename: str) -> pd.DataFrame:
+    p = (APP_DIR / sample_filename).resolve()
+    if not p.exists():
+        raise FileNotFoundError(
+            f"Built-in sample not found at {sample_filename}.\n"
+            f"Put '{sample_filename}' in the same folder as app.py in your repo."
+        )
+    # Guard against empty files
+    if p.stat().st_size == 0:
+        raise ValueError(f"Sample file '{sample_filename}' is empty (0 bytes).")
+    return pd.read_csv(p)
 
 
 @st.cache_data(show_spinner=False)
 def read_csv_bytes(file_bytes: bytes) -> pd.DataFrame:
-    return pd.read_csv(io.BytesIO(file_bytes))
+    # Pandas can read bytes via BytesIO
+    from io import BytesIO
+
+    if not file_bytes:
+        raise ValueError("Uploaded file is empty.")
+    return pd.read_csv(BytesIO(file_bytes))
 
 
-@st.cache_data(show_spinner=False)
-def read_csv_path(path_str: str) -> pd.DataFrame:
-    return pd.read_csv(path_str)
-
-
-def load_data(
-    uploaded_file,
-    use_sample: bool,
-    sample_path: str,
-) -> pd.DataFrame | None:
-    if use_sample:
-        p = Path(sample_path)
-        if not p.exists():
-            st.error(
-                f"Built-in sample not found at `{sample_path}`.\n\n"
-                "Fix: add a small sample file to your repo (recommended: `sample_ukraine.csv`) "
-                "and redeploy, or turn off the sample toggle and upload a CSV."
-            )
-            return None
-        return read_csv_path(str(p))
-
-    if uploaded_file is None:
-        return None
-
-    return read_csv_bytes(uploaded_file.getvalue())
-
-
-def prepare_daily_series(
+def build_daily_series(
     df: pd.DataFrame,
     country_col: str,
-    country_value: str,
+    country: str,
     date_col: str,
     fatalities_col: str,
 ) -> pd.DataFrame:
-    # Basic column validation
-    missing = [c for c in [country_col, date_col, fatalities_col] if c not in df.columns]
-    if missing:
-        raise KeyError(
-            f"Missing column(s): {missing}. Available columns include: {list(df.columns)[:30]}..."
-        )
+    validate_columns(df, [country_col, date_col, fatalities_col])
 
-    sub = df[df[country_col].astype(str) == str(country_value)].copy()
-
+    # Filter country
+    sub = df[df[country_col].astype(str) == str(country)].copy()
     if sub.empty:
         raise ValueError(
-            f"No rows match {country_col} == '{country_value}'. "
-            "Check spelling/case or choose a different country value."
+            f"No rows matched country='{country}' in column '{country_col}'. "
+            f"Tip: make sure capitalization/spelling matches exactly."
         )
 
-    # Parse date + fatalities
+    # Parse date + fatalities robustly
     sub[date_col] = pd.to_datetime(sub[date_col], errors="coerce")
-    sub[fatalities_col] = pd.to_numeric(sub[fatalities_col], errors="coerce").fillna(0)
-
     sub = sub.dropna(subset=[date_col])
     if sub.empty:
         raise ValueError(
-            f"After parsing `{date_col}`, no valid dates remained. "
-            "Try a different date column (e.g., date_start)."
+            f"After parsing '{date_col}' as datetime, no valid dates remained."
         )
 
+    sub[fatalities_col] = pd.to_numeric(sub[fatalities_col], errors="coerce").fillna(0)
+
     # Aggregate to daily totals
-    sub["date_day"] = sub[date_col].dt.floor("D")
     daily = (
-        sub.groupby("date_day", as_index=False)[fatalities_col]
+        sub.groupby(sub[date_col].dt.floor("D"), as_index=False)[fatalities_col]
         .sum()
-        .rename(columns={"date_day": "date", fatalities_col: "fatalities"})
+        .rename(columns={date_col: "date", fatalities_col: "fatalities"})
         .sort_values("date")
-        .reset_index(drop=True)
     )
+
+    # Fill missing days with 0 (continuous daily index)
+    full_range = pd.date_range(daily["date"].min(), daily["date"].max(), freq="D")
+    daily = daily.set_index("date").reindex(full_range).fillna({"fatalities": 0.0})
+    daily.index.name = "date"
+    daily = daily.reset_index()
 
     return daily
 
 
-def add_rolling_and_escalations(
+def detect_escalation(
     daily: pd.DataFrame,
-    rolling_days: int,
-    thresholds: list[float],
+    rolling_window_days: int,
+    thresholds: List[float],
     persistence_days: int,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    df = daily.copy()
+) -> EscalationResult:
+    if rolling_window_days < 1:
+        raise ValueError("Rolling window must be >= 1 day.")
+    if persistence_days < 1:
+        raise ValueError("Persistence must be >= 1 day.")
+    if not thresholds:
+        raise ValueError("Provide at least one threshold (e.g., 25 or 25,1000).")
 
-    # Rolling window: rolling_days of DAILY totals
-    # (Because df is daily, a window of N = N days.)
-    df["rolling"] = df["fatalities"].rolling(window=rolling_days, min_periods=1).sum()
+    df_daily = daily.copy()
+    df_daily["rolling"] = (
+        df_daily["fatalities"]
+        .rolling(window=int(rolling_window_days), min_periods=1)
+        .sum()
+    )
 
-    # Detect escalation starts for each threshold
-    starts_rows = []
-    for thr in thresholds:
-        above = df["rolling"] >= thr
+    # Union counts (for the first threshold only, used in the summary)
+    base_thr = float(thresholds[0])
+    above = df_daily["rolling"] >= base_thr
+    days_above = int(above.sum())
 
-        # consecutive days above threshold
-        consec = above.astype(int).groupby((~above).cumsum()).cumsum()
+    streak = consecutive_true_streak(above)
+    persistent = above & (streak >= int(persistence_days))
+    days_persistent = int(persistent.sum())
 
-        persistent = consec >= persistence_days
-        start = persistent & (~persistent.shift(1).fillna(False))
+    # Start events for each threshold separately
+    starts_all: List[pd.DataFrame] = []
+    for thr in thresholds[:2]:  # keep demo clean
+        thr = float(thr)
+        above_t = df_daily["rolling"] >= thr
+        streak_t = consecutive_true_streak(above_t)
+        persistent_t = above_t & (streak_t >= int(persistence_days))
+        start_t = persistent_t & ~persistent_t.shift(1, fill_value=False)
 
-        start_df = df.loc[start, ["date", "rolling"]].copy()
-        start_df["threshold"] = thr
-        starts_rows.append(start_df)
+        starts = df_daily.loc[start_t, ["date", "rolling"]].copy()
+        starts["threshold"] = thr
+        starts_all.append(starts)
 
-        # store helpful columns for summary (use first threshold as default summary)
-        # (We keep only for the first threshold to avoid clutter.)
-        if thr == thresholds[0]:
-            df["above_threshold"] = above
-            df["consecutive_above"] = consec
-            df["persistent"] = persistent
-            df["escalation_start"] = start
-
-    starts = pd.concat(starts_rows, ignore_index=True) if starts_rows else pd.DataFrame(
+    start_events = pd.concat(starts_all, ignore_index=True) if starts_all else pd.DataFrame(
         columns=["date", "rolling", "threshold"]
     )
+    start_events = start_events.sort_values(["date", "threshold"]).reset_index(drop=True)
 
-    return df, starts
+    return EscalationResult(
+        df_daily=df_daily,
+        start_events=start_events,
+        days_above=days_above,
+        days_persistent=days_persistent,
+        num_starts=int(len(start_events)),
+    )
 
 
-def make_plot(
-    df: pd.DataFrame,
-    country_value: str,
-    rolling_days: int,
-    thresholds: list[float],
-    starts: pd.DataFrame,
+def plot_result(
+    result: EscalationResult,
+    country: str,
+    rolling_window_days: int,
+    thresholds: List[float],
 ) -> plt.Figure:
-    fig = plt.figure(figsize=(12, 6))
-    plt.plot(df["date"], df["rolling"])
+    dfp = result.df_daily
+    fig = plt.figure(figsize=(12, 4.8))
+    ax = fig.add_subplot(111)
+
+    ax.plot(dfp["date"], dfp["rolling"], linewidth=2)
 
     # Threshold lines
-    for thr in thresholds:
-        plt.axhline(thr, linestyle="--")
+    for thr in thresholds[:2]:
+        ax.axhline(y=float(thr), linestyle="--", linewidth=1)
 
-    # Mark escalation starts (color per threshold is default Matplotlib cycling)
-    if not starts.empty:
-        for thr in thresholds:
-            s = starts[starts["threshold"] == thr]
-            if not s.empty:
-                plt.scatter(s["date"], s["rolling"], s=80)
+    # Start markers
+    if not result.start_events.empty:
+        ax.scatter(
+            result.start_events["date"],
+            result.start_events["rolling"],
+            s=70,
+            zorder=3,
+        )
 
-    plt.title(
-        f"AEGIS Escalation Detection — {country_value} "
-        f"(rolling={rolling_days}d, thresholds={','.join(str(int(t)) if float(t).is_integer() else str(t) for t in thresholds)})"
+    ax.set_title(
+        f"AEGIS Escalation Detection — {country} (rolling={rolling_window_days}d, thresholds={','.join(str(t) for t in thresholds[:2])})"
     )
-    plt.xlabel("Date")
-    plt.ylabel("Rolling window fatalities")
-    plt.tight_layout()
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Rolling window fatalities")
+    fig.tight_layout()
     return fig
 
 
 # -----------------------------
-# Sidebar
+# UI
 # -----------------------------
-st.sidebar.header("Inputs")
-
-use_sample = st.sidebar.checkbox(
-    "Use built-in Ukraine example (recommended demo)",
-    value=False,
-    help=(
-        "Uses a small file included with your repo (default path: sample_ukraine.csv). "
-        "Turn this off to upload your own CSV."
-    ),
+st.title("AEGIS — Escalation Detection Demo")
+st.write(
+    "Upload a dataset (CSV) and choose a country to generate the rolling fatalities plot and escalation-start markers."
 )
 
-sample_path = st.sidebar.text_input(
-    "Built-in sample path",
-    value="sample_ukraine.csv",
-    help="If using the built-in demo, this file must exist in your repo.",
-)
+with st.sidebar:
+    st.header("Inputs")
 
-uploaded = None
-if not use_sample:
-    uploaded = st.sidebar.file_uploader("Upload CSV", type=["csv"])
+    use_sample = st.checkbox(
+        "Use built-in Ukraine example (recommended demo)",
+        value=True,
+    )
 
-country_col = st.sidebar.text_input("Country column", value="country")
-country_value = st.sidebar.text_input("Country (exact match)", value="Ukraine")
-date_col = st.sidebar.text_input("Date column", value="date_start")
-fatalities_col = st.sidebar.text_input("Fatalities column", value="best")
+    uploaded = None
+    if not use_sample:
+        uploaded = st.file_uploader(
+            "Upload CSV",
+            type=["csv"],
+            accept_multiple_files=False,
+        )
 
-rolling_days = st.sidebar.number_input("Rolling window (days)", min_value=1, max_value=365, value=30, step=1)
-thresholds_raw = st.sidebar.text_input("Escalation threshold(s) (comma-separated)", value="25")
-persistence_days = st.sidebar.number_input(
-    "Persistence (consecutive days above threshold)",
-    min_value=1,
-    max_value=60,
-    value=3,
-    step=1,
-)
+    # You asked to remove sample-path input.
+    sample_filename = DEFAULT_SAMPLE_FILENAME
 
-run_btn = st.sidebar.button("Generate plot")
+    country_col = st.text_input("Country column", value="country")
+    country = st.text_input("Country (exact match)", value="Ukraine")
+    date_col = st.text_input("Date column", value="date_start")
+    fatalities_col = st.text_input("Fatalities column", value="best")
+
+    rolling_window_days = st.number_input(
+        "Rolling window (days)",
+        min_value=1,
+        max_value=365,
+        value=30,
+        step=1,
+    )
+
+    thresholds_raw = st.text_input(
+        "Escalation threshold(s) (comma-separated)",
+        value="25",
+        help='Examples: "25" or "25,1000"',
+    )
+
+    persistence_days = st.number_input(
+        "Persistence (consecutive days above threshold)",
+        min_value=1,
+        max_value=60,
+        value=3,
+        step=1,
+    )
+
+    run_btn = st.button("Generate plot")
 
 
-# -----------------------------
-# Main logic
-# -----------------------------
-df = load_data(uploaded, use_sample=use_sample, sample_path=sample_path)
-
-if df is None:
-    st.info("Upload a CSV in the sidebar (or enable the built-in demo), then click **Generate plot**.")
-    st.stop()
+# Main logic + messaging
+if use_sample:
+    st.info(f"Using built-in demo file: **{sample_filename}**")
+else:
+    if uploaded is None:
+        st.info("Upload a CSV in the sidebar, then click **Generate plot**.")
+        st.stop()
 
 if not run_btn:
-    st.info("CSV loaded — now click **Generate plot**.")
+    st.info("Click **Generate plot** when you're ready.")
     st.stop()
 
+# Load data
 try:
-    thresholds = parse_thresholds(thresholds_raw)
-    if not thresholds:
-        st.error("Please enter at least one valid threshold (e.g., `25` or `25,1000`).")
-        st.stop()
-    thresholds = thresholds[:2]  # keep demo simple
-    if len(parse_thresholds(thresholds_raw)) > 2:
-        st.warning("You entered more than 2 thresholds. For the demo, only the first 2 are used.")
+    if use_sample:
+        df = load_csv_from_repo(sample_filename)
+    else:
+        df = read_csv_bytes(uploaded.getvalue())
 
-    daily = prepare_daily_series(
+    thresholds = parse_thresholds(thresholds_raw)
+    if len(thresholds) > 2:
+        st.warning("You entered more than 2 thresholds. For the demo, only the first 2 will be used.")
+        thresholds = thresholds[:2]
+
+    daily = build_daily_series(
         df=df,
         country_col=country_col,
-        country_value=country_value,
+        country=country,
         date_col=date_col,
         fatalities_col=fatalities_col,
     )
 
-    df_roll, starts = add_rolling_and_escalations(
+    result = detect_escalation(
         daily=daily,
-        rolling_days=int(rolling_days),
+        rolling_window_days=int(rolling_window_days),
         thresholds=thresholds,
         persistence_days=int(persistence_days),
     )
 
-    fig = make_plot(
-        df=df_roll,
-        country_value=country_value,
-        rolling_days=int(rolling_days),
+    fig = plot_result(
+        result=result,
+        country=country,
+        rolling_window_days=int(rolling_window_days),
         thresholds=thresholds,
-        starts=starts,
     )
 
-    # Layout: plot + summary
-    left, right = st.columns([2.2, 1.0], gap="large")
-
-    with left:
-        st.pyplot(fig, clear_figure=True)
-
-    with right:
-        st.subheader("Summary")
-
-        st.write(f"Rows (daily): **{len(df_roll)}**")
-        st.write(f"Thresholds: **{', '.join(str(t) for t in thresholds)}**")
-        st.write(f"Rolling window: **{int(rolling_days)} days**")
-        st.write(f"Persistence: **{int(persistence_days)} days**")
-
-        # Summary based on first threshold
-        first_thr = thresholds[0]
-        above = (df_roll["rolling"] >= first_thr)
-        consec = above.astype(int).groupby((~above).cumsum()).cumsum()
-        persistent = consec >= int(persistence_days)
-        starts_first = (persistent & (~persistent.shift(1).fillna(False)))
-
-        st.write(f"Days above first threshold: **{int(above.sum())}**")
-        st.write(f"Days persistent: **{int(persistent.sum())}**")
-        st.write(f"Escalation starts detected: **{int(starts_first.sum())}**")
-
-        st.write("First escalation starts:")
-        if starts.empty:
-            st.info("No escalation starts detected with the current settings.")
-        else:
-            # show first 10 across thresholds
-            show = starts.sort_values(["date", "threshold"]).head(10).copy()
-            show["date"] = pd.to_datetime(show["date"])
-            st.dataframe(show, use_container_width=True)
-
 except Exception as e:
-    st.error(f"Error: {e}")
+    st.error(str(e))
     st.stop()
+
+# Layout: plot + summary
+left, right = st.columns([2.2, 1.0], gap="large")
+
+with left:
+    st.pyplot(fig, clear_figure=True)
+
+with right:
+    st.subheader("Summary")
+    st.write(f"Rows (daily): **{len(result.df_daily)}**")
+    st.write(f"Threshold (primary): **{float(thresholds[0])}**")
+    st.write(f"Days above threshold: **{result.days_above}**")
+    st.write(f"Days persistent: **{result.days_persistent}**")
+    st.write(f"Escalation starts detected: **{result.num_starts}**")
+
+    st.markdown("**First escalation starts:**")
+    if result.start_events.empty:
+        st.write("_None detected_")
+    else:
+        st.dataframe(result.start_events.head(20), use_container_width=True)
+
+    st.caption(
+        "Note: this is a demo heuristic (rolling fatalities + threshold + persistence). "
+        "It detects historical escalation patterns; it does not forecast future escalation by itself."
+    )
