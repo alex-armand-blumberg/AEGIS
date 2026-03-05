@@ -445,74 +445,56 @@ def load_world_dataset_for_map() -> pd.DataFrame:
 # ----------------------------
 # Map section
 # ----------------------------
-if show_map:
-    st.subheader("Interactive map")
-    st.caption("Data source: HuggingFace hosted https://UCDP.uu.se/ world dataset")
 
-    if not _HAS_PLOTLY:
-        st.info("Plotly isn't available in this environment, so the interactive map is disabled.")
-    else:
-        try:
-            df_world_raw = load_world_dataset_for_map()
-            # Validate required columns exist in the HF dataset
-            require_columns(df_world_raw, [country_col, date_col, fatalities_col], "Map dataset")
+# -------------------------------
+# Interactive map
+# -------------------------------
 
-            world_daily = build_country_daily(df_world_raw, country_col, date_col, fatalities_col)
+st.markdown("## Interactive map")
+st.caption("Data source: HuggingFace hosted world dataset")
 
-            min_d = world_daily["date"].min().date()
-            max_d = world_daily["date"].max().date()
+try:
 
-            if override_map_dates:
-                map_range = st.sidebar.date_input(
-                    "Map date range",
-                    value=(min_d, max_d),
-                    min_value=min_d,
-                    max_value=max_d,
-                    help="Filter which dates contribute to the country totals shown on the map."
-                )
-                if isinstance(map_range, tuple) and len(map_range) == 2:
-                    start_d, end_d = map_range
-                else:
-                    start_d, end_d = min_d, max_d
-            else:
-                start_d, end_d = min_d, max_d
+    # Filter data to selected date range
+    world_slice = df_world.copy()
 
-            mask = (world_daily["date"].dt.date >= start_d) & (world_daily["date"].dt.date <= end_d)
-            world_slice = world_daily.loc[mask].copy()
+    # Aggregate fatalities by country
+    by_country = (
+        world_slice.groupby("country", as_index=False)["fatalities"]
+        .sum()
+        .sort_values("fatalities", ascending=False)
+    )
 
-            by_country = (
-                world_slice.groupby("country", as_index=False)["fatalities"]
-                .sum()
-                .sort_values("fatalities", ascending=False)
-            )
+    # Create choropleth
+    fig = px.choropleth(
+        by_country,
+        locations="country",
+        locationmode="country names",
+        color="fatalities",
+        hover_name="country",
+        hover_data={
+            "country": False,
+            "fatalities": ":,"
+        },
+        title="Fatalities by country (1989–2024)",
+        color_continuous_scale="Blues_r"
+    )
 
-            # Choropleth: locationmode=country names (works for many common names)
-    try:
-        fig = px.choropleth(
-            by_country,
-            locations="country",
-            locationmode="country names",
-            color="fatalities",
-            hover_name="country",
-            hover_data={
-                "country": False,
-                "fatalities": True
-            },
-            title="Fatalities by country (1989–2024)",
-            color_continuous_scale="Blues_r"
-        )
-    
-        fig.update_coloraxes(reversescale=True)
-        fig.update_layout(margin=dict(l=0, r=0, t=60, b=0))
-    
-        st.plotly_chart(fig, use_container_width=True)
-    
-        st.caption("To change the date range, check the 'Override map data range' box on the sidebar.")
-    
-    except Exception as e:
-        st.error(f"Map error: {e}")
+    # Clean layout
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=60, b=0)
+    )
 
-st.markdown("---")
+    # Render map
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Help text
+    st.caption(
+        "To change the date range, check the 'Override map data range' box in the sidebar."
+    )
+
+except Exception as e:
+    st.error(f"Map error: {e}")
 
 # ----------------------------
 # Escalation plot section
