@@ -5,7 +5,7 @@ from pathlib import Path
 
 st.set_page_config(page_title="AEGIS Escalation Detection", layout="wide")
 
-logo = "logo.png"  # put your logo file in the repo
+logo = "logo1.mp4"  # put your logo file in the repo
 
 col1, col2 = st.columns([1,6])
 
