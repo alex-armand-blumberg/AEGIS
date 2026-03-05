@@ -455,15 +455,9 @@ st.caption("Data source: HuggingFace hosted world dataset")
 
 try:
 
-    # Use the dataframe already loaded earlier in the app
-    if 'df_raw_plot' in locals():
-        world_slice = df_raw_plot.copy()
-    elif 'df' in locals():
-        world_slice = df.copy()
-    else:
-        raise ValueError("Dataset not loaded yet")
+    world_slice = df_plot.copy()
 
-    # Ensure column name compatibility
+    # Ensure fatalities column exists
     if "best" in world_slice.columns and "fatalities" not in world_slice.columns:
         world_slice = world_slice.rename(columns={"best": "fatalities"})
 
