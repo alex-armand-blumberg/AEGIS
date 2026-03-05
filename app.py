@@ -497,15 +497,16 @@ if show_map:
         "country": False,
         "fatalities": True
     },
-    title="Fatalities by country (1989—2024)",
-    color_continuous_scale="Blues_r"
+    title="Fatalities by country (1989–2024)",
+color_continuous_scale="Blues_r"
 )
 
-st.caption("To change date range, check the 'Override map data range' box on the sidebar.")
+fig.update_coloraxes(reversescale=True)
+fig.update_layout(margin=dict(l=0, r=0, t=60, b=0))
 
-            fig.update_coloraxes(reversescale=True)
-            fig.update_layout(margin=dict(l=0, r=0, t=60, b=0))
-            st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, use_container_width=True)
+
+st.caption("To change the date range, check the 'Override map data range' box in the sidebar.")
 
         except Exception as e:
             st.error(f"Map error: {e}")
