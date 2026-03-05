@@ -27,7 +27,7 @@ APP_DIR = Path(__file__).resolve().parent
 # Sidebar Inputs
 # -----------------------------
 
-st.sidebar.image("logo.png", width=140)
+st.sidebar.image("logo.png", width=1000)
 st.sidebar.header("Inputs")
 
 
