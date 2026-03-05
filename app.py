@@ -30,7 +30,11 @@ uploaded = None
 if not use_sample:
     uploaded = st.sidebar.file_uploader("Upload CSV", type=["csv"])
 
-country_name = st.sidebar.text_input("Country", "Ukraine", help="Name must match the dataset exactly (e.g., 'Ukraine', 'Mexico', 'Syria').)
+country_name = st.sidebar.text_input(
+    "Country",
+    "Ukraine",
+    help="Name must match the dataset exactly (e.g., 'Ukraine', 'Mexico', 'Syria')."
+)
 
 country_col = st.sidebar.text_input("Name of Country Column", "country", help="Name of your dataset's column with countries listed.)
 
