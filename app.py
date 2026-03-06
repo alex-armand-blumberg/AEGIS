@@ -915,7 +915,7 @@ if show_map:
                             paper_bgcolor="#020617",
                             plot_bgcolor="#020617",
                             font=dict(color="white"),
-                            legend_title_text="Dominant category",
+                            legend_title_text="Dominant category (Click on legend to (de)select categories)",
                             margin=dict(l=0, r=0, t=60, b=0),
                         )
                         st.plotly_chart(fig, use_container_width=True)
