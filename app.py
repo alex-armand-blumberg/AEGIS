@@ -9,6 +9,10 @@ import pandas as pd
 import requests
 import streamlit as st
 
+import feedparser
+from datetime import datetime, timedelta, timezone
+from streamlit_autorefresh import st_autorefresh
+
 # Optional: used for the interactive map.
 try:
     import plotly.express as px
@@ -52,6 +56,65 @@ ACLED_FIELDS = [
 # ----------------------------
 # Robust CSV loading helpers
 # ----------------------------
+
+# ----------------------------
+# Live conflict news feed helpers
+# ----------------------------
+NEWS_FEED_URL = (
+    "https://news.google.com/rss/search?"
+    "q=(war%20OR%20conflict%20OR%20airstrike%20OR%20missile%20OR%20battle%20OR%20explosion)"
+    "&hl=en-US&gl=US&ceid=US:en"
+)
+
+@st.cache_data(ttl=900, show_spinner=False)  # 900 sec = 15 min
+def load_live_conflict_news(max_items: int = 15):
+    feed = feedparser.parse(NEWS_FEED_URL)
+
+    items = []
+    for entry in feed.entries[:max_items]:
+        published_raw = entry.get("published", "") or entry.get("updated", "")
+        published_dt = None
+
+        try:
+            if hasattr(entry, "published_parsed") and entry.published_parsed:
+                published_dt = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+            elif hasattr(entry, "updated_parsed") and entry.updated_parsed:
+                published_dt = datetime(*entry.updated_parsed[:6], tzinfo=timezone.utc)
+        except Exception:
+            published_dt = None
+
+        items.append(
+            {
+                "title": entry.get("title", "Untitled"),
+                "link": entry.get("link", ""),
+                "source": entry.get("source", {}).get("title", "Unknown source")
+                if isinstance(entry.get("source"), dict)
+                else "Unknown source",
+                "published_raw": published_raw,
+                "published_dt": published_dt,
+            }
+        )
+
+    return items
+
+
+def format_news_age(dt_obj):
+    if dt_obj is None:
+        return ""
+    now = datetime.now(timezone.utc)
+    delta = now - dt_obj
+
+    if delta < timedelta(minutes=1):
+        return "just now"
+    if delta < timedelta(hours=1):
+        mins = int(delta.total_seconds() // 60)
+        return f"{mins}m ago"
+    if delta < timedelta(days=1):
+        hrs = int(delta.total_seconds() // 3600)
+        return f"{hrs}h ago"
+    days = delta.days
+    return f"{days}d ago"
+
 def _read_csv_attempt(data: bytes, *, encoding: str, sep):
     bio = io.BytesIO(data)
     if sep is None:
@@ -444,6 +507,33 @@ with st.sidebar.expander("Limitations"):
 # ----------------------------
 # Main header
 # ----------------------------
+
+# ----------------------------
+# Live news feed
+# ----------------------------
+with st.expander("Live conflict news", expanded=False):
+    try:
+        news_items = load_live_conflict_news(max_items=15)
+
+        if not news_items:
+            st.info("No live news items available right now.")
+        else:
+            for item in news_items:
+                age_txt = format_news_age(item["published_dt"])
+                meta_parts = [p for p in [item["source"], age_txt] if p]
+                meta = " • ".join(meta_parts)
+
+                st.markdown(
+                    f"**[{item['title']}]({item['link']})**  \n"
+                    f"<span style='opacity:0.75'>{meta}</span>",
+                    unsafe_allow_html=True,
+                )
+                st.markdown("---")
+
+            st.caption("Refreshes automatically every 15 minutes.")
+    except Exception as e:
+        st.warning(f"Could not load live news feed: {e}")
+
 col1, col2 = st.columns([1, 12])
 with col1:
     st.image("logo.png", width=2000)
@@ -884,3 +974,8 @@ if show_map:
 
         except Exception as e:
             st.error(f"Map error: {e}")
+
+
+
+st_autorefresh(interval=15 * 60 * 1000, key="global_refresh_15m")
+
