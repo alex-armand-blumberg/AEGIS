@@ -7,8 +7,38 @@ import base64
 import numpy as np
 import pandas as pd
 import streamlit as st
+
 from urllib.parse import urlencode
 import streamlit.components.v1 as components
+
+from urllib.parse import urlencode
+import streamlit.components.v1 as components
+
+LIVE_MAP_DEFAULT_QUERY = (
+    '(war OR conflict OR invasion OR insurgency OR airstrike OR missile '
+    'OR drone OR shelling OR ceasefire OR militia OR rebels OR offensive)'
+)
+
+def build_gdelt_live_map_url(
+    query: str,
+    *,
+    timespan: str = "24h",
+    maxpoints: int = 250,
+    geores: int = 2,
+    sortby: str = "Date",
+    zoomwheel: bool = False,
+) -> str:
+    params = {
+        "query": query,
+        "mode": "PointData",   # correct GDELT mode
+        "format": "HTML",      # correct interactive map format
+        "timespan": timespan,
+        "maxpoints": max(1, min(int(maxpoints), 1000)),
+        "geores": int(geores),
+        "sortby": sortby,
+        "zoomwheel": "0" if not zoomwheel else "1",
+    }
+    return "https://api.gdeltproject.org/api/v2/geo/geo?" + urlencode(params)
 
 # Optional: used for the interactive map (recommended).
 # If plotly isn't installed, the app will still run but will show a friendly message.
@@ -310,8 +340,8 @@ if not use_demo:
 
 country_name = st.sidebar.text_input(
     "Country (exact match)",
-    "Ukraine",
-    help="Must match the country values in your dataset exactly (e.g., 'Ukraine')."
+    "",
+    help="Demo data currently only goes until the end of 2024."
 )
 
 # ----------------------------
@@ -471,9 +501,6 @@ def load_primary_dataset_for_plot():
 # Escalation plot section
 # ----------------------------
 
-# ----------------------------
-# Escalation plot section
-# ----------------------------
 st.subheader("Escalation plot")
 
 df_raw_plot, plot_source = (None, None)
@@ -656,141 +683,148 @@ if plot_ready:
         st.error(str(e))
 
 # ----------------------------
-# Load world dataset for map (HF hosted)
+# Live conflict map helpers
 # ----------------------------
-@st.cache_data(show_spinner=False)
-def load_world_dataset_for_map() -> pd.DataFrame:
-    b = download_bytes(HF_WORLD_CSV_URL)
-    return read_csv_bytes_robust(b)
-
-
-# ----------------------------
-# Live map config + loaders
-# ----------------------------
-LIVE_MAP_DEFAULT_QUERY = "war"
-
-
-def build_gdelt_live_map_url(
-    query: str,
-    *,
-    timespan: str = "24h",
-    maxpoints: int = 250,
-    geores: int = 2,
-    sortby: str = "Date",
-    zoomwheel: bool = False,
-    fmt: str = "GeoJSON",
-) -> str:
-    params = {
-        "query": query.strip() or LIVE_MAP_DEFAULT_QUERY,
-        "mode": "PointData",
-        "format": fmt,
-        "timespan": timespan,
-        "maxpoints": max(1, min(int(maxpoints), 1000)),
-        "geores": int(geores),
-        "sortby": sortby,
-        "zoomwheel": "0" if not zoomwheel else "1",
-    }
-    return "https://api.gdeltproject.org/api/v2/geo/geo?" + urlencode(params)
+try:
+    import pycountry
+    _HAS_PYCOUNTRY = True
+except Exception:
+    _HAS_PYCOUNTRY = False
 
 
 @st.cache_data(ttl=900, show_spinner=False)
-def fetch_gdelt_geojson(
-    query: str,
-    timespan: str,
-    maxpoints: int,
-    geores: int,
-    sortby: str = "Date",
-) -> dict:
-    url = build_gdelt_live_map_url(
-        query,
-        timespan=timespan,
-        maxpoints=maxpoints,
-        geores=geores,
-        sortby=sortby,
-        zoomwheel=False,
-        fmt="GeoJSON",
+def build_country_alias_lookup():
+    aliases = {}
+    if not _HAS_PYCOUNTRY:
+        return aliases
+
+    def add(name: str, canonical: str):
+        n = (name or "").strip()
+        if not n:
+            return
+        aliases[n.lower()] = canonical
+
+    for country in pycountry.countries:
+        canonical = country.name
+        add(canonical, canonical)
+
+        for attr in ["official_name", "common_name", "alpha_2", "alpha_3"]:
+            if hasattr(country, attr):
+                add(getattr(country, attr), canonical)
+
+    manual_aliases = {
+        "usa": "United States",
+        "u.s.": "United States",
+        "u.s": "United States",
+        "us": "United States",
+        "uk": "United Kingdom",
+        "u.k.": "United Kingdom",
+        "u.k": "United Kingdom",
+        "russia": "Russian Federation",
+        "iran": "Iran, Islamic Republic of",
+        "syria": "Syrian Arab Republic",
+        "south korea": "Korea, Republic of",
+        "north korea": "Korea, Democratic People's Republic of",
+        "moldova": "Moldova, Republic of",
+        "venezuela": "Venezuela, Bolivarian Republic of",
+        "bolivia": "Bolivia, Plurinational State of",
+        "tanzania": "Tanzania, United Republic of",
+        "laos": "Lao People's Democratic Republic",
+        "brunei": "Brunei Darussalam",
+        "palestine": "Palestine, State of",
+        "czech republic": "Czechia",
+        "ivory coast": "Côte d'Ivoire",
+        "cape verde": "Cabo Verde",
+        "eswatini": "Eswatini",
+        "swaziland": "Eswatini",
+        "congo-kinshasa": "Congo, The Democratic Republic of the",
+        "dr congo": "Congo, The Democratic Republic of the",
+        "drc": "Congo, The Democratic Republic of the",
+        "congo-brazzaville": "Congo",
+        "taiwan": "Taiwan, Province of China",
+        "vietnam": "Viet Nam",
+    }
+    for alias, canonical in manual_aliases.items():
+        aliases[alias] = canonical
+
+    return dict(sorted(aliases.items(), key=lambda kv: len(kv[0]), reverse=True))
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_live_conflict_feed(query: str, max_items: int = 150):
+    rss_url = (
+        "https://news.google.com/rss/search?"
+        f"q={query}&hl=en-US&gl=US&ceid=US:en"
     )
-    r = requests.get(url, timeout=45, headers={"User-Agent": "Mozilla/5.0"})
-    r.raise_for_status()
-    return r.json()
+    return fetch_rss_items(rss_url, max_items=max_items)
 
 
-def _first_present(d: dict, keys: list[str], default=None):
-    for k in keys:
-        if k in d and d[k] not in (None, ""):
-            return d[k]
-    return default
-
-
-def gdelt_geojson_to_points(payload: dict) -> pd.DataFrame:
-    features = payload.get("features", []) if isinstance(payload, dict) else []
-    rows = []
-
-    for feature in features:
-        geometry = feature.get("geometry") or {}
-        properties = feature.get("properties") or {}
-        coords = geometry.get("coordinates") or []
-
-        if geometry.get("type") != "Point" or len(coords) < 2:
+def extract_countries_from_text(text: str, alias_lookup: dict[str, str]) -> list[str]:
+    text_l = f" {str(text or '').lower()} "
+    matches = []
+    seen = set()
+    for alias, canonical in alias_lookup.items():
+        if len(alias) < 3:
             continue
+        if f" {alias} " in text_l and canonical not in seen:
+            matches.append(canonical)
+            seen.add(canonical)
+    return matches
 
-        lon, lat = coords[0], coords[1]
-        try:
-            lon = float(lon)
-            lat = float(lat)
-        except Exception:
-            continue
 
-        value = _first_present(
-            properties,
-            ["value", "count", "Count", "numarts", "NumArts", "mentions", "density"],
-            1,
+@st.cache_data(ttl=900, show_spinner=False)
+def build_live_country_conflict_df(query: str, max_items: int = 150) -> tuple[pd.DataFrame, pd.DataFrame]:
+    items = fetch_live_conflict_feed(query, max_items=max_items)
+    alias_lookup = build_country_alias_lookup()
+
+    event_rows = []
+    for item in items:
+        text = " ".join([
+            item.get("title", ""),
+            item.get("source", ""),
+            item.get("pub_date", ""),
+        ])
+        countries = extract_countries_from_text(text, alias_lookup)
+        for country in countries:
+            event_rows.append({
+                "country": country,
+                "title": item.get("title", ""),
+                "link": item.get("link", ""),
+                "pub_date": item.get("pub_date", ""),
+                "source": item.get("source", ""),
+            })
+
+    if not event_rows:
+        return pd.DataFrame(), pd.DataFrame(items)
+
+    events_df = pd.DataFrame(event_rows)
+    summary_df = (
+        events_df.groupby("country", as_index=False)
+        .agg(
+            article_count=("title", "count"),
+            sources=("source", lambda s: ", ".join(sorted({x for x in s if x})[:4])),
+            latest_pub_date=("pub_date", "first"),
         )
-        try:
-            value = float(value)
-        except Exception:
-            value = 1.0
+        .sort_values("article_count", ascending=False)
+    )
 
-        label = _first_present(
-            properties,
-            ["name", "Name", "location", "Location", "admin", "city", "label", "title"],
-            "Unknown location",
-        )
+    headline_map = (
+        events_df.groupby("country")["title"]
+        .apply(lambda s: "<br>• " + "<br>• ".join(list(dict.fromkeys([x for x in s if x]))[:3]))
+        .to_dict()
+    )
+    summary_df["headline_preview"] = summary_df["country"].map(headline_map).fillna("")
+    summary_df["hover_label"] = summary_df.apply(
+        lambda r: (
+            f"<b>{r['country']}</b><br>"
+            f"Conflict-related headlines (7d): {int(r['article_count'])}<br>"
+            f"Sources: {r['sources'] or 'N/A'}"
+            f"{r['headline_preview']}"
+        ),
+        axis=1,
+    )
 
-        article_html = _first_present(
-            properties,
-            ["html", "HTML", "description", "Description", "popup", "Popup"],
-            "",
-        )
-
-        rows.append(
-            {
-                "latitude": lat,
-                "longitude": lon,
-                "label": str(label),
-                "mentions": value,
-                "article_html": str(article_html),
-            }
-        )
-
-    if not rows:
-        return pd.DataFrame(columns=["latitude", "longitude", "label", "mentions", "article_html"])
-
-    df = pd.DataFrame(rows)
-    df = df[(df["latitude"].between(-90, 90)) & (df["longitude"].between(-180, 180))].copy()
-    df["radius"] = np.clip(np.sqrt(df["mentions"].clip(lower=1)) * 12000, 6000, 60000)
-
-    def mention_color(v: float) -> list[int]:
-        if v >= 100:
-            return [255, 59, 48, 190]
-        if v >= 25:
-            return [255, 159, 10, 185]
-        if v >= 5:
-            return [255, 214, 10, 180]
-        return [64, 156, 255, 170]
-
-    df["color"] = df["mentions"].apply(mention_color)
-    return df
+    return summary_df, events_df
 
 
 # ----------------------------
@@ -799,48 +833,29 @@ def gdelt_geojson_to_points(payload: dict) -> pd.DataFrame:
 if show_map:
     st.markdown("## Interactive map")
     st.caption(
-        "This map uses the live GDELT GEO 2.0 feed to display geocoded global news locations. "
-        "It refreshes from current reporting rather than the static UCDP file."
+        "Live conflict map built from Google News RSS conflict-related headlines, grouped by country mentions. "
+        "This is current and auto-refreshing, but it is media-coverage based rather than a verified casualty database."
     )
 
     with st.expander("Live map settings", expanded=False):
         live_query = st.text_input(
-            "Live event query",
-            value=LIVE_MAP_DEFAULT_QUERY,
-            help="Keep this fairly short. Good examples: war, ukraine, israel, gaza, missile, protest",
+            "Live conflict query",
+            value="(war OR conflict OR invasion OR insurgency OR airstrike OR missile OR drone OR shelling OR ceasefire OR militia OR rebels OR offensive) when:7d",
+            help="Google News search query used to build the live country map."
         )
-
-        live_timespan = st.selectbox(
-            "Lookback window",
-            options=["15m", "30m", "1h", "3h", "6h", "12h", "24h", "3d", "7d"],
-            index=6,
-            help="GDELT GEO can search up to 7 days back.",
-        )
-
-        live_maxpoints = st.slider(
-            "Maximum mapped locations",
+        live_max_items = st.slider(
+            "Maximum headlines to scan",
             min_value=25,
-            max_value=500,
-            value=250,
+            max_value=250,
+            value=150,
             step=25,
+            help="More headlines can improve coverage but may add noise."
         )
-
-        live_geores = st.selectbox(
-            "Geographic precision",
-            options=[0, 1, 2],
-            index=2,
-            format_func=lambda x: {
-                0: "All mentions",
-                1: "Exclude country-level mentions",
-                2: "City / landmark only",
-            }[x],
-        )
-
         auto_refresh_live_map = st.checkbox(
             "Auto-refresh live map",
             value=True,
+            help="Reloads the app automatically so the map stays current."
         )
-
         refresh_minutes = st.slider(
             "Auto-refresh interval (minutes)",
             min_value=5,
@@ -850,105 +865,83 @@ if show_map:
             disabled=not auto_refresh_live_map,
         )
 
-    live_map_url = build_gdelt_live_map_url(
-        live_query,
-        timespan=live_timespan,
-        maxpoints=live_maxpoints,
-        geores=live_geores,
-        sortby="Date",
-        zoomwheel=False,
-        fmt="HTML",
-    )
-
-    st.markdown(
-        f"""
-<div style="
-    padding:12px 14px;
-    border:1px solid rgba(255,255,255,0.08);
-    border-radius:12px;
-    margin-bottom:10px;
-    background: rgba(255,255,255,0.02);
-">
-    <div style="font-size:14px; opacity:0.85;">
-        <strong>Live source:</strong> GDELT GEO 2.0<br>
-        <strong>Query:</strong> <code>{live_query}</code><br>
-        <strong>Window:</strong> {live_timespan}
-        &nbsp;|&nbsp;
-        <strong>Max points:</strong> {live_maxpoints}
-    </div>
-</div>
-        """,
-        unsafe_allow_html=True,
-    )
-
     try:
-        import pydeck as pdk
+        live_summary_df, live_events_df = build_live_country_conflict_df(live_query, max_items=live_max_items)
 
-        geojson_payload = fetch_gdelt_geojson(
-            live_query,
-            timespan=live_timespan,
-            maxpoints=live_maxpoints,
-            geores=live_geores,
-            sortby="Date",
-        )
-        live_points = gdelt_geojson_to_points(geojson_payload)
-
-        if live_points.empty:
-            st.info("No live geocoded matches were returned for that query and time window.")
+        if live_summary_df.empty:
+            st.info(
+                "No country-level matches were extracted from the current live headlines. "
+                "Try a broader query or wait for the feed to update."
+            )
+        elif not _HAS_PLOTLY:
+            st.error("Plotly is not installed, so the interactive map cannot be displayed.")
         else:
-            view_state = pdk.ViewState(latitude=20, longitude=10, zoom=1.25, pitch=0)
+            fig = px.choropleth(
+                live_summary_df,
+                locations="country",
+                locationmode="country names",
+                color="article_count",
+                hover_name="country",
+                custom_data=["article_count", "sources", "latest_pub_date", "headline_preview"],
+                color_continuous_scale="OrRd",
+                title="Current conflict-related news by country mention",
+            )
+            fig.update_traces(
+                hovertemplate=(
+                    "<b>%{hovertext}</b><br>"
+                    "Headlines: %{customdata[0]}<br>"
+                    "Sources: %{customdata[1]}<br>"
+                    "Latest: %{customdata[2]}<br>"
+                    "%{customdata[3]}<extra></extra>"
+                )
+            )
+            fig.update_geos(
+                showcoastlines=True,
+                coastlinecolor="rgba(255,255,255,0.25)",
+                showcountries=True,
+                countrycolor="rgba(255,255,255,0.18)",
+                showframe=False,
+                showocean=True,
+                oceancolor="rgb(8,12,20)",
+                bgcolor="rgba(0,0,0,0)",
+                projection_type="equirectangular",
+            )
+            fig.update_layout(
+                margin=dict(l=0, r=0, t=50, b=0),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                height=650,
+                coloraxis_colorbar_title="Headline count",
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
-            layer = pdk.Layer(
-                "ScatterplotLayer",
-                data=live_points,
-                get_position="[longitude, latitude]",
-                get_fill_color="color",
-                get_radius="radius",
-                pickable=True,
-                opacity=0.75,
-                stroked=True,
-                filled=True,
-                line_width_min_pixels=1,
-                get_line_color=[255, 255, 255, 45],
+            st.markdown("### Live conflict summary")
+            st.dataframe(
+                live_summary_df[["country", "article_count", "sources", "latest_pub_date"]].head(20),
+                use_container_width=True,
             )
 
-            tooltip = {
-                "html": "<b>{label}</b><br/>Mentions: {mentions}",
-                "style": {
-                    "backgroundColor": "rgba(20,20,20,0.95)",
-                    "color": "white",
-                    "fontSize": "13px",
-                },
-            }
-
-            deck = pdk.Deck(
-                layers=[layer],
-                initial_view_state=view_state,
-                map_style="light",
-                tooltip=tooltip,
-            )
-            st.pydeck_chart(deck, use_container_width=True)
+            if country_name.strip():
+                selected = country_name.strip()
+                selected_events = live_events_df[live_events_df["country"].str.lower() == selected.lower()].copy()
+                if not selected_events.empty:
+                    st.markdown(f"### Recent live headlines for {selected}")
+                    for _, row in selected_events.drop_duplicates(subset=["title"]).head(10).iterrows():
+                        st.markdown(
+                            f"- [{row['title']}]({row['link']})"
+                            + (f" — {row['source']}" if row['source'] else "")
+                            + (f" — {row['pub_date']}" if row['pub_date'] else "")
+                        )
+                else:
+                    st.info(f"No current live conflict headlines matched {selected!r} in the scanned feed.")
 
             st.caption(
-                "Circle size reflects how often the location was mentioned in recent coverage. "
-                "This is a live geocoded news map, not a confirmed casualty database."
+                "Map methodology: the app scans recent Google News conflict-related RSS headlines, extracts country mentions, "
+                "and shades countries by the number of matching headlines. Hover over a country for a quick summary."
             )
 
-            with st.expander("Live map diagnostics", expanded=False):
-                st.write(f"Mapped locations returned: {len(live_points)}")
-                st.link_button("Open official GDELT HTML map in a new tab", live_map_url)
-                st.dataframe(
-                    live_points[["label", "mentions", "latitude", "longitude"]]
-                    .sort_values("mentions", ascending=False)
-                    .head(25),
-                    use_container_width=True,
-                )
-
     except Exception as e:
-        st.warning(f"Live map data fetch failed: {e}")
-        st.info("Falling back to the official GDELT hosted map.")
-        st.link_button("Open the live map directly", live_map_url)
-        components.iframe(live_map_url, height=760, scrolling=False)
+        st.error(f"Live map failed to load: {e}")
 
     if auto_refresh_live_map:
         refresh_ms = int(refresh_minutes) * 60 * 1000
