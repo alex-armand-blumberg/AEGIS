@@ -7,38 +7,8 @@ import base64
 import numpy as np
 import pandas as pd
 import streamlit as st
-
 from urllib.parse import urlencode
 import streamlit.components.v1 as components
-
-from urllib.parse import urlencode
-import streamlit.components.v1 as components
-
-LIVE_MAP_DEFAULT_QUERY = (
-    '(war OR conflict OR invasion OR insurgency OR airstrike OR missile '
-    'OR drone OR shelling OR ceasefire OR militia OR rebels OR offensive)'
-)
-
-def build_gdelt_live_map_url(
-    query: str,
-    *,
-    timespan: str = "24h",
-    maxpoints: int = 250,
-    geores: int = 2,
-    sortby: str = "Date",
-    zoomwheel: bool = False,
-) -> str:
-    params = {
-        "query": query,
-        "mode": "PointData",   # correct GDELT mode
-        "format": "HTML",      # correct interactive map format
-        "timespan": timespan,
-        "maxpoints": max(1, min(int(maxpoints), 1000)),
-        "geores": int(geores),
-        "sortby": sortby,
-        "zoomwheel": "0" if not zoomwheel else "1",
-    }
-    return "https://api.gdeltproject.org/api/v2/geo/geo?" + urlencode(params)
 
 # Optional: used for the interactive map (recommended).
 # If plotly isn't installed, the app will still run but will show a friendly message.
@@ -340,8 +310,8 @@ if not use_demo:
 
 country_name = st.sidebar.text_input(
     "Country (exact match)",
-    "",
-    help="Demo data currently only goes until the end of 2024."
+    "Ukraine",
+    help="Must match the country values in your dataset exactly (e.g., 'Ukraine')."
 )
 
 # ----------------------------
@@ -501,6 +471,9 @@ def load_primary_dataset_for_plot():
 # Escalation plot section
 # ----------------------------
 
+# ----------------------------
+# Escalation plot section
+# ----------------------------
 st.subheader("Escalation plot")
 
 df_raw_plot, plot_source = (None, None)
@@ -692,16 +665,10 @@ def load_world_dataset_for_map() -> pd.DataFrame:
 
 
 # ----------------------------
-# Map section
+# Live map config + loaders
 # ----------------------------
+LIVE_MAP_DEFAULT_QUERY = "war"
 
-# ----------------------------
-# Live map helpers (GDELT GEO 2.0)
-# ----------------------------
-LIVE_MAP_DEFAULT_QUERY = (
-    '(war OR conflict OR invasion OR insurgency OR airstrike OR missile '
-    'OR drone OR shelling OR ceasefire OR militia OR rebels OR offensive)'
-)
 
 def build_gdelt_live_map_url(
     query: str,
@@ -711,42 +678,143 @@ def build_gdelt_live_map_url(
     geores: int = 2,
     sortby: str = "Date",
     zoomwheel: bool = False,
+    fmt: str = "GeoJSON",
 ) -> str:
     params = {
-        "query": query,
-        "mode": "point",
-        "format": "html",
+        "query": query.strip() or LIVE_MAP_DEFAULT_QUERY,
+        "mode": "PointData",
+        "format": fmt,
         "timespan": timespan,
         "maxpoints": max(1, min(int(maxpoints), 1000)),
-        "geores": geores,
+        "geores": int(geores),
         "sortby": sortby,
-        "zoomwheel": 1 if zoomwheel else 0,
+        "zoomwheel": "0" if not zoomwheel else "1",
     }
     return "https://api.gdeltproject.org/api/v2/geo/geo?" + urlencode(params)
 
 
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_gdelt_geojson(
+    query: str,
+    timespan: str,
+    maxpoints: int,
+    geores: int,
+    sortby: str = "Date",
+) -> dict:
+    url = build_gdelt_live_map_url(
+        query,
+        timespan=timespan,
+        maxpoints=maxpoints,
+        geores=geores,
+        sortby=sortby,
+        zoomwheel=False,
+        fmt="GeoJSON",
+    )
+    r = requests.get(url, timeout=45, headers={"User-Agent": "Mozilla/5.0"})
+    r.raise_for_status()
+    return r.json()
+
+
+def _first_present(d: dict, keys: list[str], default=None):
+    for k in keys:
+        if k in d and d[k] not in (None, ""):
+            return d[k]
+    return default
+
+
+def gdelt_geojson_to_points(payload: dict) -> pd.DataFrame:
+    features = payload.get("features", []) if isinstance(payload, dict) else []
+    rows = []
+
+    for feature in features:
+        geometry = feature.get("geometry") or {}
+        properties = feature.get("properties") or {}
+        coords = geometry.get("coordinates") or []
+
+        if geometry.get("type") != "Point" or len(coords) < 2:
+            continue
+
+        lon, lat = coords[0], coords[1]
+        try:
+            lon = float(lon)
+            lat = float(lat)
+        except Exception:
+            continue
+
+        value = _first_present(
+            properties,
+            ["value", "count", "Count", "numarts", "NumArts", "mentions", "density"],
+            1,
+        )
+        try:
+            value = float(value)
+        except Exception:
+            value = 1.0
+
+        label = _first_present(
+            properties,
+            ["name", "Name", "location", "Location", "admin", "city", "label", "title"],
+            "Unknown location",
+        )
+
+        article_html = _first_present(
+            properties,
+            ["html", "HTML", "description", "Description", "popup", "Popup"],
+            "",
+        )
+
+        rows.append(
+            {
+                "latitude": lat,
+                "longitude": lon,
+                "label": str(label),
+                "mentions": value,
+                "article_html": str(article_html),
+            }
+        )
+
+    if not rows:
+        return pd.DataFrame(columns=["latitude", "longitude", "label", "mentions", "article_html"])
+
+    df = pd.DataFrame(rows)
+    df = df[(df["latitude"].between(-90, 90)) & (df["longitude"].between(-180, 180))].copy()
+    df["radius"] = np.clip(np.sqrt(df["mentions"].clip(lower=1)) * 12000, 6000, 60000)
+
+    def mention_color(v: float) -> list[int]:
+        if v >= 100:
+            return [255, 59, 48, 190]
+        if v >= 25:
+            return [255, 159, 10, 185]
+        if v >= 5:
+            return [255, 214, 10, 180]
+        return [64, 156, 255, 170]
+
+    df["color"] = df["mentions"].apply(mention_color)
+    return df
+
+
 # ----------------------------
-# Live interactive map section
+# Map section
 # ----------------------------
 if show_map:
-    st.markdown("## Live interactive map")
+    st.markdown("## Interactive map")
     st.caption(
-        "This map uses GDELT GEO 2.0 to display live geocoded global news locations. "
-        "It updates as new reporting appears."
+        "This map uses the live GDELT GEO 2.0 feed to display geocoded global news locations. "
+        "It refreshes from current reporting rather than the static UCDP file."
     )
 
     with st.expander("Live map settings", expanded=False):
         live_query = st.text_input(
             "Live event query",
             value=LIVE_MAP_DEFAULT_QUERY,
-            help='You can leave this alone or narrow it, for example: "(Ukraine OR Russia)" or "(Israel OR Gaza OR Hamas)".'
+            help="Keep this fairly short. Good examples: war, ukraine, israel, gaza, missile, protest",
         )
 
         live_timespan = st.selectbox(
             "Lookback window",
             options=["15m", "30m", "1h", "3h", "6h", "12h", "24h", "3d", "7d"],
             index=6,
-            help="How far back the live feed should search."
+            help="GDELT GEO can search up to 7 days back.",
         )
 
         live_maxpoints = st.slider(
@@ -755,7 +823,6 @@ if show_map:
             max_value=500,
             value=250,
             step=25,
-            help="More points gives more coverage but also more noise."
         )
 
         live_geores = st.selectbox(
@@ -763,17 +830,15 @@ if show_map:
             options=[0, 1, 2],
             index=2,
             format_func=lambda x: {
-                0: "All mentions (country + region + city)",
+                0: "All mentions",
                 1: "Exclude country-level mentions",
                 2: "City / landmark only",
             }[x],
-            help="Higher precision keeps the map closer to event-level locations."
         )
 
         auto_refresh_live_map = st.checkbox(
             "Auto-refresh live map",
             value=True,
-            help="Reloads the app automatically so the map stays current."
         )
 
         refresh_minutes = st.slider(
@@ -792,35 +857,98 @@ if show_map:
         geores=live_geores,
         sortby="Date",
         zoomwheel=False,
+        fmt="HTML",
     )
 
     st.markdown(
         f"""
-        <div style="
-            padding:12px 14px;
-            border:1px solid rgba(255,255,255,0.08);
-            border-radius:12px;
-            margin-bottom:10px;
-            background: rgba(255,255,255,0.02);
-        ">
-            <div style="font-size:14px; opacity:0.85;">
-                <strong>Live source:</strong> GDELT GEO 2.0<br>
-                <strong>Query:</strong> <code>{live_query}</code><br>
-                <strong>Window:</strong> {live_timespan}
-                &nbsp;|&nbsp;
-                <strong>Max points:</strong> {live_maxpoints}
-            </div>
-        </div>
+<div style="
+    padding:12px 14px;
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:12px;
+    margin-bottom:10px;
+    background: rgba(255,255,255,0.02);
+">
+    <div style="font-size:14px; opacity:0.85;">
+        <strong>Live source:</strong> GDELT GEO 2.0<br>
+        <strong>Query:</strong> <code>{live_query}</code><br>
+        <strong>Window:</strong> {live_timespan}
+        &nbsp;|&nbsp;
+        <strong>Max points:</strong> {live_maxpoints}
+    </div>
+</div>
         """,
         unsafe_allow_html=True,
     )
 
-    components.iframe(live_map_url, height=760, scrolling=False)
+    try:
+        import pydeck as pdk
 
-    st.caption(
-        "Note: this is a live geocoded news map, not a confirmed casualty database. "
-        "It is far more current than UCDP, but also noisier."
-    )
+        geojson_payload = fetch_gdelt_geojson(
+            live_query,
+            timespan=live_timespan,
+            maxpoints=live_maxpoints,
+            geores=live_geores,
+            sortby="Date",
+        )
+        live_points = gdelt_geojson_to_points(geojson_payload)
+
+        if live_points.empty:
+            st.info("No live geocoded matches were returned for that query and time window.")
+        else:
+            view_state = pdk.ViewState(latitude=20, longitude=10, zoom=1.25, pitch=0)
+
+            layer = pdk.Layer(
+                "ScatterplotLayer",
+                data=live_points,
+                get_position="[longitude, latitude]",
+                get_fill_color="color",
+                get_radius="radius",
+                pickable=True,
+                opacity=0.75,
+                stroked=True,
+                filled=True,
+                line_width_min_pixels=1,
+                get_line_color=[255, 255, 255, 45],
+            )
+
+            tooltip = {
+                "html": "<b>{label}</b><br/>Mentions: {mentions}",
+                "style": {
+                    "backgroundColor": "rgba(20,20,20,0.95)",
+                    "color": "white",
+                    "fontSize": "13px",
+                },
+            }
+
+            deck = pdk.Deck(
+                layers=[layer],
+                initial_view_state=view_state,
+                map_style="light",
+                tooltip=tooltip,
+            )
+            st.pydeck_chart(deck, use_container_width=True)
+
+            st.caption(
+                "Circle size reflects how often the location was mentioned in recent coverage. "
+                "This is a live geocoded news map, not a confirmed casualty database."
+            )
+
+            with st.expander("Live map diagnostics", expanded=False):
+                st.write(f"Mapped locations returned: {len(live_points)}")
+                st.link_button("Open official GDELT HTML map in a new tab", live_map_url)
+                st.dataframe(
+                    live_points[["label", "mentions", "latitude", "longitude"]]
+                    .sort_values("mentions", ascending=False)
+                    .head(25),
+                    use_container_width=True,
+                )
+
+    except Exception as e:
+        st.warning(f"Live map data fetch failed: {e}")
+        st.info("Falling back to the official GDELT hosted map.")
+        st.link_button("Open the live map directly", live_map_url)
+        components.iframe(live_map_url, height=760, scrolling=False)
 
     if auto_refresh_live_map:
         refresh_ms = int(refresh_minutes) * 60 * 1000
