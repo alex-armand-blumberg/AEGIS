@@ -375,7 +375,7 @@ if not use_demo:
 
 country_name = st.sidebar.text_input(
     "Country (exact match)",
-    "Ukraine",
+    "",
     help="Must match the country values in your dataset exactly (e.g., 'Ukraine').",
 )
 
@@ -533,6 +533,9 @@ with st.expander("Live conflict news", expanded=False):
             st.caption("Refreshes automatically every 15 minutes.")
     except Exception as e:
         st.warning(f"Could not load live news feed: {e}")
+
+        st_autorefresh(interval=15 * 60 * 1000, key="global_refresh_15m")
+
 
 col1, col2 = st.columns([1, 12])
 with col1:
@@ -974,8 +977,3 @@ if show_map:
 
         except Exception as e:
             st.error(f"Map error: {e}")
-
-
-
-st_autorefresh(interval=15 * 60 * 1000, key="global_refresh_15m")
-
