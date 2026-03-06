@@ -519,16 +519,34 @@ with st.expander("Live conflict news", expanded=False):
             st.info("No live news items available right now.")
         else:
             for item in news_items:
-                age_txt = format_news_age(item["published_dt"])
-                meta_parts = [p for p in [item["source"], age_txt] if p]
-                meta = " • ".join(meta_parts)
 
-                st.markdown(
-                    f"**[{item['title']}]({item['link']})**  \n"
-                    f"<span style='opacity:0.75'>{meta}</span>",
-                    unsafe_allow_html=True,
-                )
-                st.markdown("---")
+    image_url = None
+
+    # Try to extract thumbnail from RSS
+    if "media_content" in item:
+        image_url = item["media_content"][0]["url"]
+
+    elif "media_thumbnail" in item:
+        image_url = item["media_thumbnail"][0]["url"]
+
+    age_txt = format_news_age(item["published_dt"])
+    meta_parts = [p for p in [item["source"], age_txt] if p]
+    meta = " • ".join(meta_parts)
+
+    col1, col2 = st.columns([1, 4])
+
+    with col1:
+        if image_url:
+            st.image(image_url, use_container_width=True)
+
+    with col2:
+        st.markdown(
+            f"**[{item['title']}]({item['link']})**  \n"
+            f"<span style='opacity:0.75'>{meta}</span>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("---")
 
             st.caption("Refreshes automatically every 15 minutes.")
     except Exception as e:
