@@ -417,6 +417,8 @@ with st.sidebar.expander("Limitations"):
 
 - Geographic precision is limited to country-level aggregation.
 
+- Dataset upload currently limited to 200MB / file.
+
 
 **Planned improvements**
 
