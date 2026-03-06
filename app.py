@@ -468,6 +468,9 @@ def load_primary_dataset_for_plot():
 # ----------------------------
 # Escalation plot section
 # ----------------------------
+# ----------------------------
+# Escalation plot section
+# ----------------------------
 st.subheader("Escalation plot")
 
 df_raw_plot, plot_source = (None, None)
@@ -485,7 +488,7 @@ else:
     st.caption(f"Plot dataset source: {plot_source}")
     st.caption("Source: Uppsala Conflict Data Program (UCDP) Georeferenced Event Dataset via HuggingFace.")
 
-    # Validate columns for plot dataset
+    # Validate required columns
     try:
         require_columns(df_raw_plot, [country_col, date_col, fatalities_col], "Plot dataset")
     except Exception as e:
@@ -497,61 +500,130 @@ else:
         plot_ready = False
 
 if plot_ready:
-    # Build daily series for selected country
     try:
-        daily = build_country_daily(df_raw_plot, country_col, date_col, fatalities_col)
-        c_daily = daily[daily["country"] == country_name].copy()
+        import pandas as pd
+        import matplotlib.pyplot as plt
+
+        # Work on a copy and standardize required fields
+        df_plot = df_raw_plot[[country_col, date_col, fatalities_col]].copy()
+
+        df_plot = df_plot.rename(
+            columns={
+                country_col: "country",
+                date_col: "date",
+                fatalities_col: "fatalities",
+            }
+        )
+
+        # Parse and clean
+        df_plot["date"] = pd.to_datetime(df_plot["date"], errors="coerce")
+        df_plot["fatalities"] = pd.to_numeric(df_plot["fatalities"], errors="coerce")
+        df_plot["country"] = df_plot["country"].astype(str).str.strip()
+
+        df_plot = df_plot.dropna(subset=["country", "date", "fatalities"])
+        df_plot = df_plot[df_plot["fatalities"] >= 0]
+
+        # Aggregate to one row per country-date
+        daily = (
+            df_plot.groupby(["country", "date"], as_index=False)["fatalities"]
+            .sum()
+            .sort_values(["country", "date"])
+        )
+
+        # Filter selected country
+        c_daily = daily[daily["country"] == str(country_name).strip()].copy()
 
         if c_daily.empty:
             st.warning(f"No rows found for country='{country_name}'. Check spelling/case or your country column.")
         else:
-            c_daily = c_daily.set_index("date").sort_index()
-            c_daily["rolling"] = c_daily["fatalities"].rolling(int(rolling_window), min_periods=1).sum()
+            # Build a complete daily calendar so rolling(window=N) truly means N days
+            c_daily = c_daily.sort_values("date").set_index("date")
+
+            full_index = pd.date_range(
+                start=c_daily.index.min(),
+                end=c_daily.index.max(),
+                freq="D"
+            )
+
+            c_daily = c_daily.reindex(full_index, fill_value=0)
+            c_daily.index.name = "date"
+            c_daily["country"] = str(country_name).strip()
+
+            # Ensure fatalities column is numeric after reindex
+            c_daily["fatalities"] = pd.to_numeric(c_daily["fatalities"], errors="coerce").fillna(0.0)
+
+            # True rolling daily fatalities
+            window_days = int(rolling_window)
+            c_daily["rolling"] = c_daily["fatalities"].rolling(window=window_days, min_periods=1).sum()
 
             thresholds = parse_thresholds(thresholds_raw)
             if not thresholds:
                 st.error("Please provide at least one threshold (e.g., 25 or 25,50).")
             else:
-                import matplotlib.pyplot as plt
-
-                fig, ax = plt.subplots()
+                fig, ax = plt.subplots(figsize=(10, 5))
                 ax.plot(c_daily.index, c_daily["rolling"], label="Rolling fatalities")
 
-                # Draw thresholds + starts
+                # Draw thresholds and escalation starts
+                summary_frames = []
                 for i, thr in enumerate(thresholds):
-                    ax.axhline(thr, linestyle="--", linewidth=1, label=f"Threshold {i+1}: {thr:g}")
-                    starts = compute_escalation_starts(c_daily["rolling"], thr, int(persistence_days))
-                    ax.scatter(
-                        c_daily.index[starts],
-                        c_daily["rolling"][starts],
-                        s=40,
-                        label=f"Escalation starts (thr={thr:g})"
+                    ax.axhline(
+                        y=thr,
+                        linestyle="--",
+                        linewidth=1,
+                        label=f"Threshold {i+1}: {thr:g}"
                     )
 
-                ax.set_title(f"AEGIS Escalation Detection — {country_name} (rolling={int(rolling_window)}d)")
+                    starts = compute_escalation_starts(
+                        c_daily["rolling"],
+                        thr,
+                        int(persistence_days)
+                    )
+
+                    if len(starts) > 0:
+                        ax.scatter(
+                            c_daily.index[starts],
+                            c_daily["rolling"].iloc[starts],
+                            s=40,
+                            label=f"Escalation starts (thr={thr:g})"
+                        )
+
+                        starts_df = (
+                            c_daily.iloc[starts][["rolling"]]
+                            .reset_index()
+                            .rename(columns={"index": "date"})
+                            .assign(threshold=thr)
+                            .sort_values("date")
+                        )
+                    else:
+                        starts_df = pd.DataFrame(columns=["date", "rolling", "threshold"])
+
+                    summary_frames.append((thr, starts_df))
+
+                ax.set_title(f"AEGIS Escalation Detection — {country_name} (rolling={window_days}d)")
                 ax.set_xlabel("Date")
                 ax.set_ylabel("Rolling fatalities")
                 ax.legend()
+                ax.grid(True, alpha=0.3)
 
                 st.pyplot(fig, clear_figure=True)
 
-                # Summary table of first few starts
-                st.markdown("### Summary")
-                for thr in thresholds:
-                    starts = compute_escalation_starts(c_daily["rolling"], thr, int(persistence_days))
-                    starts_df = (
-                        c_daily.loc[starts, ["rolling"]]
-                        .reset_index()
-                        .rename(columns={"index": "date"})
-                        .assign(threshold=thr)
-                        .sort_values("date")
+                # Helpful diagnostic preview
+                with st.expander("Preview daily input used for the rolling calculation"):
+                    preview_df = (
+                        c_daily.reset_index()[["date", "fatalities", "rolling"]]
+                        .sort_values("date", ascending=False)
+                        .head(20)
                     )
+                    st.dataframe(preview_df, use_container_width=True)
+
+                # Summary table
+                st.markdown("### Summary")
+                for thr, starts_df in summary_frames:
                     st.write(f"**Threshold {thr:g}: escalation starts detected = {len(starts_df)}**")
                     st.dataframe(starts_df.head(10), use_container_width=True)
 
     except Exception as e:
         st.error(str(e))
-
 
 
 # ----------------------------
