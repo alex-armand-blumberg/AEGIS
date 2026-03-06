@@ -769,7 +769,7 @@ if show_map:
                     )
                     auto_refresh_map = st.checkbox(
                         "Auto-refresh map",
-                        value=False,
+                        value=True,
                         help="Reload the app on a timer so the map picks up any new public layer updates.",
                     )
                     refresh_minutes = st.slider(
