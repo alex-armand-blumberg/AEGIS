@@ -11,7 +11,7 @@ import streamlit as st
 
 import feedparser
 from datetime import datetime, timedelta, timezone
-from streamlit_autorefresh import st_autorefresh
+
 
 # Optional: used for the interactive map.
 try:
