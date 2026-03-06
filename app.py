@@ -389,14 +389,14 @@ override_map_dates = st.sidebar.checkbox(
 )
 
 # Optional override in the sidebar
-            if override_map_dates:
-                start_dt, end_dt = st.sidebar.date_input(
-                    "Map date range",
-                    value=(min_dt, max_dt),
-                    min_value=min_dt,
-                    max_value=max_dt,
-                    key="map_date_range",
-                )
+if override_map_dates:
+    start_dt, end_dt = st.sidebar.date_input(
+    "Map date range",
+    value=(min_dt, max_dt),
+    min_value=min_dt,
+    max_value=max_dt,
+    key="map_date_range",
+    )
 
 st.sidebar.markdown("---")
 
