@@ -447,9 +447,7 @@ if plot_ready:
 
         if c_daily.empty:
             st.warning(
-                f"No rows found for country='{selected_country}'. Check spelling/case or your country column.
-                
-                Common UCDP demo names: 'Russia (Soviet Union', 'Serbia (Yugoslavia)', 'Myanmar (Burma)')"
+                f"No rows found for country='{selected_country}'. Check spelling/case or your country column. Common UCDP demo names: 'Russia (Soviet Union', 'Serbia (Yugoslavia)', 'Myanmar (Burma)')"
             )
         else:
             c_daily = c_daily.sort_values("date").set_index("date")
