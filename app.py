@@ -683,7 +683,7 @@ if show_map:
                             f"Source: Public ACLED ArcGIS monthly indicators. Showing {metric_labels[selected_metric]} from {start_dt} to {end_dt}."
                         )
                         st.caption(
-                            "Conflict data is monthly-aggregated. Currently working towards individual strike-by-strike live telemetry."
+                            "Unfortunately, as of now, current conflict data is monthly-aggregated. Currently working towards individual strike-by-strike live telemetry."
                         )
 
                         fig = px.scatter_geo(
