@@ -67,7 +67,7 @@ def get_favicon(url: str) -> str:
 
 
 @st.cache_data(ttl=900, show_spinner=False)
-def load_live_conflict_news(max_items: int = 15):
+def load_live_conflict_news(max_items: int = 5):
     feed = feedparser.parse(NEWS_FEED_URL)
 
     items = []
@@ -477,7 +477,7 @@ with st.sidebar.expander("Limitations"):
 # ----------------------------
 with st.expander("Live conflict news", expanded=False):
     try:
-        news_items = load_live_conflict_news(max_items=15)
+        news_items = load_live_conflict_news(max_items=5)
 
         if not news_items:
             st.info("No live news items available right now.")
