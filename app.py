@@ -572,10 +572,10 @@ if show_map:
                 earliest_month = df_map["event_month"].min()
 
                 metric_labels = {
-                    "battles": "Battles",
-                    "explosions_remote_violence": "Explosions / remote violence",
-                    "violence_against_civilians": "Violence against civilians",
-                    "strategic_developments": "Strategic developments",
+                    "battles": "Battles (ACLED Definition)",
+                    "explosions_remote_violence": "Explosions / Remote Violence",
+                    "violence_against_civilians": "Violence Against Civilians",
+                    "strategic_developments": "Strategic Developments",
                     "fatalities": "Fatalities",
                     "violent_actors": "Violent actors",
                     "protests": "Protests",
