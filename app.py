@@ -363,7 +363,7 @@ if not use_demo:
 
 country_name = st.sidebar.text_input(
     "Country (exact match)",
-    "Ukraine",
+    "",
     help="Must match the country values in your dataset exactly (e.g., 'Ukraine').",
 )
 
@@ -844,7 +844,7 @@ if show_map:
                             f"Source: public ACLED ArcGIS monthly indicators. Showing {metric_labels[selected_metric]} from {start_dt} to {end_dt}."
                         )
                         st.caption(
-                            "This layer is conflict-focused and much closer to what you wanted than news mention shading, but it is still monthly aggregated at the subnational level rather than individual strike-by-strike live telemetry."
+                            "This layer is monthly aggregated at the subnational level. Working towards individual strike-by-strike live telemetry."
                         )
 
                         fig = px.scatter_geo(
