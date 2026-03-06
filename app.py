@@ -411,7 +411,7 @@ with st.sidebar.expander("Limitations"):
 
 - Fatality totals aggregate all events since 1989.
 
-- Some conflicts may be overcounted due to event duplication.
+- Some conflicts may be overcounted due to event duplication in the datasets.
 
 - Escalation detection currently uses simple rolling thresholds.
 
