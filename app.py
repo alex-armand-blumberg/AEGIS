@@ -759,30 +759,37 @@ if show_map:
                         )
                         st.plotly_chart(fig, use_container_width=True)
 
-                        top_cols = [
-                            "country",
-                            "admin1",
-                            "metric_value",
-                            "fatalities",
-                            "battles",
-                            "explosions_remote_violence",
-                            "violence_against_civilians",
-                        ]
-                        top_hotspots = grouped.sort_values("metric_value", ascending=False)[top_cols].head(25)
-                        top_hotspots = top_hotspots.rename(
-                            columns={
-                                "country": "Country",
-                                "admin1": "Admin1",
-                                "metric_value": metric_labels[selected_metric],
-                                "fatalities": "Fatalities",
-                                "battles": "Battles",
-                                "explosions_remote_violence": "Explosions / remote violence",
-                                "violence_against_civilians": "Violence against civilians",
-                            }
-                        )
+                        summary_cols = [
+    "country",
+    "admin1",
+    "metric_value",
+    "fatalities",
+    "battles",
+    "explosions_remote_violence",
+    "violence_against_civilians",
+]
 
-                        with st.expander("Top hotspots in the current view"):
-                            st.dataframe(top_hotspots, use_container_width=True)
+# Avoid duplicate display columns when the selected metric is already one
+# of the fixed summary columns.
+if selected_metric in {"battles", "explosions_remote_violence", "violence_against_civilians", "fatalities"}:
+    summary_cols = [c for c in summary_cols if c != selected_metric]
+
+top_hotspots = grouped.sort_values("metric_value", ascending=False)[summary_cols].head(25).copy()
+
+rename_map = {
+    "country": "Country",
+    "admin1": "Admin1",
+    "metric_value": f"Selected metric ({metric_labels[selected_metric]})",
+    "fatalities": "Fatalities",
+    "battles": "Battles",
+    "explosions_remote_violence": "Explosions / remote violence",
+    "violence_against_civilians": "Violence against civilians",
+}
+
+top_hotspots = top_hotspots.rename(columns=rename_map)
+
+with st.expander("Top hotspots in the current view"):
+    st.dataframe(top_hotspots, use_container_width=True)
 
                         if auto_refresh_map:
                             refresh_ms = int(refresh_minutes) * 60 * 1000
