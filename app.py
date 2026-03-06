@@ -709,11 +709,11 @@ if show_map:
 
             
                 # Streamlit can sometimes return a single date if user clicks weirdly
-                if isinstance(start_dt, date) and isinstance(end_dt, date) and start_dt <= end_dt:
-                    df_world = df_world[
-                        (df_world[world_date_col].dt.date >= start_dt)
-                        & (df_world[world_date_col].dt.date <= end_dt)
-                    ]
+            if isinstance(start_dt, date) and isinstance(end_dt, date) and start_dt <= end_dt:
+                df_world = df_world[
+                    (df_world[world_date_col].dt.date >= start_dt)
+                    & (df_world[world_date_col].dt.date <= end_dt)
+                ]
             else:
                 # Show the auto range (no big control in the main area)
                 start_dt, end_dt = min_dt, max_dt
