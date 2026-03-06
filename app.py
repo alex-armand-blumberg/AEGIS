@@ -2,6 +2,7 @@ import io
 import base64
 from pathlib import Path
 from datetime import date
+import xml.etree.ElementTree as ET
 
 import numpy as np
 import pandas as pd
@@ -88,6 +89,68 @@ def download_bytes(url: str) -> bytes:
     r = requests.get(url, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
     r.raise_for_status()
     return r.content
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def fetch_rss_items(rss_url: str, max_items: int = 6):
+    r = requests.get(rss_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+    r.raise_for_status()
+
+    root = ET.fromstring(r.content)
+    items = []
+    for item in root.findall(".//item")[:max_items]:
+        title = (item.findtext("title") or "").strip()
+        link = (item.findtext("link") or "").strip()
+        pub_date = (item.findtext("pubDate") or "").strip()
+        source = ""
+        src = item.find("source")
+        if src is not None and src.text:
+            source = src.text.strip()
+        if title and link:
+            items.append({"title": title, "link": link, "pub_date": pub_date, "source": source})
+
+    return items
+
+
+def render_news():
+    st.markdown("## Current Conflict News")
+    rss_url = (
+        "https://news.google.com/rss/search?"
+        "q=(war+OR+conflict+OR+invasion+OR+insurgency)+when:7d&hl=en-US&gl=US&ceid=US:en"
+    )
+
+    try:
+        items = fetch_rss_items(rss_url, max_items=6)
+        if not items:
+            st.info("No items returned from the news feed right now.")
+            return
+
+        for it in items:
+            st.markdown(
+                f"""
+                <div style="
+                    padding:14px 16px;
+                    border:1px solid rgba(255,255,255,0.10);
+                    border-radius:14px;
+                    margin-bottom:10px;
+                    background: rgba(255,255,255,0.03);
+                ">
+                    <div style="font-size:18px; font-weight:700; line-height:1.25;">
+                        <a href="{it['link']}" target="_blank" style="text-decoration:none;">
+                            {it['title']}
+                        </a>
+                    </div>
+                    <div style="opacity:0.7; margin-top:6px; font-size:13px;">
+                        {it['source'] or ''} {('• ' + it['pub_date']) if it['pub_date'] else ''}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.caption("Updates automatically ~every 15 minutes (RSS).")
+    except Exception as e:
+        st.warning(f"Live news feed failed to load: {e}")
 
 
 # ----------------------------
@@ -249,7 +312,7 @@ if not use_demo:
 
 country_name = st.sidebar.text_input(
     "Country (exact match)",
-    "",
+    "Ukraine",
     help="Must match the country values in your dataset exactly (e.g., 'Ukraine').",
 )
 
@@ -304,7 +367,7 @@ st.sidebar.markdown(
     """
 <div style="opacity:0.6; font-size:13px;">
 Plot data source: UCDP GED (1989–present) via HuggingFace.<br>
-Map data source: Public ACLED ArcGIS monthly indicators.
+Map data source: public ACLED ArcGIS monthly indicators.
 </div>
 """,
     unsafe_allow_html=True,
@@ -321,6 +384,27 @@ override_map_dates = st.sidebar.checkbox(
     value=False,
     help="If off, the map automatically uses the latest month available in the map dataset.",
 )
+
+sidebar_map_date_range = None
+if show_map and override_map_dates:
+    try:
+        _sidebar_map_df = fetch_acled_arcgis_monthly()
+        if not _sidebar_map_df.empty:
+            _sidebar_latest_month = _sidebar_map_df["event_month"].max()
+            _sidebar_earliest_month = _sidebar_map_df["event_month"].min()
+            _sidebar_default_start = max(
+                _sidebar_earliest_month.date(),
+                (_sidebar_latest_month - pd.DateOffset(months=2)).date(),
+            )
+            sidebar_map_date_range = st.sidebar.date_input(
+                "Map date range",
+                value=(_sidebar_default_start, _sidebar_latest_month.date()),
+                min_value=_sidebar_earliest_month.date(),
+                max_value=_sidebar_latest_month.date(),
+                key="map_date_range",
+            )
+    except Exception:
+        sidebar_map_date_range = None
 
 st.sidebar.markdown("---")
 
@@ -572,12 +656,12 @@ if show_map:
                 earliest_month = df_map["event_month"].min()
 
                 metric_labels = {
-                    "battles": "Battles (ACLED Definition)",
-                    "explosions_remote_violence": "Explosions / Remote Violence",
-                    "violence_against_civilians": "Violence Against Civilians",
-                    "strategic_developments": "Strategic Developments",
-                    "fatalities": "Battle Fatalities",
-                    "violent_actors": "Violent Actors",
+                    "battles": "Battles",
+                    "explosions_remote_violence": "Explosions / remote violence",
+                    "violence_against_civilians": "Violence against civilians",
+                    "strategic_developments": "Strategic developments",
+                    "fatalities": "Fatalities",
+                    "violent_actors": "Violent actors",
                     "protests": "Protests",
                     "riots": "Riots",
                 }
@@ -596,7 +680,7 @@ if show_map:
                         help="Filters out rows where battles, explosions/remote violence, violence against civilians, and strategic developments are all zero.",
                     )
                     only_selected_country = st.checkbox(
-                        "Only show data for the country entered in the sidebar",
+                        "Only show the country entered above",
                         value=False,
                     )
                     size_max = st.slider(
@@ -608,7 +692,7 @@ if show_map:
                     )
                     auto_refresh_map = st.checkbox(
                         "Auto-refresh map",
-                        value=True,
+                        value=False,
                         help="Reload the app on a timer so the map picks up any new public layer updates.",
                     )
                     refresh_minutes = st.slider(
@@ -620,15 +704,12 @@ if show_map:
                         disabled=not auto_refresh_map,
                     )
 
-                if override_map_dates:
-                    default_start = max(earliest_month.date(), (latest_month - pd.DateOffset(months=2)).date())
-                    start_dt, end_dt = st.sidebar.date_input(
-                        "Map date range",
-                        value=(default_start, latest_month.date()),
-                        min_value=earliest_month.date(),
-                        max_value=latest_month.date(),
-                        key="map_date_range",
-                    )
+                if override_map_dates and sidebar_map_date_range is not None:
+                    try:
+                        start_dt, end_dt = sidebar_map_date_range
+                    except Exception:
+                        start_dt, end_dt = latest_month.date(), latest_month.date()
+
                     if isinstance(start_dt, date) and isinstance(end_dt, date) and start_dt <= end_dt:
                         df_map = df_map[
                             (df_map["event_month"].dt.date >= start_dt)
@@ -680,10 +761,10 @@ if show_map:
                         grouped["hover_location"] = grouped["admin1"] + ", " + grouped["country"]
 
                         st.caption(
-                            f"Source: Public ACLED ArcGIS monthly indicators. Showing ACLED definition of: '{metric_labels[selected_metric]}' from {start_dt} to {end_dt}."
+                            f"Source: public ACLED ArcGIS monthly indicators. Showing {metric_labels[selected_metric]} from {start_dt} to {end_dt}."
                         )
                         st.caption(
-                            "As of now, the data is monthly aggregated at the subnational & national level. Working towards individual strike-by-strike live telemetry."
+                            "This layer is conflict-focused and much closer to what you wanted than news mention shading, but it is still monthly aggregated at the subnational level rather than individual strike-by-strike live telemetry."
                         )
 
                         fig = px.scatter_geo(
@@ -768,7 +849,6 @@ if show_map:
                             "explosions_remote_violence",
                             "violence_against_civilians",
                         ]
-
                         if selected_metric in {"battles", "explosions_remote_violence", "violence_against_civilians", "fatalities"}:
                             summary_cols = [c for c in summary_cols if c != selected_metric]
 
@@ -776,12 +856,12 @@ if show_map:
                         top_hotspots = top_hotspots.rename(
                             columns={
                                 "country": "Country",
-                                "admin1": "Region",
-                                "metric_value": f"Selected Metric ({metric_labels[selected_metric]})",
+                                "admin1": "Admin1",
+                                "metric_value": f"Selected metric ({metric_labels[selected_metric]})",
                                 "fatalities": "Fatalities",
                                 "battles": "Battles",
                                 "explosions_remote_violence": "Explosions / remote violence",
-                                "violence_against_civilians": "Violent Acts Against Civilians",
+                                "violence_against_civilians": "Violence against civilians",
                             }
                         )
 
