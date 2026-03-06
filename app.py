@@ -1,17 +1,13 @@
 import io
 import base64
 from pathlib import Path
-from datetime import date
-import xml.etree.ElementTree as ET
+from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
 import requests
 import streamlit as st
-
 import feedparser
-from datetime import datetime, timedelta, timezone
-
 
 # Optional: used for the interactive map.
 try:
@@ -53,9 +49,6 @@ ACLED_FIELDS = [
     "ObjectId",
 ]
 
-# ----------------------------
-# Robust CSV loading helpers
-# ----------------------------
 
 # ----------------------------
 # Live conflict news feed helpers
@@ -66,7 +59,14 @@ NEWS_FEED_URL = (
     "&hl=en-US&gl=US&ceid=US:en"
 )
 
-@st.cache_data(ttl=900, show_spinner=False)  # 900 sec = 15 min
+
+def get_favicon(url: str) -> str:
+    from urllib.parse import urlparse
+    domain = urlparse(url).netloc
+    return f"https://www.google.com/s2/favicons?sz=64&domain={domain}"
+
+
+@st.cache_data(ttl=900, show_spinner=False)
 def load_live_conflict_news(max_items: int = 15):
     feed = feedparser.parse(NEWS_FEED_URL)
 
@@ -83,13 +83,17 @@ def load_live_conflict_news(max_items: int = 15):
         except Exception:
             published_dt = None
 
+        source = entry.get("source", {})
+        if hasattr(source, 'get'):
+            source_title = source.get("title", "Unknown source")
+        else:
+            source_title = "Unknown source"
+
         items.append(
             {
                 "title": entry.get("title", "Untitled"),
                 "link": entry.get("link", ""),
-                "source": entry.get("source", {}).get("title", "Unknown source")
-                if isinstance(entry.get("source"), dict)
-                else "Unknown source",
+                "source": source_title,
                 "published_raw": published_raw,
                 "published_dt": published_dt,
                 "media_content": entry.get("media_content", []),
@@ -99,6 +103,7 @@ def load_live_conflict_news(max_items: int = 15):
         )
 
     return items
+
 
 def format_news_age(dt_obj):
     if dt_obj is None:
@@ -117,6 +122,9 @@ def format_news_age(dt_obj):
     days = delta.days
     return f"{days}d ago"
 
+# ----------------------------
+# Robust CSV loading helpers
+# ----------------------------
 def _read_csv_attempt(data: bytes, *, encoding: str, sep):
     bio = io.BytesIO(data)
     if sep is None:
@@ -154,68 +162,6 @@ def download_bytes(url: str) -> bytes:
     r = requests.get(url, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
     r.raise_for_status()
     return r.content
-
-
-@st.cache_data(ttl=900, show_spinner=False)
-def fetch_rss_items(rss_url: str, max_items: int = 6):
-    r = requests.get(rss_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
-    r.raise_for_status()
-
-    root = ET.fromstring(r.content)
-    items = []
-    for item in root.findall(".//item")[:max_items]:
-        title = (item.findtext("title") or "").strip()
-        link = (item.findtext("link") or "").strip()
-        pub_date = (item.findtext("pubDate") or "").strip()
-        source = ""
-        src = item.find("source")
-        if src is not None and src.text:
-            source = src.text.strip()
-        if title and link:
-            items.append({"title": title, "link": link, "pub_date": pub_date, "source": source})
-
-    return items
-
-
-def render_news():
-    st.markdown("## Current Conflict News")
-    rss_url = (
-        "https://news.google.com/rss/search?"
-        "q=(war+OR+conflict+OR+invasion+OR+insurgency)+when:7d&hl=en-US&gl=US&ceid=US:en"
-    )
-
-    try:
-        items = fetch_rss_items(rss_url, max_items=6)
-        if not items:
-            st.info("No items returned from the news feed right now.")
-            return
-
-        for it in items:
-            st.markdown(
-                f"""
-                <div style="
-                    padding:14px 16px;
-                    border:1px solid rgba(255,255,255,0.10);
-                    border-radius:14px;
-                    margin-bottom:10px;
-                    background: rgba(255,255,255,0.03);
-                ">
-                    <div style="font-size:18px; font-weight:700; line-height:1.25;">
-                        <a href="{it['link']}" target="_blank" style="text-decoration:none;">
-                            {it['title']}
-                        </a>
-                    </div>
-                    <div style="opacity:0.7; margin-top:6px; font-size:13px;">
-                        {it['source'] or ''} {('• ' + it['pub_date']) if it['pub_date'] else ''}
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        st.caption("Updates automatically ~every 15 minutes (RSS).")
-    except Exception as e:
-        st.warning(f"Live news feed failed to load: {e}")
 
 
 # ----------------------------
@@ -377,7 +323,7 @@ if not use_demo:
 
 country_name = st.sidebar.text_input(
     "Country (exact match)",
-    "",
+    "Ukraine",
     help="Must match the country values in your dataset exactly (e.g., 'Ukraine').",
 )
 
@@ -450,27 +396,6 @@ override_map_dates = st.sidebar.checkbox(
     help="If off, the map automatically uses the latest month available in the map dataset.",
 )
 
-sidebar_map_date_range = None
-if show_map and override_map_dates:
-    try:
-        _sidebar_map_df = fetch_acled_arcgis_monthly()
-        if not _sidebar_map_df.empty:
-            _sidebar_latest_month = _sidebar_map_df["event_month"].max()
-            _sidebar_earliest_month = _sidebar_map_df["event_month"].min()
-            _sidebar_default_start = max(
-                _sidebar_earliest_month.date(),
-                (_sidebar_latest_month - pd.DateOffset(months=2)).date(),
-            )
-            sidebar_map_date_range = st.sidebar.date_input(
-                "Map date range",
-                value=(_sidebar_default_start, _sidebar_latest_month.date()),
-                min_value=_sidebar_earliest_month.date(),
-                max_value=_sidebar_latest_month.date(),
-                key="map_date_range",
-            )
-    except Exception:
-        sidebar_map_date_range = None
-
 st.sidebar.markdown("---")
 
 with st.sidebar.expander("Purpose"):
@@ -506,9 +431,6 @@ with st.sidebar.expander("Limitations"):
 """
     )
 
-# ----------------------------
-# Main header
-# ----------------------------
 
 # ----------------------------
 # Live news feed
@@ -521,26 +443,28 @@ with st.expander("Live conflict news", expanded=False):
             st.info("No live news items available right now.")
         else:
             for item in news_items:
-
                 image_url = None
-            
-                # Try to extract thumbnail from RSS
-                if "media_content" in item:
-                    image_url = item["media_content"][0]["url"]
-            
-                elif "media_thumbnail" in item:
-                    image_url = item["media_thumbnail"][0]["url"]
-            
-                age_txt = format_news_age(item["published_dt"])
-                meta_parts = [p for p in [item["source"], age_txt] if p]
+
+                media_content = item.get("media_content") or []
+                media_thumbnail = item.get("media_thumbnail") or []
+
+                if media_content and isinstance(media_content[0], dict):
+                    image_url = media_content[0].get("url")
+                elif media_thumbnail and isinstance(media_thumbnail[0], dict):
+                    image_url = media_thumbnail[0].get("url")
+
+                age_txt = format_news_age(item.get("published_dt"))
+                meta_parts = [p for p in [item.get("source"), age_txt] if p]
                 meta = " • ".join(meta_parts)
-            
+
                 col1, col2 = st.columns([1, 4])
-            
+
                 with col1:
                     if image_url:
                         st.image(image_url, use_container_width=True)
-            
+                    else:
+                        st.image(get_favicon(item.get("link", "")), width=32)
+
                 with col2:
                     st.markdown(
                         f"**[{item['title']}]({item['link']})**  \n"
@@ -554,7 +478,9 @@ with st.expander("Live conflict news", expanded=False):
     except Exception as e:
         st.warning(f"Could not load live news feed: {e}")
 
-
+# ----------------------------
+# Main header
+# ----------------------------
 col1, col2 = st.columns([1, 12])
 with col1:
     st.image("logo.png", width=2000)
@@ -815,12 +741,15 @@ if show_map:
                         disabled=not auto_refresh_map,
                     )
 
-                if override_map_dates and sidebar_map_date_range is not None:
-                    try:
-                        start_dt, end_dt = sidebar_map_date_range
-                    except Exception:
-                        start_dt, end_dt = latest_month.date(), latest_month.date()
-
+                if override_map_dates:
+                    default_start = max(earliest_month.date(), (latest_month - pd.DateOffset(months=2)).date())
+                    start_dt, end_dt = st.sidebar.date_input(
+                        "Map date range",
+                        value=(default_start, latest_month.date()),
+                        min_value=earliest_month.date(),
+                        max_value=latest_month.date(),
+                        key="map_date_range",
+                    )
                     if isinstance(start_dt, date) and isinstance(end_dt, date) and start_dt <= end_dt:
                         df_map = df_map[
                             (df_map["event_month"].dt.date >= start_dt)
@@ -875,7 +804,7 @@ if show_map:
                             f"Source: public ACLED ArcGIS monthly indicators. Showing {metric_labels[selected_metric]} from {start_dt} to {end_dt}."
                         )
                         st.caption(
-                            "This layer is monthly aggregated at the national/subnational level. Working toward individual strike-by-strike live telemetry."
+                            "This layer is conflict-focused and much closer to what you wanted than news mention shading, but it is still monthly aggregated at the subnational level rather than individual strike-by-strike live telemetry."
                         )
 
                         fig = px.scatter_geo(
