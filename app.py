@@ -122,6 +122,46 @@ def format_news_age(dt_obj):
     days = delta.days
     return f"{days}d ago"
 
+def get_source_logo_url(source_name: str) -> str:
+    source_map = {
+        "Reuters": "reuters.com",
+        "Associated Press": "apnews.com",
+        "AP News": "apnews.com",
+        "BBC News": "bbc.com",
+        "BBC": "bbc.com",
+        "CNN": "cnn.com",
+        "The New York Times": "nytimes.com",
+        "New York Times": "nytimes.com",
+        "Financial Times": "ft.com",
+        "Politico": "politico.com",
+        "Council on Foreign Relations": "cfr.org",
+        "Foreign Affairs": "foreignaffairs.com",
+        "The Washington Post": "washingtonpost.com",
+        "Wall Street Journal": "wsj.com",
+        "Al Jazeera": "aljazeera.com",
+        "The Guardian": "theguardian.com",
+        "Bloomberg": "bloomberg.com",
+        "CNBC": "cnbc.com",
+        "Fox News": "foxnews.com",
+        "NBC News": "nbcnews.com",
+        "CBS News": "cbsnews.com",
+        "ABC News": "abcnews.go.com",
+        "KUOW": "kuow.org",
+    }
+
+    domain = source_map.get(source_name, "")
+    if not domain:
+        cleaned = (
+            source_name.lower()
+            .replace("the ", "")
+            .replace(" news", "")
+            .replace(" ", "")
+            .replace(".", "")
+        )
+        domain = f"{cleaned}.com"
+
+    return f"https://www.google.com/s2/favicons?sz=128&domain={domain}"
+
 # ----------------------------
 # Robust CSV loading helpers
 # ----------------------------
@@ -463,7 +503,7 @@ with st.expander("Live conflict news", expanded=False):
                     if image_url:
                         st.image(image_url, use_container_width=True)
                     else:
-                        st.image(get_favicon(item.get("link", "")), width=32)
+                        st.image(get_source_logo_url(item["source"]), width=40)
 
                 with col2:
                     st.markdown(
