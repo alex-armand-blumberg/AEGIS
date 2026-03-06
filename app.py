@@ -776,12 +776,12 @@ if show_map:
                         top_hotspots = top_hotspots.rename(
                             columns={
                                 "country": "Country",
-                                "admin1": "Admin1",
+                                "admin1": "Region",
                                 "metric_value": f"Selected metric ({metric_labels[selected_metric]})",
                                 "fatalities": "Fatalities",
                                 "battles": "Battles",
                                 "explosions_remote_violence": "Explosions / remote violence",
-                                "violence_against_civilians": "Violence against civilians",
+                                "violence_against_civilians": "Violent Acts Against Civilians",
                             }
                         )
 
