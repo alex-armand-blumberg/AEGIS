@@ -6,3 +6,4 @@ altair
 gdown
 plotly
 feedparser
+pycountry
