@@ -11,6 +11,35 @@ import streamlit as st
 from urllib.parse import urlencode
 import streamlit.components.v1 as components
 
+from urllib.parse import urlencode
+import streamlit.components.v1 as components
+
+LIVE_MAP_DEFAULT_QUERY = (
+    '(war OR conflict OR invasion OR insurgency OR airstrike OR missile '
+    'OR drone OR shelling OR ceasefire OR militia OR rebels OR offensive)'
+)
+
+def build_gdelt_live_map_url(
+    query: str,
+    *,
+    timespan: str = "24h",
+    maxpoints: int = 250,
+    geores: int = 2,
+    sortby: str = "Date",
+    zoomwheel: bool = False,
+) -> str:
+    params = {
+        "query": query,
+        "mode": "PointData",   # correct GDELT mode
+        "format": "HTML",      # correct interactive map format
+        "timespan": timespan,
+        "maxpoints": max(1, min(int(maxpoints), 1000)),
+        "geores": int(geores),
+        "sortby": sortby,
+        "zoomwheel": "0" if not zoomwheel else "1",
+    }
+    return "https://api.gdeltproject.org/api/v2/geo/geo?" + urlencode(params)
+
 # Optional: used for the interactive map (recommended).
 # If plotly isn't installed, the app will still run but will show a friendly message.
 try:
