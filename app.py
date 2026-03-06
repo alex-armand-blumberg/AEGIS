@@ -680,7 +680,7 @@ if show_map:
                         grouped["hover_location"] = grouped["admin1"] + ", " + grouped["country"]
 
                         st.caption(
-                            f"Source: Public ACLED ArcGIS monthly indicators. Showing ACLED definition of: {metric_labels[selected_metric]} from {start_dt} to {end_dt}."
+                            f"Source: Public ACLED ArcGIS monthly indicators. Showing ACLED definition of: '{metric_labels[selected_metric]}' from {start_dt} to {end_dt}."
                         )
                         st.caption(
                             "As of now, the data is monthly aggregated at the subnational & national level. Working towards individual strike-by-strike live telemetry."
