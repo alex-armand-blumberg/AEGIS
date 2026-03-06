@@ -8,6 +8,9 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from urllib.parse import urlencode
+import streamlit.components.v1 as components
+
 # Optional: used for the interactive map (recommended).
 # If plotly isn't installed, the app will still run but will show a friendly message.
 try:
@@ -469,9 +472,6 @@ def load_primary_dataset_for_plot():
 # Escalation plot section
 # ----------------------------
 
-# ----------------------------
-# Escalation plot section
-# ----------------------------
 st.subheader("Escalation plot")
 
 df_raw_plot, plot_source = (None, None)
@@ -667,86 +667,142 @@ def load_world_dataset_for_map() -> pd.DataFrame:
 # ----------------------------
 
 # ----------------------------
-# Map section
+# Live map helpers (GDELT GEO 2.0)
+# ----------------------------
+LIVE_MAP_DEFAULT_QUERY = (
+    '(war OR conflict OR invasion OR insurgency OR airstrike OR missile '
+    'OR drone OR shelling OR ceasefire OR militia OR rebels OR offensive)'
+)
+
+def build_gdelt_live_map_url(
+    query: str,
+    *,
+    timespan: str = "24h",
+    maxpoints: int = 250,
+    geores: int = 2,
+    sortby: str = "Date",
+    zoomwheel: bool = False,
+) -> str:
+    params = {
+        "query": query,
+        "mode": "point",
+        "format": "html",
+        "timespan": timespan,
+        "maxpoints": max(1, min(int(maxpoints), 1000)),
+        "geores": geores,
+        "sortby": sortby,
+        "zoomwheel": 1 if zoomwheel else 0,
+    }
+    return "https://api.gdeltproject.org/api/v2/geo/geo?" + urlencode(params)
+
+
+# ----------------------------
+# Live interactive map section
 # ----------------------------
 if show_map:
-    st.markdown("## Interactive map")
+    st.markdown("## Live interactive map")
+    st.caption(
+        "This map uses GDELT GEO 2.0 to display live geocoded global news locations. "
+        "It updates as new reporting appears."
+    )
 
-    if not _HAS_PLOTLY:
-        st.info("Interactive map requires Plotly. Add `plotly` to requirements.txt to enable it.")
-    else:
-        try:
-            # Load the HF world dataset
-            df_world = load_world_dataset_for_map()
+    with st.expander("Live map settings", expanded=False):
+        live_query = st.text_input(
+            "Live event query",
+            value=LIVE_MAP_DEFAULT_QUERY,
+            help='You can leave this alone or narrow it, for example: "(Ukraine OR Russia)" or "(Israel OR Gaza OR Hamas)".'
+        )
 
-            # Expected columns in the world dataset
-            world_country_col = "country"
-            world_date_col = "date_start"
-            world_fatal_col = "best"
+        live_timespan = st.selectbox(
+            "Lookback window",
+            options=["15m", "30m", "1h", "3h", "6h", "12h", "24h", "3d", "7d"],
+            index=6,
+            help="How far back the live feed should search."
+        )
 
-            require_columns(df_world, [world_country_col, world_date_col, world_fatal_col], "World map dataset")
+        live_maxpoints = st.slider(
+            "Maximum mapped locations",
+            min_value=25,
+            max_value=500,
+            value=250,
+            step=25,
+            help="More points gives more coverage but also more noise."
+        )
 
-            # Parse dates + numeric fatalities
-            df_world = df_world[[world_country_col, world_date_col, world_fatal_col]].copy()
-            df_world[world_date_col] = pd.to_datetime(df_world[world_date_col], errors="coerce")
-            df_world = df_world.dropna(subset=[world_date_col])
+        live_geores = st.selectbox(
+            "Geographic precision",
+            options=[0, 1, 2],
+            index=2,
+            format_func=lambda x: {
+                0: "All mentions (country + region + city)",
+                1: "Exclude country-level mentions",
+                2: "City / landmark only",
+            }[x],
+            help="Higher precision keeps the map closer to event-level locations."
+        )
 
-            df_world[world_fatal_col] = pd.to_numeric(df_world[world_fatal_col], errors="coerce").fillna(0)
+        auto_refresh_live_map = st.checkbox(
+            "Auto-refresh live map",
+            value=True,
+            help="Reloads the app automatically so the map stays current."
+        )
 
-            # Auto date range from the dataset
-            min_dt = df_world[world_date_col].min().date()
-            max_dt = df_world[world_date_col].max().date()
+        refresh_minutes = st.slider(
+            "Auto-refresh interval (minutes)",
+            min_value=5,
+            max_value=30,
+            value=15,
+            step=5,
+            disabled=not auto_refresh_live_map,
+        )
 
-            # Optional override in the sidebar
-            if override_map_dates:
-                start_dt, end_dt = st.sidebar.date_input(
-                    "Map date range",
-                    value=(min_dt, max_dt),
-                    min_value=min_dt,
-                    max_value=max_dt,
-                    key="map_date_range",
-                )
-                # Streamlit can sometimes return a single date if user clicks weirdly
-                if isinstance(start_dt, date) and isinstance(end_dt, date) and start_dt <= end_dt:
-                    df_world = df_world[
-                        (df_world[world_date_col].dt.date >= start_dt)
-                        & (df_world[world_date_col].dt.date <= end_dt)
-                    ]
-            else:
-                # Show the auto range (no big control in the main area)
-                start_dt, end_dt = min_dt, max_dt
+    live_map_url = build_gdelt_live_map_url(
+        live_query,
+        timespan=live_timespan,
+        maxpoints=live_maxpoints,
+        geores=live_geores,
+        sortby="Date",
+        zoomwheel=False,
+    )
 
-            st.caption("Data source: HuggingFace hosted UCDP world dataset")
-            st.caption("To change the date range, enable **Override map date range** in the sidebar.")
+    st.markdown(
+        f"""
+        <div style="
+            padding:12px 14px;
+            border:1px solid rgba(255,255,255,0.08);
+            border-radius:12px;
+            margin-bottom:10px;
+            background: rgba(255,255,255,0.02);
+        ">
+            <div style="font-size:14px; opacity:0.85;">
+                <strong>Live source:</strong> GDELT GEO 2.0<br>
+                <strong>Query:</strong> <code>{live_query}</code><br>
+                <strong>Window:</strong> {live_timespan}
+                &nbsp;|&nbsp;
+                <strong>Max points:</strong> {live_maxpoints}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-            # Aggregate fatalities by country for the selected range
-            by_country = (
-                df_world.groupby(world_country_col, as_index=False)[world_fatal_col]
-                .sum()
-                .rename(columns={world_country_col: "country", world_fatal_col: "fatalities"})
-                .sort_values("fatalities", ascending=False)
-            )
+    components.iframe(live_map_url, height=760, scrolling=False)
 
-            # Make higher fatalities darker:
-            # Use "Blues" (NOT Blues_r)
-            fig = px.choropleth(
-                by_country,
-                locations="country",
-                locationmode="country names",
-                color="fatalities",
-                hover_name="country",
-                hover_data={"country": False, "fatalities": ":,"},
-                title=f"Fatalities by country ({start_dt.year}–{end_dt.year})",
-                color_continuous_scale="Blues",
-            )
+    st.caption(
+        "Note: this is a live geocoded news map, not a confirmed casualty database. "
+        "It is far more current than UCDP, but also noisier."
+    )
 
-            # Cleaner hover (optional but nicer)
-            fig.update_traces(
-                hovertemplate="<b>%{location}</b><br>fatalities=%{z:,}<extra></extra>"
-            )
-
-            fig.update_layout(margin=dict(l=0, r=0, t=60, b=0))
-            st.plotly_chart(fig, use_container_width=True)
-
-        except Exception as e:
-            st.error(f"Map error: {e}")
+    if auto_refresh_live_map:
+        refresh_ms = int(refresh_minutes) * 60 * 1000
+        components.html(
+            f"""
+            <script>
+            window.setTimeout(function() {{
+                window.parent.location.reload();
+            }}, {refresh_ms});
+            </script>
+            """,
+            height=0,
+            width=0,
+        )
