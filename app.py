@@ -546,7 +546,7 @@ with st.expander("Live conflict news", expanded=False):
                         unsafe_allow_html=True,
                     )
 
-    st.markdown("---")
+                st.markdown("---")
 
             st.caption("Refreshes automatically every 15 minutes.")
     except Exception as e:
