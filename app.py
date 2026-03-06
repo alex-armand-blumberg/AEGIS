@@ -304,7 +304,7 @@ st.sidebar.markdown(
     """
 <div style="opacity:0.6; font-size:13px;">
 Plot data source: UCDP GED (1989–present) via HuggingFace.<br>
-Map data source: public ACLED ArcGIS monthly indicators.
+Map data source: Public ACLED ArcGIS monthly indicators.
 </div>
 """,
     unsafe_allow_html=True,
@@ -680,10 +680,10 @@ if show_map:
                         grouped["hover_location"] = grouped["admin1"] + ", " + grouped["country"]
 
                         st.caption(
-                            f"Source: public ACLED ArcGIS monthly indicators. Showing {metric_labels[selected_metric]} from {start_dt} to {end_dt}."
+                            f"Source: Public ACLED ArcGIS monthly indicators. Showing {metric_labels[selected_metric]} from {start_dt} to {end_dt}."
                         )
                         st.caption(
-                            "This layer is conflict-focused and much closer to what you wanted than news mention shading, but it is still monthly aggregated at the subnational level rather than individual strike-by-strike live telemetry."
+                            "Conflict data is monthly-aggregated. Currently working towards individual strike-by-strike live telemetry."
                         )
 
                         fig = px.scatter_geo(
