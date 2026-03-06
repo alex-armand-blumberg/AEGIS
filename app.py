@@ -566,12 +566,12 @@ if plot_ready:
         if c_daily.empty:
             st.warning(
                 f"No rows found for country='{selected_country}'. "
-                "Check spelling/case or your country column.
+                ""Check spelling/case or your country column.
                 
                 Common Country Mispellings:
                 Russia -> Russia (Soviet Union)
                 Myanmar -> Myanmar (Burma)
-                Serbia -> Serbia (Yugoslavia)"
+                Serbia -> Serbia (Yugoslavia)""
             )
         else:
             # Create a full daily calendar so rolling(window=N) means N calendar days
