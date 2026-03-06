@@ -249,7 +249,7 @@ if not use_demo:
 
 country_name = st.sidebar.text_input(
     "Country (exact match)",
-    "",
+    "Ukraine",
     help="Must match the country values in your dataset exactly (e.g., 'Ukraine').",
 )
 
@@ -304,7 +304,7 @@ st.sidebar.markdown(
     """
 <div style="opacity:0.6; font-size:13px;">
 Plot data source: UCDP GED (1989–present) via HuggingFace.<br>
-Map data source: Public ACLED ArcGIS monthly indicators.
+Map data source: public ACLED ArcGIS monthly indicators.
 </div>
 """,
     unsafe_allow_html=True,
@@ -447,7 +447,7 @@ if plot_ready:
 
         if c_daily.empty:
             st.warning(
-                f"No rows found for country='{selected_country}'. Check spelling/case or your country column. Try this format: [Current Country Name] ([Previous Country Name])"
+                f"No rows found for country='{selected_country}'. Check spelling/case or your country column."
             )
         else:
             c_daily = c_daily.sort_values("date").set_index("date")
@@ -680,10 +680,10 @@ if show_map:
                         grouped["hover_location"] = grouped["admin1"] + ", " + grouped["country"]
 
                         st.caption(
-                            f"Source: Public ACLED ArcGIS monthly indicators. Showing {metric_labels[selected_metric]} from {start_dt} to {end_dt}."
+                            f"Source: public ACLED ArcGIS monthly indicators. Showing {metric_labels[selected_metric]} from {start_dt} to {end_dt}."
                         )
                         st.caption(
-                            "Unfortunately, as of now, current conflict data is monthly-aggregated. Currently working towards individual strike-by-strike live telemetry."
+                            "This layer is conflict-focused and much closer to what you wanted than news mention shading, but it is still monthly aggregated at the subnational level rather than individual strike-by-strike live telemetry."
                         )
 
                         fig = px.scatter_geo(
@@ -760,36 +760,33 @@ if show_map:
                         st.plotly_chart(fig, use_container_width=True)
 
                         summary_cols = [
-    "country",
-    "admin1",
-    "metric_value",
-    "fatalities",
-    "battles",
-    "explosions_remote_violence",
-    "violence_against_civilians",
-]
+                            "country",
+                            "admin1",
+                            "metric_value",
+                            "fatalities",
+                            "battles",
+                            "explosions_remote_violence",
+                            "violence_against_civilians",
+                        ]
 
-# Avoid duplicate display columns when the selected metric is already one
-# of the fixed summary columns.
-if selected_metric in {"battles", "explosions_remote_violence", "violence_against_civilians", "fatalities"}:
-    summary_cols = [c for c in summary_cols if c != selected_metric]
+                        if selected_metric in {"battles", "explosions_remote_violence", "violence_against_civilians", "fatalities"}:
+                            summary_cols = [c for c in summary_cols if c != selected_metric]
 
-top_hotspots = grouped.sort_values("metric_value", ascending=False)[summary_cols].head(25).copy()
+                        top_hotspots = grouped.sort_values("metric_value", ascending=False)[summary_cols].head(25).copy()
+                        top_hotspots = top_hotspots.rename(
+                            columns={
+                                "country": "Country",
+                                "admin1": "Admin1",
+                                "metric_value": f"Selected metric ({metric_labels[selected_metric]})",
+                                "fatalities": "Fatalities",
+                                "battles": "Battles",
+                                "explosions_remote_violence": "Explosions / remote violence",
+                                "violence_against_civilians": "Violence against civilians",
+                            }
+                        )
 
-rename_map = {
-    "country": "Country",
-    "admin1": "Admin1",
-    "metric_value": f"Selected metric ({metric_labels[selected_metric]})",
-    "fatalities": "Fatalities",
-    "battles": "Battles",
-    "explosions_remote_violence": "Explosions / remote violence",
-    "violence_against_civilians": "Violence against civilians",
-}
-
-top_hotspots = top_hotspots.rename(columns=rename_map)
-
-with st.expander("Top hotspots in the current view"):
-    st.dataframe(top_hotspots, use_container_width=True)
+                        with st.expander("Top hotspots in the current view"):
+                            st.dataframe(top_hotspots, use_container_width=True)
 
                         if auto_refresh_map:
                             refresh_ms = int(refresh_minutes) * 60 * 1000
