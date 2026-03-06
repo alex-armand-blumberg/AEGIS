@@ -608,7 +608,7 @@ if plot_ready:
 
         if c_daily.empty:
             st.warning(
-                f"No rows found for country='{selected_country}'. Check spelling/case or your country column."
+                f"No rows found for country='{selected_country}'. Check spelling/case or rewrite in the following format: [Current Name] ([Previous Name])."
             )
         else:
             c_daily = c_daily.sort_values("date").set_index("date")
