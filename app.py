@@ -97,6 +97,7 @@ def load_live_conflict_news(max_items: int = 15):
                 "summary": entry.get("summary", ""),
             }
         )
+        st_autorefresh(interval=15 * 60 * 1000, key="global_refresh_15m")
 
     return items
 
@@ -554,8 +555,6 @@ with st.expander("Live conflict news", expanded=False):
             st.caption("Refreshes automatically every 15 minutes.")
     except Exception as e:
         st.warning(f"Could not load live news feed: {e}")
-
-        st_autorefresh(interval=15 * 60 * 1000, key="global_refresh_15m")
 
 
 col1, col2 = st.columns([1, 12])
