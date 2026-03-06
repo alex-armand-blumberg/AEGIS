@@ -388,16 +388,6 @@ override_map_dates = st.sidebar.checkbox(
     help="If off, the map automatically uses the min/max dates in your dataset."
 )
 
-# Optional override in the sidebar
-if override_map_dates:
-    start_dt, end_dt = st.sidebar.date_input(
-    "Map date range",
-    value=(min_dt, max_dt),
-    min_value=min_dt,
-    max_value=max_dt,
-    key="map_date_range",
-    )
-
 st.sidebar.markdown("---")
 
 
@@ -707,7 +697,18 @@ if show_map:
             min_dt = df_world[world_date_col].min().date()
             max_dt = df_world[world_date_col].max().date()
 
-            
+
+
+            # Optional override in the sidebar
+            if override_map_dates:
+                start_dt, end_dt = st.sidebar.date_input(
+                "Map date range",
+                value=(min_dt, max_dt),
+                min_value=min_dt,
+                max_value=max_dt,
+                key="map_date_range",
+                )
+              
                 # Streamlit can sometimes return a single date if user clicks weirdly
             if isinstance(start_dt, date) and isinstance(end_dt, date) and start_dt <= end_dt:
                 df_world = df_world[
