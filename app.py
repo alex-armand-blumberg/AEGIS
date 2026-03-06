@@ -311,7 +311,7 @@ if not use_demo:
 
 country_name = st.sidebar.text_input(
     "Country (exact match)",
-    "Ukraine",
+    "",
     help="Demo data currently only goes until the end of 2024."
 )
 
