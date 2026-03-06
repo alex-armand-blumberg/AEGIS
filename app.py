@@ -503,7 +503,7 @@ with st.expander("Live conflict news", expanded=False):
                     if image_url:
                         st.image(image_url, use_container_width=True)
                     else:
-                        st.image(get_source_logo_url(item["source"]), width=1000)
+                        st.image(get_source_logo_url(item["source"]), width=500)
 
                 with col2:
                     st.markdown(
