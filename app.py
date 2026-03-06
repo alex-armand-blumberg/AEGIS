@@ -596,7 +596,7 @@ if show_map:
                         help="Filters out rows where battles, explosions/remote violence, violence against civilians, and strategic developments are all zero.",
                     )
                     only_selected_country = st.checkbox(
-                        "Only show the country entered in the sidebar",
+                        "Only show data for the country entered in the sidebar",
                         value=False,
                     )
                     size_max = st.slider(
