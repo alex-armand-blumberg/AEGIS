@@ -99,8 +99,6 @@ def load_live_conflict_news(max_items: int = 15):
         )
 
     return items
-st_autorefresh(interval=15 * 60 * 1000, key="global_refresh_15m")
-
 
 def format_news_age(dt_obj):
     if dt_obj is None:
