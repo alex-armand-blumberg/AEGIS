@@ -777,7 +777,7 @@ if show_map:
                             columns={
                                 "country": "Country",
                                 "admin1": "Region",
-                                "metric_value": f"Selected metric ({metric_labels[selected_metric]})",
+                                "metric_value": f"Selected Metric ({metric_labels[selected_metric]})",
                                 "fatalities": "Fatalities",
                                 "battles": "Battles",
                                 "explosions_remote_violence": "Explosions / remote violence",
