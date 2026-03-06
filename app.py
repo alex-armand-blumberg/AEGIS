@@ -576,8 +576,8 @@ if show_map:
                     "explosions_remote_violence": "Explosions / Remote Violence",
                     "violence_against_civilians": "Violence Against Civilians",
                     "strategic_developments": "Strategic Developments",
-                    "fatalities": "Fatalities",
-                    "violent_actors": "Violent actors",
+                    "fatalities": "Battle Fatalities",
+                    "violent_actors": "Violent Actors",
                     "protests": "Protests",
                     "riots": "Riots",
                 }
