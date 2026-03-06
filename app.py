@@ -297,9 +297,9 @@ st.sidebar.markdown("---")
 st.sidebar.header("Inputs")
 
 use_demo = st.sidebar.checkbox(
-    "Use built-in Ukraine example (recommended for demo)",
+    "Use built-in dataset (recommended for demo)",
     value=False,
-    help="Loads ukraine_sample.csv from the repo (must be present alongside app.py)."
+    help="A small number of countries may not have data."
 )
 
 uploaded = None
