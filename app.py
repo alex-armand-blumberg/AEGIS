@@ -468,6 +468,7 @@ def load_primary_dataset_for_plot():
 # ----------------------------
 # Escalation plot section
 # ----------------------------
+
 # ----------------------------
 # Escalation plot section
 # ----------------------------
@@ -488,7 +489,6 @@ else:
     st.caption(f"Plot dataset source: {plot_source}")
     st.caption("Source: Uppsala Conflict Data Program (UCDP) Georeferenced Event Dataset via HuggingFace.")
 
-    # Validate required columns
     try:
         require_columns(df_raw_plot, [country_col, date_col, fatalities_col], "Plot dataset")
     except Exception as e:
@@ -504,9 +504,8 @@ if plot_ready:
         import pandas as pd
         import matplotlib.pyplot as plt
 
-        # Work on a copy and standardize required fields
+        # Keep only needed columns and standardize names
         df_plot = df_raw_plot[[country_col, date_col, fatalities_col]].copy()
-
         df_plot = df_plot.rename(
             columns={
                 country_col: "country",
@@ -515,11 +514,12 @@ if plot_ready:
             }
         )
 
-        # Parse and clean
+        # Clean and coerce types
+        df_plot["country"] = df_plot["country"].astype(str).str.strip()
         df_plot["date"] = pd.to_datetime(df_plot["date"], errors="coerce")
         df_plot["fatalities"] = pd.to_numeric(df_plot["fatalities"], errors="coerce")
-        df_plot["country"] = df_plot["country"].astype(str).str.strip()
 
+        # Drop unusable rows
         df_plot = df_plot.dropna(subset=["country", "date", "fatalities"])
         df_plot = df_plot[df_plot["fatalities"] >= 0]
 
@@ -530,13 +530,17 @@ if plot_ready:
             .sort_values(["country", "date"])
         )
 
-        # Filter selected country
-        c_daily = daily[daily["country"] == str(country_name).strip()].copy()
+        # Exact country match after trimming whitespace
+        selected_country = str(country_name).strip()
+        c_daily = daily[daily["country"] == selected_country].copy()
 
         if c_daily.empty:
-            st.warning(f"No rows found for country='{country_name}'. Check spelling/case or your country column.")
+            st.warning(
+                f"No rows found for country='{selected_country}'. "
+                "Check spelling/case or your country column."
+            )
         else:
-            # Build a complete daily calendar so rolling(window=N) truly means N days
+            # Create a full daily calendar so rolling(window=N) means N calendar days
             c_daily = c_daily.sort_values("date").set_index("date")
 
             full_index = pd.date_range(
@@ -545,16 +549,20 @@ if plot_ready:
                 freq="D"
             )
 
-            c_daily = c_daily.reindex(full_index, fill_value=0)
+            c_daily = c_daily.reindex(full_index)
             c_daily.index.name = "date"
-            c_daily["country"] = str(country_name).strip()
+            c_daily["country"] = selected_country
+            c_daily["fatalities"] = pd.to_numeric(
+                c_daily["fatalities"], errors="coerce"
+            ).fillna(0.0)
 
-            # Ensure fatalities column is numeric after reindex
-            c_daily["fatalities"] = pd.to_numeric(c_daily["fatalities"], errors="coerce").fillna(0.0)
-
-            # True rolling daily fatalities
+            # Rolling daily fatalities over a true daily series
             window_days = int(rolling_window)
-            c_daily["rolling"] = c_daily["fatalities"].rolling(window=window_days, min_periods=1).sum()
+            c_daily["rolling"] = (
+                c_daily["fatalities"]
+                .rolling(window=window_days, min_periods=1)
+                .sum()
+            )
 
             thresholds = parse_thresholds(thresholds_raw)
             if not thresholds:
@@ -563,8 +571,8 @@ if plot_ready:
                 fig, ax = plt.subplots(figsize=(10, 5))
                 ax.plot(c_daily.index, c_daily["rolling"], label="Rolling fatalities")
 
-                # Draw thresholds and escalation starts
                 summary_frames = []
+
                 for i, thr in enumerate(thresholds):
                     ax.axhline(
                         y=thr,
@@ -579,35 +587,56 @@ if plot_ready:
                         int(persistence_days)
                     )
 
-                    if len(starts) > 0:
-                        ax.scatter(
-                            c_daily.index[starts],
-                            c_daily["rolling"].iloc[starts],
-                            s=40,
-                            label=f"Escalation starts (thr={thr:g})"
-                        )
+                    # Normalize starts into labels that match c_daily.index
+                    if starts is None:
+                        starts = []
+                    elif isinstance(starts, pd.Series):
+                        starts = starts[starts].index if starts.dtype == bool else starts.tolist()
+                    elif isinstance(starts, pd.Index):
+                        starts = list(starts)
+                    else:
+                        starts = list(starts)
 
-                        starts_df = (
-                            c_daily.iloc[starts][["rolling"]]
-                            .reset_index()
-                            .rename(columns={"index": "date"})
-                            .assign(threshold=thr)
-                            .sort_values("date")
-                        )
+                    if len(starts) > 0:
+                        # If compute_escalation_starts returned integer positions,
+                        # convert them to datetime labels. Otherwise assume labels.
+                        if all(isinstance(x, (int,)) for x in starts):
+                            start_dates = c_daily.index[starts]
+                        else:
+                            start_dates = pd.Index(starts)
+
+                        start_dates = start_dates.intersection(c_daily.index)
+
+                        if len(start_dates) > 0:
+                            ax.scatter(
+                                start_dates,
+                                c_daily.loc[start_dates, "rolling"],
+                                s=40,
+                                label=f"Escalation starts (thr={thr:g})"
+                            )
+
+                            starts_df = (
+                                c_daily.loc[start_dates, ["rolling"]]
+                                .reset_index()
+                                .rename(columns={"index": "date"})
+                                .assign(threshold=thr)
+                                .sort_values("date")
+                            )
+                        else:
+                            starts_df = pd.DataFrame(columns=["date", "rolling", "threshold"])
                     else:
                         starts_df = pd.DataFrame(columns=["date", "rolling", "threshold"])
 
                     summary_frames.append((thr, starts_df))
 
-                ax.set_title(f"AEGIS Escalation Detection — {country_name} (rolling={window_days}d)")
+                ax.set_title(f"AEGIS Escalation Detection — {selected_country} (rolling={window_days}d)")
                 ax.set_xlabel("Date")
                 ax.set_ylabel("Rolling fatalities")
-                ax.legend()
                 ax.grid(True, alpha=0.3)
+                ax.legend()
 
                 st.pyplot(fig, clear_figure=True)
 
-                # Helpful diagnostic preview
                 with st.expander("Preview daily input used for the rolling calculation"):
                     preview_df = (
                         c_daily.reset_index()[["date", "fatalities", "rolling"]]
@@ -616,7 +645,6 @@ if plot_ready:
                     )
                     st.dataframe(preview_df, use_container_width=True)
 
-                # Summary table
                 st.markdown("### Summary")
                 for thr, starts_df in summary_frames:
                     st.write(f"**Threshold {thr:g}: escalation starts detected = {len(starts_df)}**")
@@ -624,7 +652,6 @@ if plot_ready:
 
     except Exception as e:
         st.error(str(e))
-
 
 # ----------------------------
 # Load world dataset for map (HF hosted)
