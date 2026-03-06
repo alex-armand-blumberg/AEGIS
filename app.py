@@ -67,7 +67,7 @@ NEWS_FEED_URL = (
 )
 
 @st.cache_data(ttl=900, show_spinner=False)  # 900 sec = 15 min
-def load_live_conflict_news(max_items: int = 5):
+def load_live_conflict_news(max_items: int = 15):
     feed = feedparser.parse(NEWS_FEED_URL)
 
     items = []
@@ -92,6 +92,9 @@ def load_live_conflict_news(max_items: int = 5):
                 else "Unknown source",
                 "published_raw": published_raw,
                 "published_dt": published_dt,
+                "media_content": entry.get("media_content", []),
+                "media_thumbnail": entry.get("media_thumbnail", []),
+                "summary": entry.get("summary", ""),
             }
         )
 
