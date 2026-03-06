@@ -304,7 +304,7 @@ st.sidebar.markdown(
     """
 <div style="opacity:0.6; font-size:13px;">
 Plot data source: UCDP GED (1989–present) via HuggingFace.<br>
-Map data source: public ACLED ArcGIS monthly indicators.
+Map data source: Public ACLED ArcGIS monthly indicators.
 </div>
 """,
     unsafe_allow_html=True,
@@ -680,7 +680,7 @@ if show_map:
                         grouped["hover_location"] = grouped["admin1"] + ", " + grouped["country"]
 
                         st.caption(
-                            f"Source: public ACLED ArcGIS monthly indicators. Showing {metric_labels[selected_metric]} from {start_dt} to {end_dt}."
+                            f"Source: Public ACLED ArcGIS monthly indicators. Showing {metric_labels[selected_metric]} from {start_dt} to {end_dt}."
                         )
                         st.caption(
                             "As of now, the data is monthly aggregated at the subnational & national level. Working towards individual strike-by-strike live telemetry."
