@@ -635,22 +635,11 @@ else:
                     headers = {"Authorization": f"Bearer {token}", "User-Agent": "Mozilla/5.0"}
                     end_yr  = min(plot_end_date.year, pd.Timestamp.now().year)
                     all_rows, page, page_size = [], 1, 5000
-                    # First get total count so we can calculate real % progress
-                    count_r = requests.get(
-                        ACLED_API_URL,
-                        params={"country": selected_country,
-                                "year": f"{plot_start_date.year}|{end_yr}",
-                                "year_where": "BETWEEN",
-                                "fields": "event_date",
-                                "limit": 1, "page": 1},
-                        headers=headers, timeout=30,
-                    )
-                    total_count = count_r.json().get("count", 0) if count_r.ok else 0
-                    est_pages   = max(1, int(total_count / page_size) + 1)
+                    PAGE_CAP = 60  # hard cap; each page = 5,000 events
 
                     while True:
-                        pct = min(5 + int(page / est_pages * 60), 65)
-                        _prog.progress(pct, text=f"Fetching page {page} of ~{est_pages} ({len(all_rows):,} events so far)…")
+                        pct = min(5 + int((page - 1) / PAGE_CAP * 65), 70)
+                        _prog.progress(pct, text=f"Fetching page {page} of ~{PAGE_CAP} ({len(all_rows):,} events so far)…")
                         r = requests.get(
                             ACLED_API_URL,
                             params={"country": selected_country,
@@ -668,7 +657,7 @@ else:
                         if len(data) < page_size:
                             break
                         page += 1
-                        if page > 60:
+                        if page > PAGE_CAP:
                             break
 
                     _prog.progress(70, text="Processing events…")
