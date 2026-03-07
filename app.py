@@ -461,7 +461,7 @@ with st.sidebar.expander("Advanced Settings"):
     )
     show_components = st.checkbox(
         "Show component breakdown chart",
-        value=True,
+        value=False,
         help="Stacked bar chart showing each sub-index contribution.",
     )
     st.markdown("**Plot date range**")
