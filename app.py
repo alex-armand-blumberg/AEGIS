@@ -443,7 +443,7 @@ st.sidebar.markdown(
     """
 <div style="opacity:0.6; font-size:13px;">
 Plot data source: UCDP GED (1989–present) via HuggingFace.<br>
-Map data source: public ACLED ArcGIS monthly indicators.
+Map data source: Public ACLED ArcGIS monthly indicators.
 </div>
 """,
     unsafe_allow_html=True,
@@ -871,7 +871,7 @@ if show_map:
                             "This layer is monthly aggregated at the subnational level. Working towards individual strike-by-strike live telemetry."
                         )
 
-                        )
+                        
                         st.caption(
                             "🗺️ How to read this map: Bubble color shows the dominant conflict category for each region — the event type that occurred most frequently. Bubble size reflects the selected map metric. These two can differ: a region colored red for Battles may still show a high Explosions count if that's the metric you've selected — both occurred in that region during the same period. Use the metric selector to surface different dimensions of the same underlying conflict data."
                         )
