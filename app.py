@@ -893,6 +893,14 @@ if show_map:
                             ),
                         )
 
+                        fig.update_layout(
+                            hoverlabel=dict(
+                                bgcolor="rgba(20,20,20,0.95)",
+                                font_size=14,
+                                font_family="Arial"
+                            )
+                        )
+
                         fig.update_geos(
                             showframe=False,
                             showcoastlines=True,
