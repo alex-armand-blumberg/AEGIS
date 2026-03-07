@@ -216,23 +216,32 @@ def fetch_acled_arcgis_monthly() -> pd.DataFrame:
 # ----------------------------
 def compute_escalation_index(df: pd.DataFrame, country: str) -> pd.DataFrame:
     """
-    Monthly Escalation Index (0-100) built from five ACLED leading indicators:
+    Monthly Escalation Index (0-100) built from six ACLED components.
 
-      Component                       Weight   Why it's a leading indicator
-      ─────────────────────────────────────────────────────────────────────
-      Event frequency acceleration     30%     Sudden spike in event count precedes
-                                               fatality peaks by days/weeks
-      Explosions / remote violence      25%     Shelling/airstrikes precede ground
-                                               battle fatalities
-      Strategic developments            20%     Troop moves, HQ changes, peace deal
-                                               collapses signal imminent kinetics
-      Civil unrest (protests + riots)   15%     Social unrest reliably precedes
-                                               armed conflict escalation
-      Civilian targeting ratio          10%     Shift to civilians signals strategic
-                                               deterioration
+    The key design principle: separate INTENSITY (how bad is it right now in
+    absolute terms) from ACCELERATION (is it getting worse). A steady-state
+    war like Ukraine scores high on intensity; a country entering conflict
+    scores high on acceleration. Both are dangerous for different reasons.
 
-    All components are normalised globally (across ALL countries, ALL months)
-    so the score is comparable across countries and over time.
+      Component                        Weight   Signal type
+      ──────────────────────────────────────────────────────
+      Raw conflict intensity            30%     Lagging anchor — battles +
+        (battles + explosions)                  explosions normalised globally.
+                                                Ensures sustained wars like Ukraine
+                                                score high even with flat MoM change.
+      Event frequency acceleration      20%     Leading — MoM % change in total
+                                                events. Catches countries entering
+                                                or re-escalating conflict.
+      Explosions / remote violence      20%     Leading — shelling/airstrikes
+                                                precede ground battle fatalities.
+      Strategic developments            15%     Leading — troop moves, HQ changes,
+                                                peace deal collapses.
+      Civil unrest (protests + riots)   10%     Leading — social unrest precedes
+                                                armed conflict escalation.
+      Civilian targeting ratio           5%     Leading — shift to civilians signals
+                                                strategic deterioration.
+
+    All components normalised globally (all countries, all months in dataset).
     """
     event_cols = [
         "battles", "explosions_remote_violence", "protests", "riots",
@@ -249,7 +258,10 @@ def compute_escalation_index(df: pd.DataFrame, country: str) -> pd.DataFrame:
         agg["battles"] + agg["explosions_remote_violence"] + agg["violence_against_civilians"]
     )
 
-    # Component 1: event frequency acceleration (MoM % change, clipped to [-2, 10])
+    # Component 1: raw conflict intensity (battles + explosions — absolute scale)
+    agg["intensity_raw"] = agg["battles"] + agg["explosions_remote_violence"]
+
+    # Component 2: event frequency acceleration (MoM % change, clipped to [-2, 10])
     agg["event_accel_raw"] = (
         agg.groupby("country")["total_events"]
         .pct_change()
@@ -257,12 +269,12 @@ def compute_escalation_index(df: pd.DataFrame, country: str) -> pd.DataFrame:
         .fillna(0)
     )
 
-    # Component 2–4: raw counts
+    # Component 3–5: raw counts
     agg["explosions_raw"] = agg["explosions_remote_violence"]
     agg["strategic_raw"]  = agg["strategic_developments"]
     agg["unrest_raw"]     = agg["protests"] + agg["riots"]
 
-    # Component 5: civilian targeting ratio
+    # Component 6: civilian targeting ratio
     agg["civ_ratio_raw"] = np.where(
         agg["violent_events"] > 0,
         agg["violence_against_civilians"] / agg["violent_events"],
@@ -276,19 +288,21 @@ def compute_escalation_index(df: pd.DataFrame, country: str) -> pd.DataFrame:
             return pd.Series(0.0, index=agg.index)
         return (agg[col] - mn) / (mx - mn)
 
-    agg["c_accel"]     = minmax("event_accel_raw")
-    agg["c_explosion"] = minmax("explosions_raw")
-    agg["c_strategic"] = minmax("strategic_raw")
-    agg["c_unrest"]    = minmax("unrest_raw")
-    agg["c_civilian"]  = minmax("civ_ratio_raw")
+    agg["c_intensity"]  = minmax("intensity_raw")
+    agg["c_accel"]      = minmax("event_accel_raw")
+    agg["c_explosion"]  = minmax("explosions_raw")
+    agg["c_strategic"]  = minmax("strategic_raw")
+    agg["c_unrest"]     = minmax("unrest_raw")
+    agg["c_civilian"]   = minmax("civ_ratio_raw")
 
     # Weighted composite → 0–100
     agg["escalation_index"] = (
-        0.30 * agg["c_accel"]
-        + 0.25 * agg["c_explosion"]
-        + 0.20 * agg["c_strategic"]
-        + 0.15 * agg["c_unrest"]
-        + 0.10 * agg["c_civilian"]
+        0.30 * agg["c_intensity"]
+        + 0.20 * agg["c_accel"]
+        + 0.20 * agg["c_explosion"]
+        + 0.15 * agg["c_strategic"]
+        + 0.10 * agg["c_unrest"]
+        + 0.05 * agg["c_civilian"]
     ) * 100
 
     return agg[agg["country"] == country].copy().reset_index(drop=True)
@@ -568,13 +582,14 @@ else:
                                 ax2.set_facecolor("#0f172a")
 
                                 component_data = {
-                                    "Event accel. (30%)":       idx_df["c_accel"]     * 30,
-                                    "Explosions (25%)":         idx_df["c_explosion"] * 25,
-                                    "Strategic devs (20%)":     idx_df["c_strategic"] * 20,
-                                    "Unrest / Protests (15%)":  idx_df["c_unrest"]    * 15,
-                                    "Civilian targeting (10%)": idx_df["c_civilian"]  * 10,
+                                    "Conflict intensity (30%)":  idx_df["c_intensity"] * 30,
+                                    "Event accel. (20%)":        idx_df["c_accel"]     * 20,
+                                    "Explosions (20%)":          idx_df["c_explosion"] * 20,
+                                    "Strategic devs (15%)":      idx_df["c_strategic"] * 15,
+                                    "Unrest / Protests (10%)":   idx_df["c_unrest"]    * 10,
+                                    "Civilian targeting (5%)":   idx_df["c_civilian"]  * 5,
                                 }
-                                colors = ["#f59e0b", "#ef4444", "#60a5fa", "#a78bfa", "#fde047"]
+                                colors = ["#ef4444", "#f59e0b", "#f97316", "#60a5fa", "#a78bfa", "#fde047"]
 
                                 bottom = np.zeros(len(idx_df))
                                 for (label, values), color in zip(component_data.items(), colors):
@@ -651,11 +666,12 @@ else:
                                 st.dataframe(full, use_container_width=True)
 
                             st.caption(
-                                "Index formula: 30% Event Frequency Acceleration + "
-                                "25% Explosions/Remote Violence + "
-                                "20% Strategic Developments + "
-                                "15% Civil Unrest (Protests + Riots) + "
-                                "10% Civilian Targeting Ratio. "
+                                "Index formula: 30% Raw Conflict Intensity (Battles + Explosions) + "
+                                "20% Event Frequency Acceleration + "
+                                "20% Explosions/Remote Violence + "
+                                "15% Strategic Developments + "
+                                "10% Civil Unrest (Protests + Riots) + "
+                                "5% Civilian Targeting Ratio. "
                                 "All components normalised globally (0–1) across all ACLED countries and months. "
                                 "Source: ACLED via public ArcGIS layer (updated weekly)."
                             )
