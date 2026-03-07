@@ -771,117 +771,98 @@ def _build_map_figure(grouped: pd.DataFrame, metric_labels: dict, selected_metri
     selected_admin1 = st.session_state.get("map_selected_admin1")
     center, zoom = _compute_view_for_country(grouped, selected_country)
 
-    fig = go.Figure()
-    for category, color in color_discrete_map.items():
-        sub = grouped[grouped["dominant_category"] == category].copy()
-        if sub.empty:
-            continue
+    # Build per-row hover text as a plain column so px can use it
+    def _safe_int(v):
+        try:
+            return int(float(v))
+        except Exception:
+            return 0
 
-        customdata = np.stack([
-            sub["country"].astype(str),
-            sub["admin1"].astype(str),
-            sub["metric_value"].astype(float),
-            sub["fatalities"].astype(float),
-            sub["battles"].astype(float),
-            sub["explosions_remote_violence"].astype(float),
-            sub["violence_against_civilians"].astype(float),
-            sub["strategic_developments"].astype(float),
-            sub["protests"].astype(float),
-            sub["riots"].astype(float),
-            sub["violent_actors"].astype(float),
-        ], axis=-1)
+    grouped = grouped.copy()
+    grouped["hover_label"] = (
+        grouped["admin1"].astype(str) + ", " + grouped["country"].astype(str)
+    )
 
-        fig.add_trace(
-            go.Scattermapbox(
-                lat=sub["centroid_latitude"],
-                lon=sub["centroid_longitude"],
-                mode="markers",
-                name=category,
-                customdata=customdata,
-                text=(sub["admin1"].astype(str) + ", " + sub["country"].astype(str)),
-                hovertemplate=(
-                    "<b style='font-size:18px'>%{text}</b><br><br>"
-                    + f"{metric_labels[selected_metric]}: %{{customdata[2]:,.0f}}<br>"
-                    + "Fatalities: %{customdata[3]:,.0f}<br>"
-                    + "Battles: %{customdata[4]:,.0f}<br>"
-                    + "Explosions / remote violence: %{customdata[5]:,.0f}<br>"
-                    + "Violence against civilians: %{customdata[6]:,.0f}<br>"
-                    + "Strategic developments: %{customdata[7]:,.0f}<br>"
-                    + "Protests: %{customdata[8]:,.0f}<br>"
-                    + "Riots: %{customdata[9]:,.0f}<br>"
-                    + "Violent actors: %{customdata[10]:,.0f}"
-                    + "<extra></extra>"
-                ),
-                marker=dict(
-                    size=sub["bubble_size"].astype(float),
-                    sizemode="diameter",
-                    sizemin=4,
-                    color=color,
-                    opacity=0.82,
-                ),
-            )
-        )
+    # px.scatter_mapbox is the most reliable cross-version API for carto-darkmatter
+    fig = px.scatter_mapbox(
+        grouped,
+        lat="centroid_latitude",
+        lon="centroid_longitude",
+        color="dominant_category",
+        size="bubble_size",
+        size_max=size_max,
+        color_discrete_map=color_discrete_map,
+        custom_data=[
+            "country", "admin1", "metric_value", "fatalities",
+            "battles", "explosions_remote_violence", "violence_against_civilians",
+            "strategic_developments", "protests", "riots", "violent_actors",
+        ],
+        hover_name="hover_label",
+        mapbox_style="carto-darkmatter",
+        center=center,
+        zoom=zoom,
+        height=700,
+        opacity=0.85,
+    )
 
+    # Apply rich hover template to every trace
+    hover_tmpl = (
+        "<b style='font-size:16px'>%{hovertext}</b><br><br>"
+        + f"<b>{metric_labels[selected_metric]}:</b> %{{customdata[2]:,.0f}}<br>"
+        + "<b>Fatalities:</b> %{customdata[3]:,.0f}<br>"
+        + "<b>Battles:</b> %{customdata[4]:,.0f}<br>"
+        + "<b>Explosions / remote violence:</b> %{customdata[5]:,.0f}<br>"
+        + "<b>Violence against civilians:</b> %{customdata[6]:,.0f}<br>"
+        + "<b>Strategic developments:</b> %{customdata[7]:,.0f}<br>"
+        + "<b>Protests:</b> %{customdata[8]:,.0f}<br>"
+        + "<b>Riots:</b> %{customdata[9]:,.0f}<br>"
+        + "<b>Violent actors:</b> %{customdata[10]:,.0f}"
+        + "<extra></extra>"
+    )
+    fig.update_traces(hovertemplate=hover_tmpl)
+
+    # Selection ring for the clicked hotspot
     if selected_country and selected_admin1:
         selected_sub = grouped[
             grouped["country"].astype(str).eq(str(selected_country))
             & grouped["admin1"].astype(str).eq(str(selected_admin1))
         ].copy()
         if not selected_sub.empty:
+            ring_sizes = (selected_sub["bubble_size"].astype(float) + 14).clip(lower=14).tolist()
             fig.add_trace(
                 go.Scattermapbox(
-                    lat=selected_sub["centroid_latitude"],
-                    lon=selected_sub["centroid_longitude"],
+                    lat=selected_sub["centroid_latitude"].tolist(),
+                    lon=selected_sub["centroid_longitude"].tolist(),
                     mode="markers",
-                    name="Selected hotspot",
+                    name="Selected",
                     showlegend=False,
                     hoverinfo="skip",
-                    marker=dict(
-                        size=(selected_sub["bubble_size"].astype(float) + 10),
+                    marker=go.scattermapbox.Marker(
+                        size=ring_sizes,
                         sizemode="diameter",
-                        color="rgba(255,255,255,0)",
-                        opacity=1,
-                        allowoverlap=True,
-                        symbol="circle",
-                    ),
-                )
-            )
-            fig.add_trace(
-                go.Scattermapbox(
-                    lat=selected_sub["centroid_latitude"],
-                    lon=selected_sub["centroid_longitude"],
-                    mode="markers",
-                    name="Selected hotspot fill",
-                    showlegend=False,
-                    hoverinfo="skip",
-                    marker=dict(
-                        size=(selected_sub["bubble_size"].astype(float) + 3),
-                        sizemode="diameter",
-                        color="rgba(255,255,255,0.22)",
-                        opacity=1,
-                        allowoverlap=True,
-                        symbol="circle",
+                        color="rgba(255,255,255,0.25)",
+                        opacity=1.0,
                     ),
                 )
             )
 
     fig.update_layout(
-        title="Current conflict-related hotspots",
+        title=dict(text="Current conflict-related hotspots", font=dict(color="white", size=18)),
         clickmode="event+select",
         paper_bgcolor="#020617",
         plot_bgcolor="#020617",
         font=dict(color="white"),
-        legend_title_text="Dominant category (Click on legend to (de)select categories)",
-        margin=dict(l=0, r=0, t=60, b=0),
-        mapbox=dict(
-            style="carto-darkmatter",
-            center=center,
-            zoom=zoom,
+        legend=dict(
+            title_text="Dominant category<br><sup>Click to (de)select</sup>",
+            bgcolor="rgba(2,6,23,0.75)",
+            bordercolor="rgba(255,255,255,0.15)",
+            borderwidth=1,
+            font=dict(color="white"),
         ),
-        height=700,
+        margin=dict(l=0, r=0, t=60, b=0),
         hoverlabel=dict(
-            bgcolor="rgba(20,20,20,0.96)",
-            font_size=16,
+            bgcolor="rgba(10,10,20,0.96)",
+            font_size=15,
             font_family="Arial",
         ),
     )
