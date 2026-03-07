@@ -471,7 +471,7 @@ with st.sidebar.expander("Advanced Settings"):
     with plot_date_col1:
         plot_start_date = st.date_input(
             "From",
-            value=date(2020, 1, 1),
+            value=date(2018, 1, 1),
             min_value=date(2018, 1, 1),
             max_value=date.today(),
             key="plot_start",
