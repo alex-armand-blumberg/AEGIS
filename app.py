@@ -908,7 +908,7 @@ if show_map:
                                 font=dict(color="white", size=22),
                             ),
                             legend=dict(
-                                title=dict(text="<b>Categories (Click to Isolate):</b>", side="top", font=dict(color="white", size=13)),
+                                title=dict(text="<b>Categories (Double-Click to Isolate):</b>", side="top", font=dict(color="white", size=13)),
                                 orientation="h",
                                 yanchor="bottom",
                                 y=-0.08,
