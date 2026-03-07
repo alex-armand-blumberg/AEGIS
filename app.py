@@ -771,37 +771,6 @@ def _build_map_figure(grouped: pd.DataFrame, metric_labels: dict, selected_metri
     selected_admin1 = st.session_state.get("map_selected_admin1")
     center, zoom = _compute_view_for_country(grouped, selected_country)
 
-    # Detect whether the newer go.Scattermap API is available (Plotly >= 5.24).
-    # In recent Plotly versions go.Scattermapbox was deprecated and markers may
-    # not render; go.Scattermap + layout.map is the replacement and works without
-    # a Mapbox token while still supporting the carto-darkmatter style.
-    _use_new_api = hasattr(go, "Scattermap")
-
-    def _make_scatter(lat, lon, mode, name, customdata=None, text=None,
-                      hovertemplate=None, marker=None, showlegend=True,
-                      hoverinfo=None):
-        kwargs = dict(
-            lat=lat,
-            lon=lon,
-            mode=mode,
-            name=name,
-            showlegend=showlegend,
-        )
-        if customdata is not None:
-            kwargs["customdata"] = customdata
-        if text is not None:
-            kwargs["text"] = text
-        if hovertemplate is not None:
-            kwargs["hovertemplate"] = hovertemplate
-        if marker is not None:
-            kwargs["marker"] = marker
-        if hoverinfo is not None:
-            kwargs["hoverinfo"] = hoverinfo
-        if _use_new_api:
-            return go.Scattermap(**kwargs)
-        else:
-            return go.Scattermapbox(**kwargs)
-
     fig = go.Figure()
     for category, color in color_discrete_map.items():
         sub = grouped[grouped["dominant_category"] == category].copy()
@@ -823,7 +792,7 @@ def _build_map_figure(grouped: pd.DataFrame, metric_labels: dict, selected_metri
         ], axis=-1)
 
         fig.add_trace(
-            _make_scatter(
+            go.Scattermapbox(
                 lat=sub["centroid_latitude"],
                 lon=sub["centroid_longitude"],
                 mode="markers",
@@ -844,7 +813,7 @@ def _build_map_figure(grouped: pd.DataFrame, metric_labels: dict, selected_metri
                     + "<extra></extra>"
                 ),
                 marker=dict(
-                    size=sub["bubble_size"].astype(float).tolist(),
+                    size=sub["bubble_size"].astype(float),
                     sizemode="diameter",
                     sizemin=4,
                     color=color,
@@ -860,7 +829,7 @@ def _build_map_figure(grouped: pd.DataFrame, metric_labels: dict, selected_metri
         ].copy()
         if not selected_sub.empty:
             fig.add_trace(
-                _make_scatter(
+                go.Scattermapbox(
                     lat=selected_sub["centroid_latitude"],
                     lon=selected_sub["centroid_longitude"],
                     mode="markers",
@@ -868,15 +837,17 @@ def _build_map_figure(grouped: pd.DataFrame, metric_labels: dict, selected_metri
                     showlegend=False,
                     hoverinfo="skip",
                     marker=dict(
-                        size=(selected_sub["bubble_size"].astype(float) + 10).tolist(),
+                        size=(selected_sub["bubble_size"].astype(float) + 10),
                         sizemode="diameter",
                         color="rgba(255,255,255,0)",
                         opacity=1,
+                        allowoverlap=True,
+                        symbol="circle",
                     ),
                 )
             )
             fig.add_trace(
-                _make_scatter(
+                go.Scattermapbox(
                     lat=selected_sub["centroid_latitude"],
                     lon=selected_sub["centroid_longitude"],
                     mode="markers",
@@ -884,19 +855,15 @@ def _build_map_figure(grouped: pd.DataFrame, metric_labels: dict, selected_metri
                     showlegend=False,
                     hoverinfo="skip",
                     marker=dict(
-                        size=(selected_sub["bubble_size"].astype(float) + 3).tolist(),
+                        size=(selected_sub["bubble_size"].astype(float) + 3),
                         sizemode="diameter",
                         color="rgba(255,255,255,0.22)",
                         opacity=1,
+                        allowoverlap=True,
+                        symbol="circle",
                     ),
                 )
             )
-
-    map_layout = dict(
-        style="carto-darkmatter",
-        center=center,
-        zoom=zoom,
-    )
 
     fig.update_layout(
         title="Current conflict-related hotspots",
@@ -906,13 +873,17 @@ def _build_map_figure(grouped: pd.DataFrame, metric_labels: dict, selected_metri
         font=dict(color="white"),
         legend_title_text="Dominant category (Click on legend to (de)select categories)",
         margin=dict(l=0, r=0, t=60, b=0),
+        mapbox=dict(
+            style="carto-darkmatter",
+            center=center,
+            zoom=zoom,
+        ),
         height=700,
         hoverlabel=dict(
             bgcolor="rgba(20,20,20,0.96)",
             font_size=16,
             font_family="Arial",
         ),
-        **({"map": map_layout} if _use_new_api else {"mapbox": map_layout}),
     )
     return fig
 
