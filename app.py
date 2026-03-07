@@ -886,16 +886,10 @@ if show_map:
                         fig.update_traces(
                             marker=dict(line=dict(width=0.4, color="rgba(255,255,255,0.35)"), opacity=0.82),
                             hovertemplate=(
-                                "<b>%{hovertext}</b><br>"
-                                + f"Selected metric ({metric_labels[selected_metric]}): %{{customdata[0]:,}}<br>"
-                                + "Fatalities: %{customdata[1]:,}<br>"
-                                + "Battles: %{customdata[2]:,}<br>"
-                                + "Explosions / remote violence: %{customdata[3]:,}<br>"
-                                + "Violence against civilians: %{customdata[4]:,}<br>"
-                                + "Strategic developments: %{customdata[5]:,}<br>"
-                                + "Protests: %{customdata[6]:,}<br>"
-                                + "Riots: %{customdata[7]:,}<br>"
-                                + "Violent actors: %{customdata[8]:,}<extra></extra>"
+                                "<b style='font-size:16px'>%{hovertext}</b><br><br>"
+                                + f"{metric_labels[selected_metric]}: %{{customdata[0]:,}}<br>"
+                                + "Fatalities: %{customdata[1]:,}"
+                                + "<extra></extra>"
                             ),
                         )
 
