@@ -940,7 +940,7 @@ if show_map:
                         if "selected_country" in st.session_state:
                             selected_country = st.session_state["selected_country"]
 
-                            focus_df = grouped[grouped["country"] == selected_country].copy()
+                        focus_df = grouped[grouped["country"] == selected_country].copy()
 
                         if not focus_df.empty:
                             zoom_fig = px.scatter_geo(
