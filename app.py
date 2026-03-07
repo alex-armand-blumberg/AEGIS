@@ -606,6 +606,12 @@ st.caption(
 # ----------------------------
 st.subheader("Escalation Index")
 
+st.caption(
+    "The longer your plot date range, the longer it will take for the plot to load."
+    "Each date addition adds thousands of rows, so it may take a couple extra minutes."
+    "1 Page of events (~5,000) takes 4 seconds to load."
+)
+
 if not run_btn:
     st.info(
         "Enter a country name in the sidebar (e.g. **Ukraine**, **Sudan**, **Myanmar**) "
@@ -642,7 +648,7 @@ else:
 
                     while True:
                         pct = min(5 + int(page / est_pages * 60), 65)
-                        _prog.progress(pct, text=f"Fetching page {page} of ~{est_pages} ({len(all_rows):,} events so far)…")
+                        _prog.progress(pct, text=f"Fetching page {page} of ~ 60 events so far)…")
                         r = requests.get(
                             ACLED_API_URL,
                             params={"country": selected_country,
