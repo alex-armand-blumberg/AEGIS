@@ -451,32 +451,15 @@ country_name = st.sidebar.text_input(
     help="Must match the country name in ACLED exactly (e.g. 'Ukraine', 'Sudan', 'Myanmar').",
 )
 
-with st.sidebar.expander("🔑 ACLED Login (full history)", expanded=False):
-    st.markdown(
-        "Use your **myACLED** email and password to unlock full event history "
-        "back to 1997. Register free at "
-        "[acleddata.com/user/register](https://acleddata.com/user/register). "
-        "No login = public ArcGIS layer (~13 months only).",
-        unsafe_allow_html=True,
-    )
-    acled_api_email = st.text_input(
-        "myACLED email",
-        "",
-        key="acled_email",
-        help="The email address you used to register at acleddata.com",
-    )
-    acled_api_key = st.text_input(
-        "myACLED password",
-        "",
-        type="password",
-        key="acled_key",
-        help="Your myACLED account password (used to fetch an OAuth token — never stored).",
-    )
-    use_api = bool(acled_api_key.strip() and acled_api_email.strip())
-    if use_api:
-        st.success("✓ Credentials provided — full history enabled.")
-    else:
-        st.caption("No credentials — using public ArcGIS layer (~13 months).")
+# Load ACLED credentials silently from Streamlit secrets
+try:
+    acled_api_email = st.secrets["acled"]["email"]
+    acled_api_key   = st.secrets["acled"]["password"]
+    use_api = bool(acled_api_email and acled_api_key)
+except Exception:
+    acled_api_email = ""
+    acled_api_key   = ""
+    use_api = False
 
 with st.sidebar.expander("Advanced Settings"):
     escalation_threshold = st.slider(
@@ -525,8 +508,8 @@ st.sidebar.markdown("---")
 st.sidebar.markdown(
     """
 <div style="opacity:0.6; font-size:13px;">
-Plot data source: ACLED via public ArcGIS layer (updated weekly).<br>
-Map data source: same ACLED layer.
+Plot data source: ACLED (full history via API).<br>
+Map data source: public ACLED ArcGIS layer.
 </div>
 """,
     unsafe_allow_html=True,
