@@ -738,7 +738,7 @@ else:
                                     pd.to_datetime(esc_rows["event_month"]),
                                     esc_rows["index_smoothed"],
                                     color="#ef4444", s=60, zorder=5,
-                                    label=f"Escalation flagged ({len(esc_rows)} months)",
+                                    label=f"Months where escalation was flagged ({len(esc_rows)} / {len(df_acled)} months)",
                                 )
 
                             ax.set_title(
