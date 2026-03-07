@@ -470,7 +470,7 @@ with st.sidebar.expander("Advanced Settings"):
         plot_start_date = st.date_input(
             "From",
             value=date(2020, 1, 1),
-            min_value=date(1997, 1, 1),
+            min_value=date(2018, 1, 1),
             max_value=date.today(),
             key="plot_start",
         )
@@ -478,7 +478,7 @@ with st.sidebar.expander("Advanced Settings"):
         plot_end_date = st.date_input(
             "To",
             value=date.today(),
-            min_value=date(2016, 1, 1),
+            min_value=date(2018, 1, 1),
             max_value=date.today(),
             key="plot_end",
         )
@@ -606,12 +606,6 @@ st.caption(
 # ----------------------------
 st.subheader("Escalation Index")
 
-st.caption(
-    "The longer your plot date range, the longer it will take for the plot to load."
-    " Each date addition adds thousands of rows, so it may take a couple extra minutes."
-    " 1 Page of events (~5,000) takes 4 seconds to load."
-)
-
 if not run_btn:
     st.info(
         "Enter a country name in the sidebar (e.g. **Ukraine**, **Sudan**, **Myanmar**) "
@@ -648,7 +642,7 @@ else:
 
                     while True:
                         pct = min(5 + int(page / est_pages * 60), 65)
-                        _prog.progress(pct, text=f"Fetching page {page} of ~ 60 events so far)…")
+                        _prog.progress(pct, text=f"Fetching page {page} of ~{est_pages} ({len(all_rows):,} events so far)…")
                         r = requests.get(
                             ACLED_API_URL,
                             params={"country": selected_country,
