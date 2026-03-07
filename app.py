@@ -862,7 +862,9 @@ if show_map:
                         st.info("No positive values were found for the selected map metric.")
                     else:
                         grouped["admin1"] = grouped["admin1"].fillna("Unknown")
-                        grouped["bubble_size"] = grouped["metric_value"].clip(lower=1)
+                        raw = grouped["metric_value"].clip(lower=1)
+                        min_display = raw.max() * 0.08
+                        grouped["bubble_size"] = raw.clip(lower=min_display)
                         grouped["hover_location"] = grouped["admin1"] + ", " + grouped["country"]
 
                         st.caption(
