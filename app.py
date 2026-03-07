@@ -10,10 +10,6 @@ import requests
 import streamlit as st
 import feedparser
 
-# --- Map popup HTML template (inline for Streamlit Cloud compatibility) ---
-_MAP_POPUP_TEMPLATE = '<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8">\n<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>\n<style>\n  html, body { margin:0; padding:0; background:#020617; height:100%; }\n  #wrap { position:relative; width:100%; height:820px; }\n  #map  { width:100%; height:820px; }\n  #popup {\n    display:none;\n    position:absolute;\n    top:0; right:0;\n    width:310px;\n    height:100%;\n    background:linear-gradient(160deg,rgba(10,18,38,0.98) 0%,rgba(22,35,60,0.98) 100%);\n    border-left:3px solid #f59e0b;\n    overflow-y:auto;\n    z-index:999;\n    box-sizing:border-box;\n    padding:18px 16px 18px 18px;\n    font-family:Arial,sans-serif;\n    color:white;\n  }\n  .close-btn {\n    float:right; cursor:pointer; font-size:16px;\n    color:rgba(255,255,255,0.5); background:none; border:none;\n    padding:0; margin-top:2px;\n  }\n  .close-btn:hover { color:white; }\n  .grid { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin:14px 0 4px; }\n  .card { border-radius:9px; padding:11px 8px; text-align:center; }\n  .card .num { font-size:18px; font-weight:800; }\n  .card .lbl { font-size:9px; color:rgba(255,255,255,0.5); margin-top:4px; letter-spacing:.8px; }\n  .news-item { margin:10px 0; }\n  .news-item a { color:#93c5fd; text-decoration:none; font-size:13px; line-height:1.4; }\n  .news-item a:hover { color:white; text-decoration:underline; }\n  .news-meta { font-size:11px; color:rgba(255,255,255,0.4); margin-top:2px; }\n  hr.div { border:none; border-top:1px solid rgba(255,255,255,0.07); margin:8px 0; }\n</style>\n</head>\n<body>\n<div id="wrap">\n  <div id="map"></div>\n  <div id="popup">\n    <button class="close-btn" onclick="closePopup()">&#10005;</button>\n    <div id="popup-body"></div>\n  </div>\n</div>\n<script>\nvar FIG    = __FIG__;\nvar LOOKUP = __LOOKUP__;\nvar STATS  = __STATS__;\nvar COORDS = __COORDS__;\n\nPlotly.newPlot(\'map\', FIG.data, FIG.layout, {scrollZoom:true, displayModeBar:true, responsive:true});\n\ndocument.getElementById(\'map\').on(\'plotly_click\', function(evt) {\n  var pt = evt.points[0];\n  var curve = pt.curveNumber, pidx = pt.pointNumber;\n  var country = (LOOKUP[curve] || [])[pidx] || \'\';\n  if (country) openPopup(country);\n});\n\nfunction n(v) { return (v||0).toLocaleString(); }\n\nfunction card(color, bg, border, val, lbl) {\n  return \'<div class="card" style="background:\'+bg+\';border:1px solid \'+border+\';">\' +\n         \'<div class="num" style="color:\'+color+\'">\'+val+\'</div>\' +\n         \'<div class="lbl">\'+lbl+\'</div></div>\';\n}\n\nfunction openPopup(country) {\n  var s = STATS[country] || {};\n  var coords = COORDS[country];\n  if (coords) {\n    Plotly.relayout(\'map\', {\n      \'mapbox.center\': {lat: coords.lat, lon: coords.lon},\n      \'mapbox.zoom\': coords.zoom\n    });\n  }\n  document.getElementById(\'popup-body\').innerHTML =\n    \'<div style="font-size:20px;font-weight:800;margin-bottom:2px;">&#127758; \' + country + \'</div>\' +\n    \'<div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:14px;letter-spacing:1px;">ACLED CONFLICT DATA</div>\' +\n    \'<div class="grid">\' +\n      card(\'#ef4444\',\'rgba(239,68,68,0.13)\',\'rgba(239,68,68,0.3)\',     n(s.fatalities),        \'FATALITIES\')   +\n      card(\'#f59e0b\',\'rgba(245,158,11,0.13)\',\'rgba(245,158,11,0.3)\',   n(s.explosions),         \'EXPLOSIONS\')   +\n      card(\'#f87171\',\'rgba(248,113,113,0.13)\',\'rgba(248,113,113,0.3)\', n(s.battles),            \'BATTLES\')      +\n      card(\'#fde047\',\'rgba(253,224,71,0.13)\',\'rgba(253,224,71,0.3)\',   n(s.civilian_violence),  \'CIV. VIOLENCE\')+\n      card(\'#60a5fa\',\'rgba(96,165,250,0.13)\',\'rgba(96,165,250,0.3)\',   n(s.strategic),          \'STRATEGIC\')    +\n      card(\'#a78bfa\',\'rgba(167,139,250,0.13)\',\'rgba(167,139,250,0.3)\', n(s.protests),           \'PROTESTS\')     +\n      card(\'#f472b6\',\'rgba(244,114,182,0.13)\',\'rgba(244,114,182,0.3)\', n(s.riots),              \'RIOTS\')        +\n      card(\'white\',\'rgba(255,255,255,0.05)\',\'rgba(255,255,255,0.1)\',   n(s.violent_actors),     \'ACTORS\')       +\n    \'</div>\';\n  document.getElementById(\'popup\').style.display = \'block\';\n}\n\nfunction closePopup() {\n  document.getElementById(\'popup\').style.display = \'none\';\n  Plotly.relayout(\'map\', {\'mapbox.center\':{lat:20,lon:10},\'mapbox.zoom\':1});\n}\n</script>\n</body>\n</html>\n'
-
-
 # Optional: used for the interactive map.
 try:
     import plotly.express as px
@@ -166,6 +162,30 @@ def get_source_logo_url(source_name: str) -> str:
         domain = f"{cleaned}.com"
 
     return f"https://www.google.com/s2/favicons?sz=128&domain={domain}"
+
+@st.cache_data(ttl=900, show_spinner=False)
+def load_country_news(country: str, max_items: int = 5):
+    query = requests.utils.quote(f"{country} conflict war military")
+    url = f"https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
+    feed = feedparser.parse(url)
+    items = []
+    for entry in feed.entries[:max_items]:
+        published_dt = None
+        try:
+            if hasattr(entry, "published_parsed") and entry.published_parsed:
+                published_dt = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+        except Exception:
+            pass
+        source = entry.get("source", {})
+        source_title = source.get("title", "Unknown source") if hasattr(source, "get") else "Unknown source"
+        items.append({
+            "title": entry.get("title", "Untitled"),
+            "link":  entry.get("link", ""),
+            "source": source_title,
+            "published_dt": published_dt,
+        })
+    return items
+
 
 # ----------------------------
 # Robust CSV loading helpers
@@ -852,133 +872,191 @@ if show_map:
                             "This layer is monthly aggregated at the subnational level. Working towards individual strike-by-strike live telemetry."
                         )
 
-                        fig = px.scatter_mapbox(
-                            grouped,
-                            lat="centroid_latitude",
-                            lon="centroid_longitude",
-                            color="dominant_category",
-                            size="bubble_size",
-                            size_max=size_max,
-                            hover_name="hover_location",
-                            hover_data={
-                                "metric_value": ":,",
-                                "fatalities": ":,",
-                                "battles": ":,",
-                                "explosions_remote_violence": ":,",
-                                "violence_against_civilians": ":,",
-                                "strategic_developments": ":,",
-                                "protests": ":,",
-                                "riots": ":,",
-                                "violent_actors": ":,",
-                                "centroid_latitude": False,
-                                "centroid_longitude": False,
-                                "admin1": False,
-                                "country": False,
-                                "bubble_size": False,
-                            },
-                            mapbox_style="carto-darkmatter",
-                            center={"lat": 20, "lon": 10},
-                            zoom=1,
-                            title="Current conflict-related hotspots",
-                            color_discrete_map={
-                                "Battles": "#ef4444",
-                                "Explosions / remote violence": "#f59e0b",
-                                "Violence against civilians": "#fde047",
-                                "Strategic developments": "#60a5fa",
-                                "Protests": "#a78bfa",
-                                "Riots": "#f472b6",
-                            },
-                        )
+                        # ── Session state for focused country ─────────────
+                        if "map_focused_country" not in st.session_state:
+                            st.session_state["map_focused_country"] = None
+                        focused = st.session_state["map_focused_country"]
 
-                        fig.update_traces(
-                            marker=dict(opacity=0.85),
-                            hovertemplate=(
-                                "<b style='font-size:16px'>%{hovertext}</b><br><br>"
-                                + f"{metric_labels[selected_metric]}: %{{customdata[0]:,}}<br>"
-                                + "Fatalities: %{customdata[1]:,}"
-                                + "<extra></extra>"
-                            ),
-                        )
-
-                        fig.update_layout(
-                            paper_bgcolor="#020617",
-                            plot_bgcolor="#020617",
-                            font=dict(color="white"),
-                            title=dict(
-                                text="Current Conflict-Related Hotspots",
-                                x=0.5, xanchor="center",
-                                y=0.98, yanchor="top",
-                                font=dict(color="white", size=22),
-                            ),
-                            legend=dict(
-                                title=dict(text="<b>Categories (Click to Isolate):</b>", side="top", font=dict(color="white", size=13)),
-                                orientation="h",
-                                yanchor="bottom", y=-0.08,
-                                xanchor="left", x=0,
-                                bgcolor="rgba(2,6,23,0)",
-                                font=dict(color="white", size=13),
-                            ),
-                            margin=dict(l=0, r=0, t=60, b=80),
-                            height=780,
-                            hoverlabel=dict(bgcolor="rgba(20,20,20,0.95)", font_size=14, font_family="Arial"),
-                        )
-
-                        # Build per-trace country lookup so JS knows which country each point belongs to
-                        point_lookup = {}
-                        for ci, trace in enumerate(fig.data):
-                            cat_name = trace.name
-                            cat_rows = grouped[grouped["dominant_category"] == cat_name].copy()
-                            countries_ordered = []
-                            if hasattr(trace, "lat") and trace.lat is not None:
-                                for tlat, tlon in zip(trace.lat, trace.lon):
-                                    m = cat_rows[
-                                        (cat_rows["centroid_latitude"] == tlat) &
-                                        (cat_rows["centroid_longitude"] == tlon)
-                                    ]
-                                    countries_ordered.append(str(m.iloc[0]["country"]) if not m.empty else "")
-                            point_lookup[ci] = countries_ordered
-
-                        # Per-country aggregated stats for popup cards
-                        country_stats = {}
-                        for ctry, rows in grouped.groupby("country"):
-                            country_stats[str(ctry)] = {
-                                "fatalities":        int(rows["fatalities"].sum()),
-                                "explosions":        int(rows["explosions_remote_violence"].sum()),
-                                "battles":           int(rows["battles"].sum()),
-                                "civilian_violence": int(rows["violence_against_civilians"].sum()),
-                                "strategic":         int(rows["strategic_developments"].sum()),
-                                "protests":          int(rows["protests"].sum()),
-                                "riots":             int(rows["riots"].sum()),
-                                "violent_actors":    int(rows["violent_actors"].sum()),
-                            }
-
-                        # Per-country zoom coordinates
-                        country_coords = {}
-                        for ctry, rows in grouped.groupby("country"):
-                            clat = (rows["centroid_latitude"].min() + rows["centroid_latitude"].max()) / 2
-                            clon = (rows["centroid_longitude"].min() + rows["centroid_longitude"].max()) / 2
-                            span = max(
-                                rows["centroid_latitude"].max() - rows["centroid_latitude"].min(),
-                                rows["centroid_longitude"].max() - rows["centroid_longitude"].min(),
-                                0.5,
+                        # ── Country picker (inline, compact) ──────────────
+                        country_list = sorted(grouped["country"].dropna().unique().tolist())
+                        col_pick, col_reset = st.columns([5, 1])
+                        with col_pick:
+                            sel = st.selectbox(
+                                "Select a country to zoom and see details",
+                                ["— World view —"] + country_list,
+                                index=0 if focused is None else (country_list.index(focused) + 1 if focused in country_list else 0),
+                                label_visibility="collapsed",
+                                key=f"cpick_{selected_metric}_{start_dt}",
                             )
-                            country_coords[str(ctry)] = {
-                                "lat":  round(float(clat), 4),
-                                "lon":  round(float(clon), 4),
-                                "zoom": round(max(1.5, min(6.0, 5.8 - float(np.log2(span + 1)))), 2),
-                            }
+                            new_focus = None if sel == "— World view —" else sel
+                            if new_focus != focused:
+                                st.session_state["map_focused_country"] = new_focus
+                                focused = new_focus
+                                st.rerun()
+                        with col_reset:
+                            if focused and st.button("✕ Reset", use_container_width=True):
+                                st.session_state["map_focused_country"] = None
+                                focused = None
+                                st.rerun()
 
-                        # Inject data into the HTML template and render as a component
-                        html_template = _MAP_POPUP_TEMPLATE
-                        map_html = (
-                            html_template
-                            .replace("__FIG__",    fig.to_json())
-                            .replace("__LOOKUP__", json.dumps(point_lookup))
-                            .replace("__STATS__",  json.dumps(country_stats))
-                            .replace("__COORDS__", json.dumps(country_coords))
-                            .replace("__METRIC_LABEL__", metric_labels[selected_metric])
-                        )
-                        st.components.v1.html(map_html, height=825, scrolling=False)
+                        # ── Map center / zoom ─────────────────────────────
+                        if focused:
+                            c_rows = grouped[grouped["country"] == focused]
+                            if not c_rows.empty:
+                                clat = (c_rows["centroid_latitude"].min() + c_rows["centroid_latitude"].max()) / 2
+                                clon = (c_rows["centroid_longitude"].min() + c_rows["centroid_longitude"].max()) / 2
+                                span = max(
+                                    c_rows["centroid_latitude"].max() - c_rows["centroid_latitude"].min(),
+                                    c_rows["centroid_longitude"].max() - c_rows["centroid_longitude"].min(),
+                                    0.5,
+                                )
+                                map_center = {"lat": float(clat), "lon": float(clon)}
+                                map_zoom   = float(max(1.5, min(6.0, 5.8 - np.log2(span + 1))))
+                            else:
+                                map_center, map_zoom = {"lat": 20, "lon": 10}, 1.0
+                        else:
+                            map_center, map_zoom = {"lat": 20, "lon": 10}, 1.0
+
+                        # ── Layout: map left, panel right when focused ────
+                        if focused:
+                            map_col, panel_col = st.columns([3, 1], gap="small")
+                        else:
+                            map_col = st.container()
+                            panel_col = None
+
+                        with map_col:
+                            fig = px.scatter_mapbox(
+                                grouped,
+                                lat="centroid_latitude",
+                                lon="centroid_longitude",
+                                color="dominant_category",
+                                size="bubble_size",
+                                size_max=size_max,
+                                hover_name="hover_location",
+                                hover_data={
+                                    "metric_value": ":,",
+                                    "fatalities": ":,",
+                                    "battles": ":,",
+                                    "explosions_remote_violence": ":,",
+                                    "violence_against_civilians": ":,",
+                                    "strategic_developments": ":,",
+                                    "protests": ":,",
+                                    "riots": ":,",
+                                    "violent_actors": ":,",
+                                    "centroid_latitude": False,
+                                    "centroid_longitude": False,
+                                    "admin1": False,
+                                    "country": False,
+                                    "bubble_size": False,
+                                },
+                                mapbox_style="carto-darkmatter",
+                                center=map_center,
+                                zoom=map_zoom,
+                                title="Current Conflict-Related Hotspots",
+                                color_discrete_map={
+                                    "Battles": "#ef4444",
+                                    "Explosions / remote violence": "#f59e0b",
+                                    "Violence against civilians": "#fde047",
+                                    "Strategic developments": "#60a5fa",
+                                    "Protests": "#a78bfa",
+                                    "Riots": "#f472b6",
+                                },
+                            )
+                            fig.update_traces(
+                                marker=dict(opacity=0.85),
+                                hovertemplate=(
+                                    "<b style='font-size:15px'>%{hovertext}</b><br><br>"
+                                    + f"{metric_labels[selected_metric]}: %{{customdata[0]:,}}<br>"
+                                    + "Fatalities: %{customdata[1]:,}"
+                                    + "<extra></extra>"
+                                ),
+                            )
+                            map_h = 760 if focused else 790
+                            fig.update_layout(
+                                paper_bgcolor="#020617",
+                                plot_bgcolor="#020617",
+                                font=dict(color="white"),
+                                title=dict(
+                                    text="Current Conflict-Related Hotspots",
+                                    x=0.5, xanchor="center",
+                                    y=0.98, yanchor="top",
+                                    font=dict(color="white", size=20),
+                                ),
+                                legend=dict(
+                                    title=dict(text="<b>Categories:</b>", side="top", font=dict(color="white", size=12)),
+                                    orientation="h",
+                                    yanchor="bottom", y=-0.10,
+                                    xanchor="left", x=0,
+                                    bgcolor="rgba(2,6,23,0)",
+                                    font=dict(color="white", size=12),
+                                ),
+                                margin=dict(l=0, r=0, t=55, b=75),
+                                height=map_h,
+                                hoverlabel=dict(bgcolor="rgba(20,20,20,0.95)", font_size=13, font_family="Arial"),
+                            )
+                            st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": True})
+
+                        # ── Country info panel ────────────────────────────
+                        if focused and panel_col is not None:
+                            with panel_col:
+                                country_rows = grouped[grouped["country"] == focused]
+                                if not country_rows.empty:
+                                    t = country_rows[[
+                                        "battles", "explosions_remote_violence", "protests",
+                                        "riots", "strategic_developments", "violence_against_civilians",
+                                        "violent_actors", "fatalities",
+                                    ]].sum()
+
+                                    def _card(color, bg, border, val, lbl):
+                                        return (
+                                            f'<div style="background:{bg};border:1px solid {border};'
+                                            f'border-radius:8px;padding:10px 6px;text-align:center;margin-bottom:8px;">'
+                                            f'<div style="font-size:20px;font-weight:800;color:{color};">{val:,}</div>'
+                                            f'<div style="font-size:9px;color:rgba(255,255,255,0.5);margin-top:3px;letter-spacing:.8px;">{lbl}</div>'
+                                            f'</div>'
+                                        )
+
+                                    panel_html = (
+                                        f'<div style="background:linear-gradient(160deg,rgba(10,18,38,0.97),rgba(22,35,60,0.97));'
+                                        f'border-left:3px solid #f59e0b;border-radius:10px;padding:16px 14px;'
+                                        f'font-family:Arial,sans-serif;color:white;">'
+                                        f'<div style="font-size:17px;font-weight:800;margin-bottom:2px;">&#127758; {focused}</div>'
+                                        f'<div style="font-size:9px;color:rgba(255,255,255,0.35);margin-bottom:14px;letter-spacing:1px;">ACLED CONFLICT DATA</div>'
+                                        + _card("#ef4444","rgba(239,68,68,0.13)","rgba(239,68,68,0.3)",    int(t["fatalities"]),              "FATALITIES")
+                                        + _card("#f59e0b","rgba(245,158,11,0.13)","rgba(245,158,11,0.3)",  int(t["explosions_remote_violence"]),"EXPLOSIONS")
+                                        + _card("#f87171","rgba(248,113,113,0.13)","rgba(248,113,113,0.3)",int(t["battles"]),                  "BATTLES")
+                                        + _card("#fde047","rgba(253,224,71,0.13)","rgba(253,224,71,0.3)",  int(t["violence_against_civilians"]),"CIV. VIOLENCE")
+                                        + _card("#60a5fa","rgba(96,165,250,0.13)","rgba(96,165,250,0.3)",  int(t["strategic_developments"]),   "STRATEGIC")
+                                        + _card("#a78bfa","rgba(167,139,250,0.13)","rgba(167,139,250,0.3)",int(t["protests"]),                 "PROTESTS")
+                                        + _card("#f472b6","rgba(244,114,182,0.13)","rgba(244,114,182,0.3)",int(t["riots"]),                    "RIOTS")
+                                        + _card("white","rgba(255,255,255,0.05)","rgba(255,255,255,0.1)",  int(t["violent_actors"]),           "ACTORS")
+                                        + '</div>'
+                                    )
+                                    st.markdown(panel_html, unsafe_allow_html=True)
+
+                                    # Recent news
+                                    st.markdown(
+                                        '<div style="font-size:13px;font-weight:700;color:white;margin:14px 0 8px;">&#128240; Recent News</div>',
+                                        unsafe_allow_html=True,
+                                    )
+                                    try:
+                                        news = load_country_news(focused, max_items=5)
+                                        if news:
+                                            for article in news:
+                                                age = format_news_age(article["published_dt"])
+                                                meta = " · ".join(p for p in [article["source"], age] if p)
+                                                title_safe = article['title']
+                                                link_safe  = article['link']
+                                                st.markdown(
+                                                    f"[{title_safe}]({link_safe})  \n"
+                                                    f"<span style='opacity:0.45;font-size:10px;'>{meta}</span>",
+                                                    unsafe_allow_html=True,
+                                                )
+                                                st.markdown("<hr style='border-color:rgba(255,255,255,0.06);margin:6px 0;'>", unsafe_allow_html=True)
+                                        else:
+                                            st.caption("No recent news found.")
+                                    except Exception:
+                                        st.caption("Could not load news.")
 
                         summary_cols = [
                             "country",
