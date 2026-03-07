@@ -9,6 +9,8 @@ import requests
 import streamlit as st
 import feedparser
 
+from streamlit_plotly_events import plotly_events
+
 # Optional: used for the interactive map.
 try:
     import plotly.express as px
