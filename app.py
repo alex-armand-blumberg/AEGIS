@@ -342,7 +342,7 @@ def fetch_ticker_data() -> list:
         merged["prev_score"] = merged["score_prev"].fillna(0)
         merged["trend"] = merged["score_cur"] - merged["prev_score"]
 
-        top = merged.nlargest(20, "score_cur")
+        top = merged.nlargest(10, "score_cur")
 
         items = []
         for _, row in top.iterrows():
@@ -888,71 +888,150 @@ else:
                                     forecast_lo.append(max(0,   fv - 1.5 * std_err))
                                     forecast_hi.append(min(100, fv + 1.5 * std_err))
 
-                            # ── Main escalation index chart ──────────────
-                            fig, ax = plt.subplots(figsize=(12, 5))
-                            fig.patch.set_facecolor("#020617")
-                            ax.set_facecolor("#0f172a")
+                            # ── Main escalation index chart (Plotly interactive) ──
+                            import plotly.graph_objects as go
 
-                            ax.axhspan(escalation_threshold, 100, alpha=0.07, color="#ef4444", zorder=0)
-                            ax.axhline(
-                                y=escalation_threshold, color="#ef4444",
-                                linestyle="--", linewidth=1.2,
-                                label=f"Alert threshold ({escalation_threshold})",
+                            def _drill_hover(row):
+                                return (
+                                    f"<b>{pd.to_datetime(row['event_month']).strftime('%b %Y')}</b><br>"
+                                    f"Index: {row['escalation_index']:.1f} &nbsp;|&nbsp; Smoothed: {row['index_smoothed']:.1f}<br>"
+                                    f"<br>"
+                                    f"⚔️ Battles: <b>{int(row.get('battles',0)):,}</b><br>"
+                                    f"💥 Explosions: <b>{int(row.get('explosions_remote_violence',0)):,}</b><br>"
+                                    f"🎯 Strategic devs: <b>{int(row.get('strategic_developments',0)):,}</b><br>"
+                                    f"✊ Protests: <b>{int(row.get('protests',0)):,}</b><br>"
+                                    f"🔥 Riots: <b>{int(row.get('riots',0)):,}</b><br>"
+                                    f"👥 Civ. violence: <b>{int(row.get('violence_against_civilians',0)):,}</b><br>"
+                                    f"<br>💀 Fatalities: <b>{int(row.get('fatalities',0)):,}</b>"
+                                )
+
+                            pfig = go.Figure()
+
+                            # Threshold shading
+                            pfig.add_hrect(
+                                y0=escalation_threshold, y1=105,
+                                fillcolor="#ef4444", opacity=0.06,
+                                layer="below", line_width=0,
                             )
-                            ax.plot(dates, idx_df["escalation_index"],
-                                    color="#60a5fa", alpha=0.25, linewidth=1)
-                            ax.plot(
-                                dates, idx_df["index_smoothed"],
-                                color="#60a5fa", linewidth=2.5,
-                                label=f"Escalation Index ({w}-month smoothed)",
+
+                            # Threshold line
+                            pfig.add_hline(
+                                y=escalation_threshold,
+                                line_dash="dash", line_color="#ef4444", line_width=1.5,
+                                annotation_text=f"Alert threshold ({escalation_threshold})",
+                                annotation_font_color="#ef4444",
+                                annotation_position="bottom right",
                             )
+
+                            # Raw index (faint)
+                            pfig.add_trace(go.Scatter(
+                                x=dates, y=idx_df["escalation_index"],
+                                mode="lines",
+                                line=dict(color="#60a5fa", width=1),
+                                opacity=0.25,
+                                name="Raw index",
+                                hoverinfo="skip",
+                            ))
+
+                            # Smoothed index line with hover
+                            pfig.add_trace(go.Scatter(
+                                x=dates, y=idx_df["index_smoothed"],
+                                mode="lines",
+                                line=dict(color="#60a5fa", width=2.5),
+                                name=f"Escalation Index ({w}-mo smoothed)",
+                                customdata=idx_df.index,
+                                hovertemplate=[_drill_hover(r) for _, r in idx_df.iterrows()],
+                            ))
+
+                            # Escalation flagged dots
                             if not esc_rows.empty:
-                                ax.scatter(
-                                    pd.to_datetime(esc_rows["event_month"]),
-                                    esc_rows["index_smoothed"],
-                                    color="#ef4444", s=60, zorder=5,
-                                    label=f"Escalation flagged ({len(esc_rows)} / {len(df_acled)} months)",
-                                )
+                                pfig.add_trace(go.Scatter(
+                                    x=pd.to_datetime(esc_rows["event_month"]),
+                                    y=esc_rows["index_smoothed"],
+                                    mode="markers",
+                                    marker=dict(color="#ef4444", size=10, symbol="circle"),
+                                    name=f"Escalation flagged ({len(esc_rows)} months)",
+                                    hovertemplate=[
+                                        "<b>🔴 ESCALATION FLAGGED</b><br>" + _drill_hover(r)
+                                        for _, r in esc_rows.iterrows()
+                                    ],
+                                ))
+
+                            # Pre-escalation warning diamonds
                             if not warn_rows.empty:
-                                ax.scatter(
-                                    pd.to_datetime(warn_rows["event_month"]),
-                                    warn_rows["index_smoothed"],
-                                    color="#f97316", s=90, marker="D",
-                                    zorder=6,
-                                    label=f"Pre-escalation warning ({len(warn_rows)} months)",
-                                )
+                                pfig.add_trace(go.Scatter(
+                                    x=pd.to_datetime(warn_rows["event_month"]),
+                                    y=warn_rows["index_smoothed"],
+                                    mode="markers",
+                                    marker=dict(color="#f97316", size=13, symbol="diamond"),
+                                    name=f"Pre-escalation warning ({len(warn_rows)} months)",
+                                    hovertemplate=[
+                                        "<b>🟠 PRE-ESCALATION WARNING</b><br>"
+                                        "Index below threshold but leading indicators elevated.<br>"
+                                        + _drill_hover(r)
+                                        for _, r in warn_rows.iterrows()
+                                    ],
+                                ))
+
+                            # Forecast line + band
                             if forecast_dates:
                                 last_hist_val = float(idx_df["index_smoothed"].iloc[-1])
-                                fc_dates_plot = [pd.to_datetime(idx_df["event_month"].iloc[-1])] + forecast_dates
-                                fc_vals_plot  = [last_hist_val] + forecast_vals
-                                fc_lo_plot    = [last_hist_val] + forecast_lo
-                                fc_hi_plot    = [last_hist_val] + forecast_hi
-                                ax.plot(fc_dates_plot, fc_vals_plot,
-                                        color="#a78bfa", linewidth=2, linestyle=":",
-                                        zorder=4, label="3-month forecast (linear trend)")
-                                ax.fill_between(fc_dates_plot, fc_lo_plot, fc_hi_plot,
-                                                color="#a78bfa", alpha=0.15, zorder=3)
+                                fc_x = [pd.to_datetime(idx_df["event_month"].iloc[-1])] + forecast_dates
+                                fc_y = [last_hist_val] + forecast_vals
+                                fc_lo_all = [last_hist_val] + forecast_lo
+                                fc_hi_all = [last_hist_val] + forecast_hi
 
-                            ax.set_title(
-                                f"AEGIS Escalation Index — {selected_country}",
-                                color="white", fontsize=15, pad=12,
+                                pfig.add_trace(go.Scatter(
+                                    x=fc_x + fc_x[::-1],
+                                    y=fc_hi_all + fc_lo_all[::-1],
+                                    fill="toself", fillcolor="rgba(167,139,250,0.12)",
+                                    line=dict(color="rgba(0,0,0,0)"),
+                                    hoverinfo="skip", showlegend=False,
+                                ))
+                                pfig.add_trace(go.Scatter(
+                                    x=fc_x, y=fc_y,
+                                    mode="lines+markers",
+                                    line=dict(color="#a78bfa", width=2, dash="dot"),
+                                    marker=dict(color="#a78bfa", size=7),
+                                    name="3-month forecast",
+                                    hovertemplate=[
+                                        f"<b>Forecast: {d.strftime('%b %Y')}</b><br>"
+                                        f"Projected index: <b>{v:.1f}</b><br>"
+                                        f"Range: {lo:.1f} – {hi:.1f}<extra></extra>"
+                                        for d, v, lo, hi in zip(fc_x, fc_y, fc_lo_all, fc_hi_all)
+                                    ],
+                                ))
+
+                            pfig.update_layout(
+                                title=dict(
+                                    text=f"AEGIS Escalation Index — {selected_country}",
+                                    font=dict(color="white", size=16),
+                                ),
+                                paper_bgcolor="#020617",
+                                plot_bgcolor="#0f172a",
+                                font=dict(color="#94a3b8"),
+                                xaxis=dict(
+                                    gridcolor="#1e293b", showgrid=True,
+                                    tickformat="%b %Y", tickangle=-35,
+                                ),
+                                yaxis=dict(
+                                    gridcolor="#1e293b", showgrid=True,
+                                    range=[0, 105], title="Escalation Index (0–100)",
+                                ),
+                                legend=dict(
+                                    bgcolor="#1e293b", bordercolor="#334155",
+                                    borderwidth=1, font=dict(color="white", size=11),
+                                ),
+                                hovermode="closest",
+                                hoverlabel=dict(
+                                    bgcolor="#1e293b", bordercolor="#334155",
+                                    font=dict(color="white", size=12),
+                                ),
+                                margin=dict(l=60, r=30, t=60, b=60),
+                                height=500,
                             )
-                            ax.set_xlabel("Month", color="#94a3b8")
-                            ax.set_ylabel("Escalation Index (0–100)", color="#94a3b8")
-                            ax.tick_params(colors="#94a3b8")
-                            ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
-                            ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-                            plt.xticks(rotation=35, ha="right")
-                            ax.set_ylim(0, 105)
-                            ax.grid(True, alpha=0.15, color="#334155")
-                            for spine in ax.spines.values():
-                                spine.set_edgecolor("#334155")
-                            ax.legend(
-                                facecolor="#1e293b", edgecolor="#334155",
-                                labelcolor="white", fontsize=10,
-                            )
-                            fig.tight_layout()
-                            st.pyplot(fig, clear_figure=True)
+
+                            st.plotly_chart(pfig, use_container_width=True)
                             _prog.progress(100, text="Done.")
                             _prog.empty()
 
@@ -972,6 +1051,113 @@ else:
                                     "the last 6 months of the smoothed index. The shaded band shows "
                                     "the uncertainty range. Treat as a directional signal, not a "
                                     "precise prediction."
+                                )
+
+                            # ── Month drill-down ─────────────────────────
+                            st.markdown("### Drill down — what drove a specific month?")
+
+                            # Build option list: flagged months first, then all months
+                            all_month_labels = idx_df["event_month"].dt.strftime("%b %Y").tolist()
+                            flagged_labels   = esc_rows["event_month"].dt.strftime("%b %Y").tolist()
+                            warn_labels      = warn_rows["event_month"].dt.strftime("%b %Y").tolist()
+
+                            # Tag each option so user knows its status
+                            def _tag(m):
+                                if m in flagged_labels:   return f"🔴 {m} — escalation flagged"
+                                if m in warn_labels:      return f"🟠 {m} — pre-escalation warning"
+                                return f"⬜ {m}"
+
+                            options = [_tag(m) for m in all_month_labels]
+                            # Default to highest-scoring flagged month
+                            if flagged_labels:
+                                best_month = (
+                                    esc_rows.loc[esc_rows["index_smoothed"].idxmax(), "event_month"]
+                                    .strftime("%b %Y")
+                                )
+                                default_idx = all_month_labels.index(best_month)
+                            else:
+                                default_idx = len(options) - 1
+
+                            selected_opt = st.selectbox(
+                                "Select a month to inspect:",
+                                options=options,
+                                index=default_idx,
+                                key="drilldown_month",
+                            )
+                            # Extract the plain month label back out
+                            selected_label = selected_opt.split("—")[0].strip().lstrip("🔴🟠⬜ ")
+
+                            drill_row = idx_df[
+                                idx_df["event_month"].dt.strftime("%b %Y") == selected_label
+                            ]
+
+                            if not drill_row.empty:
+                                dr = drill_row.iloc[0]
+
+                                # Determine status tag
+                                if selected_label in flagged_labels:
+                                    status_html = '<span style="background:#ef4444;color:white;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;">ESCALATION FLAGGED</span>'
+                                elif selected_label in warn_labels:
+                                    status_html = '<span style="background:#f97316;color:white;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;">PRE-ESCALATION WARNING</span>'
+                                else:
+                                    status_html = '<span style="background:#334155;color:#94a3b8;padding:2px 8px;border-radius:4px;font-size:12px;">BELOW THRESHOLD</span>'
+
+                                st.markdown(
+                                    f"**{selected_label}** &nbsp; {status_html} &nbsp; "
+                                    f"Index: **{dr['escalation_index']:.1f}** (smoothed: **{dr['index_smoothed']:.1f}**)",
+                                    unsafe_allow_html=True,
+                                )
+
+                                # 6 event-type counts with context sentences
+                                event_types = [
+                                    ("battles",                    "Battles",                    "#ef4444", 30,
+                                     "Direct armed confrontations between organised forces."),
+                                    ("explosions_remote_violence", "Explosions / Remote violence","#f97316", 20,
+                                     "Shelling, airstrikes, IEDs, drone strikes. Often precedes ground battles."),
+                                    ("strategic_developments",     "Strategic developments",      "#60a5fa", 15,
+                                     "Troop movements, HQ changes, peace deal collapses, ceasefires."),
+                                    ("protests",                   "Protests",                    "#a78bfa", 10,
+                                     "Non-violent demonstrations. Social unrest often precedes armed conflict."),
+                                    ("riots",                      "Riots",                       "#fde047", 10,
+                                     "Violent but non-armed demonstrations and looting."),
+                                    ("violence_against_civilians", "Violence vs. civilians",      "#f59e0b",  5,
+                                     "Targeted attacks on non-combatants. Signals strategic deterioration."),
+                                ]
+
+                                # Find max count for bar scaling
+                                max_count = max(int(dr.get(col, 0)) for col, *_ in event_types) or 1
+
+                                cols_drill = st.columns(2)
+                                for i, (col, label, color, weight, desc) in enumerate(event_types):
+                                    count = int(dr.get(col, 0))
+                                    pct   = int(count / max_count * 100)
+                                    with cols_drill[i % 2]:
+                                        st.markdown(
+                                            f"<div style='margin-bottom:12px;'>"
+                                            f"<div style='display:flex;justify-content:space-between;margin-bottom:3px;'>"
+                                            f"<span style='color:{color};font-weight:600;font-size:13px;'>{label}</span>"
+                                            f"<span style='color:#94a3b8;font-size:13px;'><b style='color:white;'>{count:,}</b> events &nbsp;·&nbsp; {weight}% weight</span>"
+                                            f"</div>"
+                                            f"<div style='background:#1e293b;border-radius:4px;height:8px;'>"
+                                            f"<div style='background:{color};width:{pct}%;height:8px;border-radius:4px;'></div>"
+                                            f"</div>"
+                                            f"<div style='color:#64748b;font-size:11px;margin-top:3px;'>{desc}</div>"
+                                            f"</div>",
+                                            unsafe_allow_html=True,
+                                        )
+
+                                # Fatalities callout
+                                fat = int(dr.get("fatalities", 0))
+                                total = int(dr.get("total_events", 0))
+                                st.markdown(
+                                    f"<div style='background:#1e293b;border:1px solid #334155;border-radius:6px;"
+                                    f"padding:10px 16px;margin-top:4px;display:flex;gap:32px;'>"
+                                    f"<span style='color:#94a3b8;font-size:13px;'>Total events: "
+                                    f"<b style='color:white;font-size:16px;'>{total:,}</b></span>"
+                                    f"<span style='color:#94a3b8;font-size:13px;'>Recorded fatalities: "
+                                    f"<b style='color:#ef4444;font-size:16px;'>{fat:,}</b></span>"
+                                    f"</div>",
+                                    unsafe_allow_html=True,
                                 )
 
                             # ── Component breakdown stacked bar ───────────
