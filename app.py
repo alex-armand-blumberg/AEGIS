@@ -798,7 +798,6 @@ if show_map:
                         max_value=latest_month.date(),
                         key="map_date_range",
                     )
-
                     if isinstance(start_dt, date) and isinstance(end_dt, date) and start_dt <= end_dt:
                         df_map = df_map[
                             (df_map["event_month"].dt.date >= start_dt)
@@ -845,13 +844,25 @@ if show_map:
                     grouped["metric_value"] = pd.to_numeric(
                         grouped[selected_metric], errors="coerce"
                     ).fillna(0)
+
+                    grouped["admin1"] = grouped["admin1"].fillna("Unknown")
+                    grouped["centroid_latitude"] = pd.to_numeric(
+                        grouped["centroid_latitude"], errors="coerce"
+                    )
+                    grouped["centroid_longitude"] = pd.to_numeric(
+                        grouped["centroid_longitude"], errors="coerce"
+                    )
+
+                    grouped = grouped.dropna(
+                        subset=["centroid_latitude", "centroid_longitude"]
+                    ).copy()
+
                     grouped = grouped[grouped["metric_value"] > 0].copy()
 
                     if grouped.empty:
                         st.info("No positive values were found for the selected map metric.")
                     else:
-                        grouped["admin1"] = grouped["admin1"].fillna("Unknown")
-                        grouped["bubble_size"] = grouped["metric_value"].clip(lower=1)
+                        grouped["bubble_size"] = grouped["metric_value"].clip(lower=5)
                         grouped["hover_location"] = grouped["admin1"] + ", " + grouped["country"]
 
                         st.caption(
@@ -860,6 +871,9 @@ if show_map:
                         st.caption(
                             "This layer is monthly aggregated at the subnational level. Working towards individual strike-by-strike live telemetry."
                         )
+
+                        # Optional temporary debug check:
+                        # st.write(grouped[["country", "admin1", "centroid_latitude", "centroid_longitude", "metric_value"]].head(10))
 
                         fig = px.scatter_geo(
                             grouped,
