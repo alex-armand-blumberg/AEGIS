@@ -608,6 +608,11 @@ st.caption(
 # ----------------------------
 st.subheader("Escalation Index")
 
+st.caption(
+    "Depending on the date range selected, index plotting time may range from a couple seconds to a couple minutes. "
+    "One page of events (5,000) takes ~4 seconds to load."
+)
+
 if not run_btn:
     st.info(
         "Enter a country name in the sidebar (e.g. **Ukraine**, **Sudan**, **Myanmar**) "
