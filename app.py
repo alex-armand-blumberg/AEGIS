@@ -715,6 +715,46 @@ else:
                             dates     = pd.to_datetime(idx_df["event_month"])
                             esc_rows  = idx_df[idx_df["index_smoothed"] > escalation_threshold]
 
+                            # ── Pre-escalation warning signal ────────────
+                            # Fires when index is BELOW threshold but leading
+                            # components (strategic + explosions) are both
+                            # elevated AND index has been rising for 2+ months.
+                            idx_df["_rising"] = (
+                                idx_df["index_smoothed"].diff() > 0
+                            ).astype(int)
+                            idx_df["_rising2"] = (
+                                idx_df["_rising"] + idx_df["_rising"].shift(1)
+                            ).fillna(0)
+                            idx_df["_lead_signal"] = (
+                                idx_df["c_strategic"] + idx_df["c_explosion"]
+                            )
+                            warn_rows = idx_df[
+                                (idx_df["index_smoothed"] < escalation_threshold)
+                                & (idx_df["_lead_signal"] > 1.2)
+                                & (idx_df["_rising2"] >= 2)
+                            ]
+
+                            # ── 3-month forecast (linear trend on last 6 months)
+                            import numpy as np
+                            forecast_dates, forecast_vals, forecast_lo, forecast_hi = [], [], [], []
+                            if len(idx_df) >= 6:
+                                tail = idx_df.tail(6).copy()
+                                tail_x = np.arange(len(tail))
+                                tail_y = tail["index_smoothed"].values
+                                coeffs = np.polyfit(tail_x, tail_y, 1)
+                                slope, intercept = coeffs
+                                last_date = pd.to_datetime(idx_df["event_month"].iloc[-1])
+                                residuals = tail_y - np.polyval(coeffs, tail_x)
+                                std_err   = residuals.std()
+                                for i in range(1, 4):
+                                    fd = last_date + pd.DateOffset(months=i)
+                                    fv = np.polyval(coeffs, len(tail) - 1 + i)
+                                    fv = float(np.clip(fv, 0, 100))
+                                    forecast_dates.append(fd)
+                                    forecast_vals.append(fv)
+                                    forecast_lo.append(max(0,   fv - 1.5 * std_err))
+                                    forecast_hi.append(min(100, fv + 1.5 * std_err))
+
                             # ── Main escalation index chart ──────────────
                             fig, ax = plt.subplots(figsize=(12, 5))
                             fig.patch.set_facecolor("#020617")
@@ -741,6 +781,35 @@ else:
                                     label=f"Months where escalation was flagged ({len(esc_rows)} / {len(df_acled)} months)",
                                 )
 
+                            # Pre-escalation warning dots (orange diamonds)
+                            if not warn_rows.empty:
+                                ax.scatter(
+                                    pd.to_datetime(warn_rows["event_month"]),
+                                    warn_rows["index_smoothed"],
+                                    color="#f97316", s=90, marker="D",
+                                    zorder=6,
+                                    label=f"Pre-escalation warning ({len(warn_rows)} months)",
+                                )
+
+                            # 3-month forecast line + uncertainty band
+                            if forecast_dates:
+                                last_hist_date = pd.to_datetime(idx_df["event_month"].iloc[-1])
+                                last_hist_val  = float(idx_df["index_smoothed"].iloc[-1])
+                                fc_dates_plot  = [last_hist_date] + forecast_dates
+                                fc_vals_plot   = [last_hist_val]  + forecast_vals
+                                fc_lo_plot     = [last_hist_val]  + forecast_lo
+                                fc_hi_plot     = [last_hist_val]  + forecast_hi
+                                ax.plot(
+                                    fc_dates_plot, fc_vals_plot,
+                                    color="#a78bfa", linewidth=2,
+                                    linestyle=":", zorder=4,
+                                    label="3-month forecast (linear trend)",
+                                )
+                                ax.fill_between(
+                                    fc_dates_plot, fc_lo_plot, fc_hi_plot,
+                                    color="#a78bfa", alpha=0.15, zorder=3,
+                                )
+
                             ax.set_title(
                                 f"AEGIS Escalation Index — {selected_country}",
                                 color="white", fontsize=15, pad=12,
@@ -763,6 +832,18 @@ else:
                             st.pyplot(fig, clear_figure=True)
                             _prog.progress(100, text="Done.")
                             _prog.empty()
+
+                            # ── Signal legend expander ───────────────────
+                            with st.expander("How to read the signals", expanded=False):
+                                st.markdown(
+                                    "**Blue line** — smoothed Escalation Index (0-100).\n\n"
+                                    "**Red dots** — months above your alert threshold. Sustained elevated conflict.\n\n"
+                                    "**Orange diamonds** — pre-escalation warning. Index still below threshold, "
+                                    "but strategic developments + explosions both elevated AND index rising 2+ months. "
+                                    "Fires *before* red dots appear.\n\n"
+                                    "**Purple dotted line** — 3-month linear forecast with uncertainty band. "
+                                    "Directional signal only, not a causal model."
+                                )
 
                             # ── Component breakdown stacked bar ───────────
                             if show_components:
