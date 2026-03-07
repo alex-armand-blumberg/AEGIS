@@ -902,14 +902,14 @@ if show_map:
                             legend=dict(
                                 title_text="Dominant category (Click on legend to (de)select categories)",
                                 orientation="h",
-                                yanchor="top",
-                                y=-0.05,
+                                yanchor="bottom",
+                                y=1.02,
                                 xanchor="left",
                                 x=0,
                                 bgcolor="rgba(2,6,23,0)",
                                 font=dict(color="white", size=13),
                             ),
-                            margin=dict(l=0, r=0, t=40, b=120),
+                            margin=dict(l=0, r=0, t=120, b=0),
                             height=780,
                             hoverlabel=dict(
                                 bgcolor="rgba(20,20,20,0.95)",
