@@ -491,8 +491,8 @@ st.sidebar.markdown("---")
 st.sidebar.markdown(
     """
 <div style="opacity:0.6; font-size:13px;">
-Plot data source: ACLED (full history via API).<br>
-Map data source: public ACLED ArcGIS layer.
+Plot data source: ACLED (2018-2025 history via Researcher-Tier API).<br>
+Map data source: Public ACLED ArcGIS layer.
 </div>
 """,
     unsafe_allow_html=True,
@@ -534,13 +534,14 @@ with st.sidebar.expander("Limitations"):
         """
 **Current limitations of AEGIS**
 
-- ACLED public ArcGIS layer is monthly aggregated at subnational level, not individual events.
+- Only have access to data from Jan 2018 to Jan 2025 for Escalation Index, as I currently only have Researcher Tier ACLED access.
+- ACLED public ArcGIS layer for the map is monthly aggregated at subnational level, not individual events.
 - Some countries may have sparse data in earlier months.
-- The Escalation Index is a weighted heuristic, not a trained predictive model.
 - Public map data is monthly and subnational, not individual strike-level event data.
 
 **Planned improvements**
 
+- Get a higher ACLED Tier, giving me access to more data for Escalation Index.
 - Direct ACLED API for weekly/event-level granularity
 - Actor-level escalation detection
 - ML-based index calibration against historical escalation outcomes
@@ -610,7 +611,7 @@ st.subheader("Escalation Index")
 
 st.caption(
     "Depending on the date range selected, index plotting time may range from a couple seconds to a couple minutes. "
-    "One page of events (5,000) takes ~4 seconds to load."
+    "One page of events (5,000 events) takes ~4 seconds to load."
 )
 
 if not run_btn:
@@ -1016,7 +1017,7 @@ if show_map:
                     else:
                         grouped["admin1"] = grouped["admin1"].fillna("Unknown")
                         raw = grouped["metric_value"].clip(lower=1)
-                        grouped["bubble_size"] = raw.clip(lower=raw.max() * 0.08)
+                        grouped["bubble_size"] = raw.clip(lower=raw.max() * 0.01)
                         grouped["hover_location"] = grouped["admin1"] + ", " + grouped["country"]
 
                         st.caption(
