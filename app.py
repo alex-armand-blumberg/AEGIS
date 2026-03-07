@@ -908,7 +908,7 @@ if show_map:
                                 font=dict(color="white", size=22),
                             ),
                             legend=dict(
-                                title=dict(text="<b>Categories (To isolate one category, it is reccomended to open Conflict Map Settings and select the desired Map Metric.):</b>", side="top", font=dict(color="white", size=13)),
+                                title=dict(text="<b>Categories <b>(To isolate one category, it is reccomended to open Conflict Map Settings and select the desired Map Metric.):", side="top", font=dict(color="white", size=13)),
                                 
                                 orientation="h",
                                 yanchor="bottom",
