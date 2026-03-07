@@ -1322,6 +1322,8 @@ if show_map:
                         with st.expander("Top hotspots in the current view"):
                             st.dataframe(top_hotspots, use_container_width=True)
 
+                        st.caption("")
+
                         if auto_refresh_map:
                             refresh_ms = int(refresh_minutes) * 60 * 1000
                             st.components.v1.html(
