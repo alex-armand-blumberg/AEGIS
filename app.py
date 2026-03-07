@@ -698,6 +698,7 @@ if plot_ready:
 # ----------------------------
 # Interactive map section
 # ----------------------------
+
 def _build_dominant_category(row: pd.Series) -> str:
     category_map = {
         "battles": "Battles",
@@ -720,6 +721,7 @@ if show_map:
     else:
         try:
             df_map = fetch_acled_arcgis_monthly()
+
             if df_map.empty:
                 st.warning("No ACLED map data was returned from the public layer.")
             else:
@@ -782,7 +784,10 @@ if show_map:
                     )
 
                 if override_map_dates:
-                    default_start = max(earliest_month.date(), (latest_month - pd.DateOffset(months=2)).date())
+                    default_start = max(
+                        earliest_month.date(),
+                        (latest_month - pd.DateOffset(months=2)).date(),
+                    )
                     start_dt, end_dt = st.sidebar.date_input(
                         "Map date range",
                         value=(default_start, latest_month.date()),
@@ -803,7 +808,9 @@ if show_map:
                     df_map = df_map[df_map["event_month"].dt.date == latest_month.date()]
 
                 if only_selected_country:
-                    df_map = df_map[df_map["country"].astype(str).str.strip() == str(country_name).strip()]
+                    df_map = df_map[
+                        df_map["country"].astype(str).str.strip() == str(country_name).strip()
+                    ]
 
                 if show_only_violent:
                     df_map = df_map[df_map[violent_cols].fillna(0).sum(axis=1) > 0]
@@ -815,29 +822,47 @@ if show_map:
                         df_map.groupby(
                             ["country", "admin1", "centroid_latitude", "centroid_longitude"],
                             as_index=False,
-                        )
-                        [[
-                            "battles",
-                            "explosions_remote_violence",
-                            "protests",
-                            "riots",
-                            "strategic_developments",
-                            "violence_against_civilians",
-                            "violent_actors",
-                            "fatalities",
-                        ]]
+                        )[
+                            [
+                                "battles",
+                                "explosions_remote_violence",
+                                "protests",
+                                "riots",
+                                "strategic_developments",
+                                "violence_against_civilians",
+                                "violent_actors",
+                                "fatalities",
+                            ]
+                        ]
                         .sum()
                     )
 
                     grouped["dominant_category"] = grouped.apply(_build_dominant_category, axis=1)
-                    grouped["metric_value"] = pd.to_numeric(grouped[selected_metric], errors="coerce").fillna(0)
+                    grouped["metric_value"] = pd.to_numeric(
+                        grouped[selected_metric], errors="coerce"
+                    ).fillna(0)
+
+                    grouped["admin1"] = grouped["admin1"].fillna("Unknown")
+                    grouped["centroid_latitude"] = pd.to_numeric(
+                        grouped["centroid_latitude"], errors="coerce"
+                    )
+                    grouped["centroid_longitude"] = pd.to_numeric(
+                        grouped["centroid_longitude"], errors="coerce"
+                    )
+
+                    grouped = grouped.dropna(
+                        subset=["centroid_latitude", "centroid_longitude"]
+                    ).copy()
+                    grouped = grouped[
+                        grouped["centroid_latitude"].between(-90, 90)
+                        & grouped["centroid_longitude"].between(-180, 180)
+                    ].copy()
                     grouped = grouped[grouped["metric_value"] > 0].copy()
 
                     if grouped.empty:
                         st.info("No positive values were found for the selected map metric.")
                     else:
-                        grouped["admin1"] = grouped["admin1"].fillna("Unknown")
-                        grouped["bubble_size"] = grouped["metric_value"].clip(lower=1)
+                        grouped["bubble_size"] = grouped["metric_value"].clip(lower=5)
                         grouped["hover_location"] = grouped["admin1"] + ", " + grouped["country"]
 
                         st.caption(
@@ -884,7 +909,10 @@ if show_map:
                         )
 
                         fig.update_traces(
-                            marker=dict(line=dict(width=0.4, color="rgba(255,255,255,0.35)"), opacity=0.82),
+                            marker=dict(
+                                line=dict(width=0.4, color="rgba(255,255,255,0.35)"),
+                                opacity=0.82,
+                            ),
                             hovertemplate=(
                                 "<b style='font-size:16px'>%{hovertext}</b><br><br>"
                                 + f"{metric_labels[selected_metric]}: %{{customdata[0]:,}}<br>"
@@ -897,7 +925,7 @@ if show_map:
                             hoverlabel=dict(
                                 bgcolor="rgba(20,20,20,0.95)",
                                 font_size=14,
-                                font_family="Arial"
+                                font_family="Arial",
                             )
                         )
 
@@ -913,6 +941,7 @@ if show_map:
                             oceancolor="#020617",
                             bgcolor="#020617",
                         )
+
                         fig.update_layout(
                             paper_bgcolor="#020617",
                             plot_bgcolor="#020617",
@@ -920,7 +949,109 @@ if show_map:
                             legend_title_text="Dominant category (Click on legend to (de)select categories)",
                             margin=dict(l=0, r=0, t=60, b=0),
                         )
-                        st.plotly_chart(fig, use_container_width=True)
+
+                        selected_points = plotly_events(
+                            fig,
+                            click_event=True,
+                            hover_event=False,
+                            select_event=False,
+                            override_height=600,
+                            key="world_map_click",
+                        )
+
+                        if selected_points:
+                            point_index = selected_points[0]["pointIndex"]
+                            clicked_country = grouped.iloc[point_index]["country"]
+                            st.session_state["selected_country"] = clicked_country
+                        elif "selected_country" not in st.session_state and not grouped.empty:
+                            st.session_state["selected_country"] = grouped.iloc[0]["country"]
+
+                        if "selected_country" in st.session_state:
+                            selected_country = st.session_state["selected_country"]
+                            focus_df = grouped[grouped["country"] == selected_country].copy()
+
+                            if not focus_df.empty:
+                                zoom_fig = px.scatter_geo(
+                                    focus_df,
+                                    lat="centroid_latitude",
+                                    lon="centroid_longitude",
+                                    color="dominant_category",
+                                    size="bubble_size",
+                                    size_max=size_max,
+                                    hover_name="hover_location",
+                                    hover_data={
+                                        "metric_value": ":,",
+                                        "fatalities": ":,",
+                                        "battles": ":,",
+                                        "explosions_remote_violence": ":,",
+                                        "violence_against_civilians": ":,",
+                                        "strategic_developments": ":,",
+                                        "protests": ":,",
+                                        "riots": ":,",
+                                        "violent_actors": ":,",
+                                        "centroid_latitude": False,
+                                        "centroid_longitude": False,
+                                        "admin1": False,
+                                        "country": False,
+                                        "bubble_size": False,
+                                    },
+                                    projection="natural earth",
+                                    title=f"{selected_country} focus",
+                                    color_discrete_map={
+                                        "Battles": "#ef4444",
+                                        "Explosions / remote violence": "#f59e0b",
+                                        "Violence against civilians": "#fde047",
+                                        "Strategic developments": "#60a5fa",
+                                        "Protests": "#a78bfa",
+                                        "Riots": "#f472b6",
+                                    },
+                                )
+
+                                zoom_fig.update_traces(
+                                    marker=dict(
+                                        line=dict(width=0.5, color="rgba(255,255,255,0.35)"),
+                                        opacity=0.85,
+                                    ),
+                                    hovertemplate=(
+                                        "<b style='font-size:16px'>%{hovertext}</b><br><br>"
+                                        + f"{metric_labels[selected_metric]}: %{{customdata[0]:,}}<br>"
+                                        + "Fatalities: %{customdata[1]:,}"
+                                        + "<extra></extra>"
+                                    ),
+                                )
+
+                                zoom_fig.update_layout(
+                                    hoverlabel=dict(
+                                        bgcolor="rgba(20,20,20,0.95)",
+                                        font_size=14,
+                                        font_family="Arial",
+                                    )
+                                )
+
+                                zoom_fig.update_geos(
+                                    fitbounds="locations",
+                                    showframe=False,
+                                    showcoastlines=True,
+                                    coastlinecolor="rgba(180,180,180,0.35)",
+                                    showcountries=True,
+                                    countrycolor="rgba(180,180,180,0.35)",
+                                    showland=True,
+                                    landcolor="#111827",
+                                    showocean=True,
+                                    oceancolor="#020617",
+                                    bgcolor="#020617",
+                                )
+
+                                zoom_fig.update_layout(
+                                    paper_bgcolor="#020617",
+                                    plot_bgcolor="#020617",
+                                    font=dict(color="white"),
+                                    legend_title_text="Dominant category",
+                                    margin=dict(l=0, r=0, t=60, b=0),
+                                    height=500,
+                                )
+
+                                st.plotly_chart(zoom_fig, use_container_width=True)
 
                         summary_cols = [
                             "country",
@@ -931,10 +1062,19 @@ if show_map:
                             "explosions_remote_violence",
                             "violence_against_civilians",
                         ]
-                        if selected_metric in {"battles", "explosions_remote_violence", "violence_against_civilians", "fatalities"}:
+
+                        if selected_metric in {
+                            "battles",
+                            "explosions_remote_violence",
+                            "violence_against_civilians",
+                            "fatalities",
+                        }:
                             summary_cols = [c for c in summary_cols if c != selected_metric]
 
-                        top_hotspots = grouped.sort_values("metric_value", ascending=False)[summary_cols].head(25).copy()
+                        top_hotspots = grouped.sort_values(
+                            "metric_value", ascending=False
+                        )[summary_cols].head(25).copy()
+
                         top_hotspots = top_hotspots.rename(
                             columns={
                                 "country": "Country",
