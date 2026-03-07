@@ -608,8 +608,8 @@ st.subheader("Escalation Index")
 
 st.caption(
     "The longer your plot date range, the longer it will take for the plot to load."
-    "Each date addition adds thousands of rows, so it may take a couple extra minutes."
-    "1 Page of events (~5,000) takes 4 seconds to load."
+    " Each date addition adds thousands of rows, so it may take a couple extra minutes."
+    " 1 Page of events (~5,000) takes 4 seconds to load."
 )
 
 if not run_btn:
