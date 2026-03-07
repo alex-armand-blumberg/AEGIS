@@ -215,11 +215,12 @@ def fetch_acled_arcgis_monthly() -> pd.DataFrame:
 
 
 # ----------------------------
-# ACLED API full-history fetch (requires free API key from developer.acleddata.com)
+# ACLED API full-history fetch (new OAuth system — uses myACLED email + password)
+# No API key needed. Register free at acleddata.com/user/register
 # ----------------------------
-ACLED_API_URL = "https://api.acleddata.com/acled/read"
+ACLED_OAUTH_URL  = "https://acleddata.com/oauth/token"
+ACLED_API_URL    = "https://acleddata.com/api/acled/read"
 
-# Map ACLED API event_type strings → our column names
 ACLED_EVENT_TYPE_MAP = {
     "Battles":                      "battles",
     "Explosions/Remote violence":   "explosions_remote_violence",
@@ -230,35 +231,52 @@ ACLED_EVENT_TYPE_MAP = {
 }
 
 
+def _get_acled_oauth_token(email: str, password: str) -> str:
+    """Exchange myACLED credentials for a 24-hour bearer token."""
+    r = requests.post(
+        ACLED_OAUTH_URL,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        data={
+            "username":   email.strip(),
+            "password":   password.strip(),
+            "grant_type": "password",
+            "client_id":  "acled",
+        },
+        timeout=30,
+    )
+    if r.status_code != 200:
+        raise RuntimeError(
+            f"ACLED login failed ({r.status_code}). Check your email and password."
+        )
+    return r.json()["access_token"]
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
-def fetch_acled_api_historical(api_key: str, api_email: str) -> pd.DataFrame:
+def fetch_acled_api_historical(email: str, password: str) -> pd.DataFrame:
     """
-    Pull all ACLED events (event-level) via the authenticated API, then
-    aggregate to country × month to match the ArcGIS layer schema.
-    Returns a DataFrame with the same columns as fetch_acled_arcgis_monthly()
-    so compute_escalation_index() works without modification.
+    Pull all ACLED events via the authenticated API (OAuth bearer token),
+    then aggregate to country × month to match the ArcGIS layer schema.
     """
+    token = _get_acled_oauth_token(email, password)
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "User-Agent": "Mozilla/5.0",
+    }
+
     all_rows = []
     page = 1
     page_size = 5000
 
     while True:
         params = {
-            "key":      api_key.strip(),
-            "email":    api_email.strip(),
-            "fields":   "event_date,country,event_type,fatalities,latitude,longitude",
-            "limit":    page_size,
-            "page":     page,
-            "format":   "json",
+            "fields":  "event_date,country,event_type,fatalities,latitude,longitude",
+            "limit":   page_size,
+            "page":    page,
+            "_format": "json",
         }
-        r = requests.get(ACLED_API_URL, params=params, timeout=90,
-                         headers={"User-Agent": "Mozilla/5.0"})
+        r = requests.get(ACLED_API_URL, params=params, headers=headers, timeout=120)
         r.raise_for_status()
         payload = r.json()
-
-        if payload.get("status") != 200:
-            msg = payload.get("message", str(payload))
-            raise RuntimeError(f"ACLED API error: {msg}")
 
         data = payload.get("data", [])
         if not data:
@@ -268,7 +286,7 @@ def fetch_acled_api_historical(api_key: str, api_email: str) -> pd.DataFrame:
         if len(data) < page_size:
             break
         page += 1
-        if page > 500:          # safety cap (~2.5 M events)
+        if page > 600:   # safety cap ~3 M events
             break
 
     if not all_rows:
@@ -281,19 +299,15 @@ def fetch_acled_api_historical(api_key: str, api_email: str) -> pd.DataFrame:
     raw["longitude"]  = pd.to_numeric(raw.get("longitude", pd.Series(dtype=float)), errors="coerce")
     raw = raw.dropna(subset=["event_date", "country"])
 
-    # Add month column and event-type dummy columns
     raw["event_month"] = raw["event_date"].dt.to_period("M").dt.to_timestamp()
     today = pd.Timestamp.now().normalize()
     raw = raw[raw["event_month"] <= today]
 
     for col in ACLED_EVENT_TYPE_MAP.values():
         raw[col] = 0
-
     for api_type, col in ACLED_EVENT_TYPE_MAP.items():
-        mask = raw["event_type"].str.strip() == api_type
-        raw.loc[mask, col] = 1
+        raw.loc[raw["event_type"].str.strip() == api_type, col] = 1
 
-    # Aggregate to country × month
     agg = (
         raw.groupby(["country", "event_month"], as_index=False)
         .agg(
@@ -309,7 +323,7 @@ def fetch_acled_api_historical(api_key: str, api_email: str) -> pd.DataFrame:
         )
     )
     agg["admin1"] = ""
-    agg["violent_actors"] = 0    # not available at this aggregation level
+    agg["violent_actors"] = 0
     return agg
 
 
@@ -437,31 +451,32 @@ country_name = st.sidebar.text_input(
     help="Must match the country name in ACLED exactly (e.g. 'Ukraine', 'Sudan', 'Myanmar').",
 )
 
-with st.sidebar.expander("🔑 ACLED API Key (full history)", expanded=False):
+with st.sidebar.expander("🔑 ACLED Login (full history)", expanded=False):
     st.markdown(
-        "Free registration at [developer.acleddata.com](https://developer.acleddata.com). "
-        "Unlocks full event history back to 1997. Without a key, the plot uses the "
-        "public ArcGIS layer (~13 months of data).",
+        "Use your **myACLED** email and password to unlock full event history "
+        "back to 1997. Register free at "
+        "[acleddata.com/user/register](https://acleddata.com/user/register). "
+        "No login = public ArcGIS layer (~13 months only).",
         unsafe_allow_html=True,
     )
     acled_api_email = st.text_input(
-        "ACLED account email",
+        "myACLED email",
         "",
         key="acled_email",
-        help="The email address you registered with at developer.acleddata.com",
+        help="The email address you used to register at acleddata.com",
     )
     acled_api_key = st.text_input(
-        "ACLED API key",
+        "myACLED password",
         "",
         type="password",
         key="acled_key",
-        help="Your personal ACLED API access key.",
+        help="Your myACLED account password (used to fetch an OAuth token — never stored).",
     )
     use_api = bool(acled_api_key.strip() and acled_api_email.strip())
     if use_api:
-        st.success("✓ API credentials provided — full history enabled.")
+        st.success("✓ Credentials provided — full history enabled.")
     else:
-        st.caption("No key provided — using public ArcGIS layer (~13 months).")
+        st.caption("No credentials — using public ArcGIS layer (~13 months).")
 
 with st.sidebar.expander("Advanced Settings"):
     escalation_threshold = st.slider(
@@ -645,7 +660,7 @@ else:
         with st.spinner(spinner_msg):
             try:
                 if use_api:
-                    df_acled = fetch_acled_api_historical(acled_api_key, acled_api_email)
+                    df_acled = fetch_acled_api_historical(acled_api_email, acled_api_key)
                     data_label = "ACLED API (full history)"
                 else:
                     df_acled = fetch_acled_arcgis_monthly()
