@@ -899,6 +899,12 @@ if show_map:
                             paper_bgcolor="#020617",
                             plot_bgcolor="#020617",
                             font=dict(color="white"),
+                            title=dict(
+                                text="Current Conflict-Related Hotspots",
+                                x=0.5,
+                                xanchor="center",
+                                font=dict(color="white", size=22),
+                            ),
                             legend=dict(
                                 title_text="Dominant category (Click on legend to (de)select categories)",
                                 orientation="h",
@@ -917,7 +923,7 @@ if show_map:
                                 font_family="Arial",
                             ),
                         )
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": True})
 
                         summary_cols = [
                             "country",
