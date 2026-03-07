@@ -938,7 +938,7 @@ if show_map:
                             st.session_state["selected_country"] = clicked_country
 
                         if "selected_country" in st.session_state:
-    selected_country = st.session_state["selected_country"]
+                            selected_country = st.session_state["selected_country"]
 
     focus_df = grouped[grouped["country"] == selected_country].copy()
 
