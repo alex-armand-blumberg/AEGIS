@@ -905,18 +905,16 @@ if show_map:
                                 xanchor="center",
                                 font=dict(color="white", size=22),
                             ),
-                            st.write(""),
                             legend=dict(
-                                title_text="Categories (Click to Isolate): ",
+                                title=dict(text="<b>Categories (Click to Isolate):</b>", side="top", font=dict(color="white", size=13)),
                                 orientation="h",
                                 yanchor="bottom",
-                                y=1.02,
+                                y=1.06,
                                 xanchor="left",
                                 x=0,
                                 bgcolor="rgba(2,6,23,0)",
                                 font=dict(color="white", size=13),
                             ),
-                            st.write(""),
                             margin=dict(l=0, r=0, t=120, b=0),
                             height=780,
                             hoverlabel=dict(
@@ -929,7 +927,7 @@ if show_map:
 
                         summary_cols = [
                             "country",
-                            "Region",
+                            "admin1",
                             "metric_value",
                             "fatalities",
                             "battles",
