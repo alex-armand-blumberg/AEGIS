@@ -252,63 +252,19 @@ def _get_acled_oauth_token(email: str, password: str) -> str:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def fetch_acled_api_historical(
-    email: str, password: str, country: str,
-    start_year: int = 2010, end_year: int = 2100
-) -> pd.DataFrame:
-    """
-    Pull ACLED events for a SINGLE country via the authenticated API,
-    filtered server-side by country and year so only relevant rows transfer.
-    Key fixes vs old version:
-      - fields separator is | not ,
-      - year filter passed to API so we don't fetch decades of data
-      - pagination uses offset not page
-      - JSON is default format, no _format param needed
-    """
-    token = _get_acled_oauth_token(email, password)
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "User-Agent": "Mozilla/5.0",
-    }
+def _get_acled_bearer_token(email: str, password: str) -> str:
+    """Cached OAuth token — valid 24h, re-fetched every hour."""
+    return _get_acled_oauth_token(email, password)
 
-    all_rows = []
-    page = 1
-    page_size = 5000
-    end_year_clamped = min(end_year, pd.Timestamp.now().year)
 
-    while True:
-        params = {
-            "country":    country,
-            "year":       f"{start_year}|{end_year_clamped}",
-            "year_where": "BETWEEN",
-            "fields":     "event_date|country|event_type|fatalities|latitude|longitude",
-            "limit":      page_size,
-            "page":       page,
-        }
-        r = requests.get(ACLED_API_URL, params=params, headers=headers, timeout=120)
-        r.raise_for_status()
-        payload = r.json()
-
-        data = payload.get("data", [])
-        if not data:
-            break
-
-        all_rows.extend(data)
-        if len(data) < page_size:
-            break
-        page += 1
-        if page > 60:   # safety cap ~300k events
-            break
-
+def _process_acled_rows(all_rows: list, country: str) -> pd.DataFrame:
+    """Convert raw API row-list → aggregated country×month DataFrame."""
     if not all_rows:
         return pd.DataFrame()
 
     raw = pd.DataFrame(all_rows)
-
-    # Normalise column names — API may return with different casing
     raw.columns = [c.lower().strip() for c in raw.columns]
 
-    # Find the date column (might be event_date or just date)
     date_col = next((c for c in raw.columns if "date" in c), None)
     if date_col is None:
         return pd.DataFrame()
@@ -318,22 +274,15 @@ def fetch_acled_api_historical(
     raw["latitude"]   = pd.to_numeric(raw.get("latitude",  pd.Series(0, index=raw.index)), errors="coerce")
     raw["longitude"]  = pd.to_numeric(raw.get("longitude", pd.Series(0, index=raw.index)), errors="coerce")
 
-    # Find event_type column
     type_col = next((c for c in raw.columns if "event_type" in c), None)
-    if type_col:
-        raw["event_type"] = raw[type_col].astype(str).str.strip()
-    else:
-        raw["event_type"] = ""
+    raw["event_type"] = raw[type_col].astype(str).str.strip() if type_col else ""
 
-    # Find country column
-    country_col = next((c for c in raw.columns if c == "country"), None)
-    if country_col is None:
+    if "country" not in raw.columns:
         raw["country"] = country
 
     raw = raw.dropna(subset=["event_date"])
     raw["event_month"] = raw["event_date"].dt.to_period("M").dt.to_timestamp()
-    today = pd.Timestamp.now().normalize()
-    raw = raw[raw["event_month"] <= today]
+    raw = raw[raw["event_month"] <= pd.Timestamp.now().normalize()]
 
     for col in ACLED_EVENT_TYPE_MAP.values():
         raw[col] = 0
@@ -668,14 +617,63 @@ else:
         st.warning("Please enter a country name in the sidebar.")
     else:
         try:
-            _prog = st.progress(0, text=f"Fetching ACLED data for {selected_country}…")
+            _prog = st.progress(0, text=f"Connecting to ACLED…")
+
             if use_api:
-                df_acled = fetch_acled_api_historical(acled_api_email, acled_api_key, selected_country, start_year=plot_start_date.year, end_year=plot_end_date.year)
+                # ── Live-paging fetch so bar advances each page ───────────────
+                _cache_key = f"acled_{selected_country}_{plot_start_date.year}_{plot_end_date.year}"
+                if _cache_key not in st.session_state:
+                    token   = _get_acled_bearer_token(acled_api_email, acled_api_key)
+                    headers = {"Authorization": f"Bearer {token}", "User-Agent": "Mozilla/5.0"}
+                    end_yr  = min(plot_end_date.year, pd.Timestamp.now().year)
+                    all_rows, page, page_size = [], 1, 5000
+                    # First get total count so we can calculate real % progress
+                    count_r = requests.get(
+                        ACLED_API_URL,
+                        params={"country": selected_country,
+                                "year": f"{plot_start_date.year}|{end_yr}",
+                                "year_where": "BETWEEN",
+                                "fields": "event_date",
+                                "limit": 1, "page": 1},
+                        headers=headers, timeout=30,
+                    )
+                    total_count = count_r.json().get("count", 0) if count_r.ok else 0
+                    est_pages   = max(1, int(total_count / page_size) + 1)
+
+                    while True:
+                        pct = min(5 + int(page / est_pages * 60), 65)
+                        _prog.progress(pct, text=f"Fetching page {page} of ~{est_pages} ({len(all_rows):,} events so far)…")
+                        r = requests.get(
+                            ACLED_API_URL,
+                            params={"country": selected_country,
+                                    "year": f"{plot_start_date.year}|{end_yr}",
+                                    "year_where": "BETWEEN",
+                                    "fields": "event_date|country|event_type|fatalities|latitude|longitude",
+                                    "limit": page_size, "page": page},
+                            headers=headers, timeout=120,
+                        )
+                        r.raise_for_status()
+                        data = r.json().get("data", [])
+                        if not data:
+                            break
+                        all_rows.extend(data)
+                        if len(data) < page_size:
+                            break
+                        page += 1
+                        if page > 60:
+                            break
+
+                    _prog.progress(70, text="Processing events…")
+                    st.session_state[_cache_key] = _process_acled_rows(all_rows, selected_country)
+
+                df_acled   = st.session_state[_cache_key]
                 data_label = "ACLED API (full history)"
             else:
-                df_acled = fetch_acled_arcgis_monthly()
+                _prog.progress(30, text="Loading ArcGIS layer…")
+                df_acled   = fetch_acled_arcgis_monthly()
                 data_label = "ACLED ArcGIS layer (~13 months)"
-            _prog.progress(40, text="Computing Escalation Index…")
+
+            _prog.progress(80, text="Computing Escalation Index…")
 
             if df_acled.empty:
                 _prog.empty()
@@ -687,7 +685,7 @@ else:
             else:
                 st.caption(f"Data source: {data_label} · {len(df_acled):,} country-month rows loaded ({df_acled['event_month'].min().strftime('%b %Y') if not df_acled.empty else '?'} – {df_acled['event_month'].max().strftime('%b %Y') if not df_acled.empty else '?'})")
                 idx_df = compute_escalation_index(df_acled, selected_country)
-                _prog.progress(70, text="Rendering chart…")
+                _prog.progress(95, text="Rendering chart…")
 
                 if idx_df.empty:
                     _prog.empty()
