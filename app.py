@@ -252,11 +252,18 @@ def _get_acled_oauth_token(email: str, password: str) -> str:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def fetch_acled_api_historical(email: str, password: str, country: str) -> pd.DataFrame:
+def fetch_acled_api_historical(
+    email: str, password: str, country: str,
+    start_year: int = 2010
+) -> pd.DataFrame:
     """
     Pull ACLED events for a SINGLE country via the authenticated API,
-    then aggregate to country × month. Filtering by country at the API
-    level means only ~thousands of rows are transferred instead of millions.
+    filtered server-side by country and year so only relevant rows transfer.
+    Key fixes vs old version:
+      - fields separator is | not ,
+      - year filter passed to API so we don't fetch decades of data
+      - pagination uses offset not page
+      - JSON is default format, no _format param needed
     """
     token = _get_acled_oauth_token(email, password)
     headers = {
@@ -265,16 +272,19 @@ def fetch_acled_api_historical(email: str, password: str, country: str) -> pd.Da
     }
 
     all_rows = []
-    page = 1
+    offset = 0
     page_size = 5000
+    current_year = pd.Timestamp.now().year
+    year_filter  = "|".join(str(y) for y in range(start_year, current_year + 1))
 
     while True:
         params = {
-            "country": country,          # server-side filter — only fetch this country
-            "fields":  "event_date,country,event_type,fatalities,latitude,longitude",
-            "limit":   page_size,
-            "page":    page,
-            "_format": "json",
+            "country":    country,
+            "year":       year_filter,
+            "year_where": "BETWEEN",
+            "fields":     "event_date|country|event_type|fatalities|latitude|longitude",
+            "limit":      page_size,
+            "offset":     offset,
         }
         r = requests.get(ACLED_API_URL, params=params, headers=headers, timeout=120)
         r.raise_for_status()
@@ -287,20 +297,41 @@ def fetch_acled_api_historical(email: str, password: str, country: str) -> pd.Da
         all_rows.extend(data)
         if len(data) < page_size:
             break
-        page += 1
-        if page > 50:    # safety cap — single country won't exceed ~250k events
+        offset += page_size
+        if offset > 300_000:   # safety cap
             break
 
     if not all_rows:
         return pd.DataFrame()
 
     raw = pd.DataFrame(all_rows)
-    raw["event_date"] = pd.to_datetime(raw["event_date"], errors="coerce")
-    raw["fatalities"] = pd.to_numeric(raw["fatalities"], errors="coerce").fillna(0)
-    raw["latitude"]   = pd.to_numeric(raw.get("latitude",  pd.Series(dtype=float)), errors="coerce")
-    raw["longitude"]  = pd.to_numeric(raw.get("longitude", pd.Series(dtype=float)), errors="coerce")
-    raw = raw.dropna(subset=["event_date", "country"])
 
+    # Normalise column names — API may return with different casing
+    raw.columns = [c.lower().strip() for c in raw.columns]
+
+    # Find the date column (might be event_date or just date)
+    date_col = next((c for c in raw.columns if "date" in c), None)
+    if date_col is None:
+        return pd.DataFrame()
+
+    raw["event_date"] = pd.to_datetime(raw[date_col], errors="coerce")
+    raw["fatalities"] = pd.to_numeric(raw.get("fatalities", 0), errors="coerce").fillna(0)
+    raw["latitude"]   = pd.to_numeric(raw.get("latitude",  pd.Series(0, index=raw.index)), errors="coerce")
+    raw["longitude"]  = pd.to_numeric(raw.get("longitude", pd.Series(0, index=raw.index)), errors="coerce")
+
+    # Find event_type column
+    type_col = next((c for c in raw.columns if "event_type" in c), None)
+    if type_col:
+        raw["event_type"] = raw[type_col].astype(str).str.strip()
+    else:
+        raw["event_type"] = ""
+
+    # Find country column
+    country_col = next((c for c in raw.columns if c == "country"), None)
+    if country_col is None:
+        raw["country"] = country
+
+    raw = raw.dropna(subset=["event_date"])
     raw["event_month"] = raw["event_date"].dt.to_period("M").dt.to_timestamp()
     today = pd.Timestamp.now().normalize()
     raw = raw[raw["event_month"] <= today]
@@ -308,7 +339,7 @@ def fetch_acled_api_historical(email: str, password: str, country: str) -> pd.Da
     for col in ACLED_EVENT_TYPE_MAP.values():
         raw[col] = 0
     for api_type, col in ACLED_EVENT_TYPE_MAP.items():
-        raw.loc[raw["event_type"].str.strip() == api_type, col] = 1
+        raw.loc[raw["event_type"] == api_type, col] = 1
 
     agg = (
         raw.groupby(["country", "event_month"], as_index=False)
@@ -645,7 +676,7 @@ else:
         with st.spinner(spinner_msg):
             try:
                 if use_api:
-                    df_acled = fetch_acled_api_historical(acled_api_email, acled_api_key, selected_country)
+                    df_acled = fetch_acled_api_historical(acled_api_email, acled_api_key, selected_country, start_year=plot_start_date.year)
                     data_label = "ACLED API (full history)"
                 else:
                     df_acled = fetch_acled_arcgis_monthly()
