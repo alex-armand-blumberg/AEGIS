@@ -208,6 +208,9 @@ def fetch_acled_arcgis_monthly() -> pd.DataFrame:
     df["event_month"] = _parse_arcgis_date_col(df["event_month"]).dt.normalize()
     df = df.dropna(subset=["event_month", "centroid_longitude", "centroid_latitude"])
     df = df[df["centroid_latitude"].between(-90, 90) & df["centroid_longitude"].between(-180, 180)]
+    # Drop any future placeholder months the layer may contain
+    today = pd.Timestamp.now().normalize()
+    df = df[df["event_month"] <= today]
     return df
 
 
@@ -281,19 +284,19 @@ def compute_escalation_index(df: pd.DataFrame, country: str) -> pd.DataFrame:
         0.0,
     )
 
-    # Normalise every component 0→1 globally
-    def minmax(col):
-        mn, mx = agg[col].min(), agg[col].max()
-        if mx == mn:
-            return pd.Series(0.0, index=agg.index)
-        return (agg[col] - mn) / (mx - mn)
+    # Normalise every component using percentile rank (0→1) across all country-months.
+    # This prevents one extreme outlier country (e.g. Ukraine) from crushing every
+    # other country's score under min-max scaling. A country in the 80th percentile
+    # globally scores 0.8 regardless of absolute event volume.
+    def pct_rank(col):
+        return agg[col].rank(pct=True, method="average").fillna(0.0)
 
-    agg["c_intensity"]  = minmax("intensity_raw")
-    agg["c_accel"]      = minmax("event_accel_raw")
-    agg["c_explosion"]  = minmax("explosions_raw")
-    agg["c_strategic"]  = minmax("strategic_raw")
-    agg["c_unrest"]     = minmax("unrest_raw")
-    agg["c_civilian"]   = minmax("civ_ratio_raw")
+    agg["c_intensity"]  = pct_rank("intensity_raw")
+    agg["c_accel"]      = pct_rank("event_accel_raw")
+    agg["c_explosion"]  = pct_rank("explosions_raw")
+    agg["c_strategic"]  = pct_rank("strategic_raw")
+    agg["c_unrest"]     = pct_rank("unrest_raw")
+    agg["c_civilian"]   = pct_rank("civ_ratio_raw")
 
     # Weighted composite → 0–100
     agg["escalation_index"] = (
