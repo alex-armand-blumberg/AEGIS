@@ -714,47 +714,30 @@ def _build_dominant_category(row: pd.Series) -> str:
     return category_map[best_key]
 
 
-def _estimate_mapbox_zoom(lat_span: float, lon_span: float) -> float:
-    span = max(float(lat_span or 0), float(lon_span or 0), 0.01)
-    if span > 120:
-        return 0.9
-    if span > 80:
-        return 1.3
-    if span > 45:
-        return 2.0
-    if span > 25:
-        return 3.0
-    if span > 12:
-        return 4.0
-    if span > 6:
-        return 5.0
-    if span > 3:
-        return 6.0
-    return 7.0
-
-
-def _compute_view_for_country(df: pd.DataFrame, selected_country: str | None):
-    default_center = {"lat": 18, "lon": 10}
-    default_zoom = 0.95
-
+def _compute_geo_view_for_country(df: pd.DataFrame, selected_country: str | None):
+    """Return (lon_range, lat_range, center_lon, center_lat) for scatter_geo zoom.
+    Returns None values when no country is selected (show full world)."""
     if not selected_country:
-        return default_center, default_zoom
+        return None, None, None, None
 
     d = df[df["country"].astype(str).str.strip() == str(selected_country).strip()].copy()
     if d.empty:
-        return default_center, default_zoom
+        return None, None, None, None
 
     lat_min = float(d["centroid_latitude"].min())
     lat_max = float(d["centroid_latitude"].max())
     lon_min = float(d["centroid_longitude"].min())
     lon_max = float(d["centroid_longitude"].max())
 
-    center = {
-        "lat": (lat_min + lat_max) / 2,
-        "lon": (lon_min + lon_max) / 2,
-    }
-    zoom = _estimate_mapbox_zoom(lat_max - lat_min, lon_max - lon_min)
-    return center, zoom
+    # Add padding proportional to span so markers at the edges aren't clipped
+    lat_pad = max((lat_max - lat_min) * 0.4, 3.0)
+    lon_pad = max((lon_max - lon_min) * 0.4, 3.0)
+
+    lat_range = [max(-89, lat_min - lat_pad), min(89, lat_max + lat_pad)]
+    lon_range = [max(-179, lon_min - lon_pad), min(179, lon_max + lon_pad)]
+    center_lon = (lon_min + lon_max) / 2
+    center_lat = (lat_min + lat_max) / 2
+    return lon_range, lat_range, center_lon, center_lat
 
 
 def _build_map_figure(grouped: pd.DataFrame, metric_labels: dict, selected_metric: str, size_max: int):
@@ -769,22 +752,15 @@ def _build_map_figure(grouped: pd.DataFrame, metric_labels: dict, selected_metri
 
     selected_country = st.session_state.get("map_selected_country")
     selected_admin1 = st.session_state.get("map_selected_admin1")
-    center, zoom = _compute_view_for_country(grouped, selected_country)
-
-    # Build per-row hover text as a plain column so px can use it
-    def _safe_int(v):
-        try:
-            return int(float(v))
-        except Exception:
-            return 0
+    lon_range, lat_range, center_lon, center_lat = _compute_geo_view_for_country(grouped, selected_country)
 
     grouped = grouped.copy()
-    grouped["hover_label"] = (
-        grouped["admin1"].astype(str) + ", " + grouped["country"].astype(str)
-    )
+    grouped["hover_label"] = grouped["admin1"].astype(str) + ", " + grouped["country"].astype(str)
 
-    # px.scatter_mapbox is the most reliable cross-version API for carto-darkmatter
-    fig = px.scatter_mapbox(
+    # px.scatter_geo works without any tile server or token — it is a pure
+    # vector renderer and is the most reliable way to plot ACLED data on Streamlit Cloud.
+    # We style it to match the dark CARTO aesthetic via update_geos.
+    fig = px.scatter_geo(
         grouped,
         lat="centroid_latitude",
         lon="centroid_longitude",
@@ -798,53 +774,54 @@ def _build_map_figure(grouped: pd.DataFrame, metric_labels: dict, selected_metri
             "strategic_developments", "protests", "riots", "violent_actors",
         ],
         hover_name="hover_label",
-        mapbox_style="carto-darkmatter",
-        center=center,
-        zoom=zoom,
+        projection="natural earth",
+        title="Current conflict-related hotspots",
         height=700,
-        opacity=0.85,
     )
 
-    # Apply rich hover template to every trace
-    hover_tmpl = (
-        "<b style='font-size:16px'>%{hovertext}</b><br><br>"
-        + f"<b>{metric_labels[selected_metric]}:</b> %{{customdata[2]:,.0f}}<br>"
-        + "<b>Fatalities:</b> %{customdata[3]:,.0f}<br>"
-        + "<b>Battles:</b> %{customdata[4]:,.0f}<br>"
-        + "<b>Explosions / remote violence:</b> %{customdata[5]:,.0f}<br>"
-        + "<b>Violence against civilians:</b> %{customdata[6]:,.0f}<br>"
-        + "<b>Strategic developments:</b> %{customdata[7]:,.0f}<br>"
-        + "<b>Protests:</b> %{customdata[8]:,.0f}<br>"
-        + "<b>Riots:</b> %{customdata[9]:,.0f}<br>"
-        + "<b>Violent actors:</b> %{customdata[10]:,.0f}"
-        + "<extra></extra>"
+    fig.update_traces(
+        marker=dict(
+            line=dict(width=0.5, color="rgba(255,255,255,0.3)"),
+            opacity=0.85,
+        ),
+        hovertemplate=(
+            "<b style='font-size:16px'>%{hovertext}</b><br><br>"
+            + f"<b>{metric_labels[selected_metric]}:</b> %{{customdata[2]:,.0f}}<br>"
+            + "<b>Fatalities:</b> %{customdata[3]:,.0f}<br>"
+            + "<b>Battles:</b> %{customdata[4]:,.0f}<br>"
+            + "<b>Explosions / remote violence:</b> %{customdata[5]:,.0f}<br>"
+            + "<b>Violence against civilians:</b> %{customdata[6]:,.0f}<br>"
+            + "<b>Strategic developments:</b> %{customdata[7]:,.0f}<br>"
+            + "<b>Protests:</b> %{customdata[8]:,.0f}<br>"
+            + "<b>Riots:</b> %{customdata[9]:,.0f}<br>"
+            + "<b>Violent actors:</b> %{customdata[10]:,.0f}"
+            + "<extra></extra>"
+        ),
     )
-    fig.update_traces(hovertemplate=hover_tmpl)
 
-    # Selection ring for the clicked hotspot
-    if selected_country and selected_admin1:
-        selected_sub = grouped[
-            grouped["country"].astype(str).eq(str(selected_country))
-            & grouped["admin1"].astype(str).eq(str(selected_admin1))
-        ].copy()
-        if not selected_sub.empty:
-            ring_sizes = (selected_sub["bubble_size"].astype(float) + 14).clip(lower=14).tolist()
-            fig.add_trace(
-                go.Scattermapbox(
-                    lat=selected_sub["centroid_latitude"].tolist(),
-                    lon=selected_sub["centroid_longitude"].tolist(),
-                    mode="markers",
-                    name="Selected",
-                    showlegend=False,
-                    hoverinfo="skip",
-                    marker=go.scattermapbox.Marker(
-                        size=ring_sizes,
-                        sizemode="diameter",
-                        color="rgba(255,255,255,0.25)",
-                        opacity=1.0,
-                    ),
-                )
-            )
+    # Dark CARTO-style geo theming
+    geo_kwargs = dict(
+        showframe=False,
+        showcoastlines=True,
+        coastlinecolor="rgba(160,160,180,0.4)",
+        showcountries=True,
+        countrycolor="rgba(160,160,180,0.4)",
+        showland=True,
+        landcolor="#1a1f2e",
+        showocean=True,
+        oceancolor="#020617",
+        showlakes=False,
+        bgcolor="#020617",
+        projection_type="natural earth",
+    )
+
+    # Zoom into selected country if one is chosen
+    if lon_range and lat_range:
+        geo_kwargs["lonaxis_range"] = lon_range
+        geo_kwargs["lataxis_range"] = lat_range
+        geo_kwargs["projection_rotation"] = dict(lon=center_lon, lat=center_lat)
+
+    fig.update_geos(**geo_kwargs)
 
     fig.update_layout(
         title=dict(text="Current conflict-related hotspots", font=dict(color="white", size=18)),
@@ -853,8 +830,8 @@ def _build_map_figure(grouped: pd.DataFrame, metric_labels: dict, selected_metri
         plot_bgcolor="#020617",
         font=dict(color="white"),
         legend=dict(
-            title_text="Dominant category<br><sup>Click to (de)select</sup>",
-            bgcolor="rgba(2,6,23,0.75)",
+            title_text="Dominant category (Click legend to filter)",
+            bgcolor="rgba(2,6,23,0.80)",
             bordercolor="rgba(255,255,255,0.15)",
             borderwidth=1,
             font=dict(color="white"),
