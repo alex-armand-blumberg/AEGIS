@@ -734,6 +734,16 @@ else:
                                 )
                                 & (idx_df["_rising"] == 1)
                             ]
+                            # DEBUG — remove after confirming diamonds appear
+                            with st.expander("DEBUG: pre-escalation signal values", expanded=True):
+                                debug_df = idx_df[[
+                                    "event_month", "index_smoothed",
+                                    "c_strategic", "c_explosion", "_rising", "_lead_signal"
+                                ]].copy()
+                                debug_df["below_thresh"] = idx_df["index_smoothed"] < escalation_threshold
+                                debug_df["approaching"]  = idx_df["index_smoothed"] > escalation_threshold - 20
+                                st.dataframe(debug_df, use_container_width=True)
+                                st.write(f"warn_rows count: {len(warn_rows)}")
 
                             # ── 3-month forecast (linear trend on last 6 months) ──
                             forecast_dates, forecast_vals, forecast_lo, forecast_hi = [], [], [], []
