@@ -254,7 +254,7 @@ def _get_acled_oauth_token(email: str, password: str) -> str:
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_acled_api_historical(
     email: str, password: str, country: str,
-    start_year: int = 2010
+    start_year: int = 2010, end_year: int = 2100
 ) -> pd.DataFrame:
     """
     Pull ACLED events for a SINGLE country via the authenticated API,
@@ -275,7 +275,7 @@ def fetch_acled_api_historical(
     offset = 0
     page_size = 5000
     start_date_str = f"{start_year}-01-01"
-    end_date_str   = pd.Timestamp.now().strftime("%Y-%m-%d")
+    end_date_str   = f"{min(end_year, pd.Timestamp.now().year)}-12-31"
 
     while True:
         params = {
@@ -676,7 +676,7 @@ else:
         with st.spinner(spinner_msg):
             try:
                 if use_api:
-                    df_acled = fetch_acled_api_historical(acled_api_email, acled_api_key, selected_country, start_year=plot_start_date.year)
+                    df_acled = fetch_acled_api_historical(acled_api_email, acled_api_key, selected_country, start_year=plot_start_date.year, end_year=plot_end_date.year)
                     data_label = "ACLED API (full history)"
                 else:
                     df_acled = fetch_acled_arcgis_monthly()
