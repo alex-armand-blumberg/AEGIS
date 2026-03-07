@@ -877,7 +877,7 @@ if show_map:
                         # ── Country selector for zoom + info panel ──────────
                         country_list = sorted(grouped["country"].dropna().unique().tolist())
                         selected_focus = st.selectbox(
-                            "🔍 Click a country to zoom and see details",
+                            "🔍 Click a country to zoom and see details (beta)",
                             options=["— World view —"] + country_list,
                             index=0,
                             key=f"country_focus_{selected_metric}_{start_dt}",
