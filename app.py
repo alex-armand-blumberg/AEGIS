@@ -274,17 +274,17 @@ def fetch_acled_api_historical(
     all_rows = []
     offset = 0
     page_size = 5000
-    current_year = pd.Timestamp.now().year
-    year_filter  = "|".join(str(y) for y in range(start_year, current_year + 1))
+    start_date_str = f"{start_year}-01-01"
+    end_date_str   = pd.Timestamp.now().strftime("%Y-%m-%d")
 
     while True:
         params = {
-            "country":    country,
-            "year":       year_filter,
-            "year_where": "BETWEEN",
-            "fields":     "event_date|country|event_type|fatalities|latitude|longitude",
-            "limit":      page_size,
-            "offset":     offset,
+            "country":          country,
+            "event_date":       f"{start_date_str}|{end_date_str}",
+            "event_date_where": "BETWEEN",
+            "fields":           "event_date|country|event_type|fatalities|latitude|longitude",
+            "limit":            page_size,
+            "offset":           offset,
         }
         r = requests.get(ACLED_API_URL, params=params, headers=headers, timeout=120)
         r.raise_for_status()
