@@ -12,6 +12,7 @@ import feedparser
 # Optional: used for the interactive map.
 try:
     import plotly.express as px
+    from streamlit_plotly_events import plotly_events
     _HAS_PLOTLY = True
 except Exception:
     _HAS_PLOTLY = False
@@ -161,6 +162,33 @@ def get_source_logo_url(source_name: str) -> str:
         domain = f"{cleaned}.com"
 
     return f"https://www.google.com/s2/favicons?sz=128&domain={domain}"
+
+@st.cache_data(ttl=900, show_spinner=False)
+def load_country_news(country: str, max_items: int = 4):
+    query = requests.utils.quote(f"{country} conflict war military")
+    url = (
+        f"https://news.google.com/rss/search?"
+        f"q={query}&hl=en-US&gl=US&ceid=US:en"
+    )
+    feed = feedparser.parse(url)
+    items = []
+    for entry in feed.entries[:max_items]:
+        published_dt = None
+        try:
+            if hasattr(entry, "published_parsed") and entry.published_parsed:
+                published_dt = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+        except Exception:
+            pass
+        source = entry.get("source", {})
+        source_title = source.get("title", "Unknown source") if hasattr(source, "get") else "Unknown source"
+        items.append({
+            "title": entry.get("title", "Untitled"),
+            "link": entry.get("link", ""),
+            "source": source_title,
+            "published_dt": published_dt,
+        })
+    return items
+
 
 # ----------------------------
 # Robust CSV loading helpers
@@ -847,6 +875,30 @@ if show_map:
                             "This layer is monthly aggregated at the subnational level. Working towards individual strike-by-strike live telemetry."
                         )
 
+                        # Session state for clicked country
+                        if "map_clicked_country" not in st.session_state:
+                            st.session_state["map_clicked_country"] = None
+                        clicked_country = st.session_state["map_clicked_country"]
+
+                        # Compute map center/zoom
+                        if clicked_country:
+                            c_rows = grouped[grouped["country"] == clicked_country]
+                            if not c_rows.empty:
+                                clat = (c_rows["centroid_latitude"].min() + c_rows["centroid_latitude"].max()) / 2
+                                clon = (c_rows["centroid_longitude"].min() + c_rows["centroid_longitude"].max()) / 2
+                                lat_span = c_rows["centroid_latitude"].max() - c_rows["centroid_latitude"].min()
+                                lon_span = c_rows["centroid_longitude"].max() - c_rows["centroid_longitude"].min()
+                                span = max(lat_span, lon_span, 0.5)
+                                zoom = max(1.0, min(6.0, 5.5 - np.log2(span + 1)))
+                                map_center = {"lat": clat, "lon": clon}
+                                map_zoom = zoom
+                            else:
+                                map_center = {"lat": 20, "lon": 10}
+                                map_zoom = 1
+                        else:
+                            map_center = {"lat": 20, "lon": 10}
+                            map_zoom = 1
+
                         fig = px.scatter_mapbox(
                             grouped,
                             lat="centroid_latitude",
@@ -872,8 +924,8 @@ if show_map:
                                 "bubble_size": False,
                             },
                             mapbox_style="carto-darkmatter",
-                            center={"lat": 20, "lon": 10},
-                            zoom=1,
+                            center=map_center,
+                            zoom=map_zoom,
                             title="Current conflict-related hotspots",
                             color_discrete_map={
                                 "Battles": "#ef4444",
@@ -908,7 +960,7 @@ if show_map:
                                 font=dict(color="white", size=22),
                             ),
                             legend=dict(
-                                title=dict(text="<b>Categories:</b>", side="top", font=dict(color="white", size=13)),
+                                title=dict(text="<b>Categories (Click to Isolate):</b>", side="top", font=dict(color="white", size=13)),
                                 orientation="h",
                                 yanchor="bottom",
                                 y=-0.08,
@@ -925,7 +977,125 @@ if show_map:
                                 font_family="Arial",
                             ),
                         )
-                        st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": True})
+
+                        # Capture bubble clicks via plotly_events
+                        clicked_points = plotly_events(
+                            fig,
+                            click_event=True,
+                            hover_event=False,
+                            select_event=False,
+                            override_height=780,
+                            override_width="100%",
+                            key=f"aegis_map_{selected_metric}_{start_dt}_{end_dt}_{clicked_country}",
+                        )
+
+                        if clicked_points:
+                            pt = clicked_points[0]
+                            curve_idx = pt.get("curveNumber", 0)
+                            point_idx = pt.get("pointNumber", 0)
+                            try:
+                                # In px.scatter_mapbox with hover_data, country is at customdata index 12
+                                raw_country = fig.data[curve_idx].customdata[point_idx][12]
+                                if raw_country and str(raw_country) != "nan":
+                                    st.session_state["map_clicked_country"] = str(raw_country)
+                                    st.rerun()
+                            except Exception:
+                                pass
+
+                        # Country info panel (slides up below map)
+                        if clicked_country:
+                            country_rows = grouped[grouped["country"] == clicked_country]
+                            if not country_rows.empty:
+                                totals = country_rows[[
+                                    "battles", "explosions_remote_violence", "protests",
+                                    "riots", "strategic_developments", "violence_against_civilians",
+                                    "violent_actors", "fatalities",
+                                ]].sum()
+
+                                panel_html = f"""
+<div style="
+  background: linear-gradient(135deg, rgba(15,23,42,0.97) 0%, rgba(30,41,59,0.97) 100%);
+  border: 1px solid rgba(251,191,36,0.35);
+  border-left: 4px solid #f59e0b;
+  border-radius: 14px;
+  padding: 24px 28px;
+  margin-top: 16px;
+">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+    <div>
+      <div style="font-size:28px; font-weight:800; color:white;">&#127758; {clicked_country}</div>
+      <div style="font-size:12px; color:rgba(255,255,255,0.45); margin-top:3px;">ACLED conflict data &middot; {start_dt} to {end_dt}</div>
+    </div>
+  </div>
+  <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:12px;">
+    <div style="background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.35); border-radius:10px; padding:14px; text-align:center;">
+      <div style="font-size:24px; font-weight:800; color:#ef4444;">{int(totals["fatalities"]):,}</div>
+      <div style="font-size:11px; color:rgba(255,255,255,0.55); margin-top:5px; letter-spacing:1px;">FATALITIES</div>
+    </div>
+    <div style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.35); border-radius:10px; padding:14px; text-align:center;">
+      <div style="font-size:24px; font-weight:800; color:#f59e0b;">{int(totals["explosions_remote_violence"]):,}</div>
+      <div style="font-size:11px; color:rgba(255,255,255,0.55); margin-top:5px; letter-spacing:1px;">EXPLOSIONS</div>
+    </div>
+    <div style="background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.35); border-radius:10px; padding:14px; text-align:center;">
+      <div style="font-size:24px; font-weight:800; color:#f87171;">{int(totals["battles"]):,}</div>
+      <div style="font-size:11px; color:rgba(255,255,255,0.55); margin-top:5px; letter-spacing:1px;">BATTLES</div>
+    </div>
+    <div style="background:rgba(253,224,71,0.12); border:1px solid rgba(253,224,71,0.35); border-radius:10px; padding:14px; text-align:center;">
+      <div style="font-size:24px; font-weight:800; color:#fde047;">{int(totals["violence_against_civilians"]):,}</div>
+      <div style="font-size:11px; color:rgba(255,255,255,0.55); margin-top:5px; letter-spacing:1px;">CIVILIAN VIOLENCE</div>
+    </div>
+    <div style="background:rgba(96,165,250,0.12); border:1px solid rgba(96,165,250,0.35); border-radius:10px; padding:14px; text-align:center;">
+      <div style="font-size:24px; font-weight:800; color:#60a5fa;">{int(totals["strategic_developments"]):,}</div>
+      <div style="font-size:11px; color:rgba(255,255,255,0.55); margin-top:5px; letter-spacing:1px;">STRATEGIC DEVS</div>
+    </div>
+    <div style="background:rgba(167,139,250,0.12); border:1px solid rgba(167,139,250,0.35); border-radius:10px; padding:14px; text-align:center;">
+      <div style="font-size:24px; font-weight:800; color:#a78bfa;">{int(totals["protests"]):,}</div>
+      <div style="font-size:11px; color:rgba(255,255,255,0.55); margin-top:5px; letter-spacing:1px;">PROTESTS</div>
+    </div>
+    <div style="background:rgba(244,114,182,0.12); border:1px solid rgba(244,114,182,0.35); border-radius:10px; padding:14px; text-align:center;">
+      <div style="font-size:24px; font-weight:800; color:#f472b6;">{int(totals["riots"]):,}</div>
+      <div style="font-size:11px; color:rgba(255,255,255,0.55); margin-top:5px; letter-spacing:1px;">RIOTS</div>
+    </div>
+    <div style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:14px; text-align:center;">
+      <div style="font-size:24px; font-weight:800; color:white;">{int(totals["violent_actors"]):,}</div>
+      <div style="font-size:11px; color:rgba(255,255,255,0.55); margin-top:5px; letter-spacing:1px;">VIOLENT ACTORS</div>
+    </div>
+  </div>
+</div>
+"""
+                                st.markdown(panel_html, unsafe_allow_html=True)
+
+                                # Recent country news
+                                st.markdown(
+                                    f'<div style="font-size:17px; font-weight:700; color:white; margin-top:22px; margin-bottom:10px;">'  
+                                    f'&#128240; Recent news &mdash; {clicked_country}</div>',
+                                    unsafe_allow_html=True,
+                                )
+                                try:
+                                    news = load_country_news(clicked_country, max_items=4)
+                                    if news:
+                                        for article in news:
+                                            age = format_news_age(article["published_dt"])
+                                            meta = " · ".join(p for p in [article["source"], age] if p)
+                                            st.markdown(
+                                                f"**[{article['title']}]({article['link']})**  \n"
+                                                f"<span style='opacity:0.55; font-size:12px;'>{meta}</span>",
+                                                unsafe_allow_html=True,
+                                            )
+                                            st.markdown(
+                                                "<hr style='border-color:rgba(255,255,255,0.07); margin:8px 0;'>",
+                                                unsafe_allow_html=True,
+                                            )
+                                    else:
+                                        st.caption("No recent news found for this country.")
+                                except Exception:
+                                    st.caption("Could not load news feed.")
+
+                            col_reset, _ = st.columns([1, 5])
+                            with col_reset:
+                                if st.button("Reset to world view", use_container_width=True):
+                                    st.session_state["map_clicked_country"] = None
+                                    st.rerun()
 
                         summary_cols = [
                             "country",
