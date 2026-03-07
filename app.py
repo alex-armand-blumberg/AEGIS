@@ -847,7 +847,7 @@ if show_map:
                             "This layer is monthly aggregated at the subnational level. Working towards individual strike-by-strike live telemetry."
                         )
 
-                        fig = px.scatter_geo(
+                        fig = px.scatter_mapbox(
                             grouped,
                             lat="centroid_latitude",
                             lon="centroid_longitude",
@@ -871,7 +871,9 @@ if show_map:
                                 "country": False,
                                 "bubble_size": False,
                             },
-                            projection="natural earth",
+                            mapbox_style="carto-darkmatter",
+                            center={"lat": 20, "lon": 10},
+                            zoom=1,
                             title="Current conflict-related hotspots",
                             color_discrete_map={
                                 "Battles": "#ef4444",
@@ -884,7 +886,7 @@ if show_map:
                         )
 
                         fig.update_traces(
-                            marker=dict(line=dict(width=0.4, color="rgba(255,255,255,0.35)"), opacity=0.82),
+                            marker=dict(opacity=0.85),
                             hovertemplate=(
                                 "<b style='font-size:16px'>%{hovertext}</b><br><br>"
                                 + f"{metric_labels[selected_metric]}: %{{customdata[0]:,}}<br>"
@@ -893,52 +895,17 @@ if show_map:
                             ),
                         )
 
-                        fig.update_geos(
-                            showframe=False,
-                            showcoastlines=True,
-                            coastlinecolor="rgba(140,150,170,0.5)",
-                            showcountries=True,
-                            countrycolor="rgba(140,150,170,0.5)",
-                            showland=True,
-                            landcolor="#1c2333",
-                            showocean=True,
-                            oceancolor="#020917",
-                            showlakes=False,
-                            showrivers=False,
-                            bgcolor="#020917",
-                            lataxis_showgrid=False,
-                            lonaxis_showgrid=False,
-                        )
                         fig.update_layout(
-                            paper_bgcolor="#020917",
-                            plot_bgcolor="#020917",
-                            font=dict(color="white", family="Arial"),
-                            title=dict(
-                                text="Current conflict-related hotspots",
-                                font=dict(color="white", size=20, family="Arial"),
-                                x=0.5,
-                                xanchor="center",
-                            ),
-                            legend=dict(
-                                title_text="Dominant category",
-                                bgcolor="rgba(10,15,30,0.85)",
-                                bordercolor="rgba(255,255,255,0.15)",
-                                borderwidth=1,
-                                font=dict(color="white", size=13),
-                            ),
-                            hoverlabel=dict(
-                                bgcolor="rgba(10,15,30,0.96)",
-                                font_size=14,
-                                font_family="Arial",
-                                font_color="white",
-                            ),
+                            paper_bgcolor="#020617",
+                            plot_bgcolor="#020617",
+                            font=dict(color="white"),
+                            legend_title_text="Dominant category (Click on legend to (de)select categories)",
                             margin=dict(l=0, r=0, t=60, b=0),
                             height=700,
-                        )
-                        fig.update_traces(
-                            marker=dict(
-                                line=dict(width=0.6, color="rgba(255,255,255,0.4)"),
-                                opacity=0.88,
+                            hoverlabel=dict(
+                                bgcolor="rgba(20,20,20,0.95)",
+                                font_size=14,
+                                font_family="Arial",
                             ),
                         )
                         st.plotly_chart(fig, use_container_width=True)
