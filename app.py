@@ -1,4 +1,3 @@
-
 import io
 import base64
 from pathlib import Path
@@ -778,17 +777,6 @@ def _build_map_figure(grouped: pd.DataFrame, metric_labels: dict, selected_metri
         if sub.empty:
             continue
 
-        is_selected = (
-            sub["country"].astype(str).eq(str(selected_country))
-            & sub["admin1"].astype(str).eq(str(selected_admin1))
-        ) if selected_country and selected_admin1 else pd.Series(False, index=sub.index)
-
-        marker_sizes = [
-            float(size) + (8 if sel else 0)
-            for size, sel in zip(sub["bubble_size"].astype(float).tolist(), is_selected.tolist())
-        ]
-        marker_opacity = [0.98 if sel else 0.82 for sel in is_selected.tolist()]
-
         customdata = np.stack([
             sub["country"].astype(str),
             sub["admin1"].astype(str),
@@ -824,15 +812,58 @@ def _build_map_figure(grouped: pd.DataFrame, metric_labels: dict, selected_metri
                     + "Violent actors: %{customdata[10]:,.0f}"
                     + "<extra></extra>"
                 ),
-                marker={
-                    "size": marker_sizes,
-                    "sizemode": "diameter",
-                    "sizemin": 4,
-                    "color": color,
-                    "opacity": marker_opacity,
-                },
+                marker=dict(
+                    size=sub["bubble_size"].astype(float),
+                    sizemode="diameter",
+                    sizemin=4,
+                    color=color,
+                    opacity=0.82,
+                ),
             )
         )
+
+    if selected_country and selected_admin1:
+        selected_sub = grouped[
+            grouped["country"].astype(str).eq(str(selected_country))
+            & grouped["admin1"].astype(str).eq(str(selected_admin1))
+        ].copy()
+        if not selected_sub.empty:
+            fig.add_trace(
+                go.Scattermapbox(
+                    lat=selected_sub["centroid_latitude"],
+                    lon=selected_sub["centroid_longitude"],
+                    mode="markers",
+                    name="Selected hotspot",
+                    showlegend=False,
+                    hoverinfo="skip",
+                    marker=dict(
+                        size=(selected_sub["bubble_size"].astype(float) + 10),
+                        sizemode="diameter",
+                        color="rgba(255,255,255,0)",
+                        opacity=1,
+                        allowoverlap=True,
+                        symbol="circle",
+                    ),
+                )
+            )
+            fig.add_trace(
+                go.Scattermapbox(
+                    lat=selected_sub["centroid_latitude"],
+                    lon=selected_sub["centroid_longitude"],
+                    mode="markers",
+                    name="Selected hotspot fill",
+                    showlegend=False,
+                    hoverinfo="skip",
+                    marker=dict(
+                        size=(selected_sub["bubble_size"].astype(float) + 3),
+                        sizemode="diameter",
+                        color="rgba(255,255,255,0.22)",
+                        opacity=1,
+                        allowoverlap=True,
+                        symbol="circle",
+                    ),
+                )
+            )
 
     fig.update_layout(
         title="Current conflict-related hotspots",
@@ -1111,4 +1142,3 @@ if show_map:
 
         except Exception as e:
             st.error(f"Map error: {e}")
-
