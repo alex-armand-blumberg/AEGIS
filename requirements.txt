@@ -7,3 +7,5 @@ gdown
 plotly
 feedparser
 pycountry
+requests
+streamlit-plotly-events
