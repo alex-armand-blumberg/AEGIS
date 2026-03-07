@@ -215,6 +215,105 @@ def fetch_acled_arcgis_monthly() -> pd.DataFrame:
 
 
 # ----------------------------
+# ACLED API full-history fetch (requires free API key from developer.acleddata.com)
+# ----------------------------
+ACLED_API_URL = "https://api.acleddata.com/acled/read"
+
+# Map ACLED API event_type strings → our column names
+ACLED_EVENT_TYPE_MAP = {
+    "Battles":                      "battles",
+    "Explosions/Remote violence":   "explosions_remote_violence",
+    "Violence against civilians":   "violence_against_civilians",
+    "Strategic developments":       "strategic_developments",
+    "Protests":                     "protests",
+    "Riots":                        "riots",
+}
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_acled_api_historical(api_key: str, api_email: str) -> pd.DataFrame:
+    """
+    Pull all ACLED events (event-level) via the authenticated API, then
+    aggregate to country × month to match the ArcGIS layer schema.
+    Returns a DataFrame with the same columns as fetch_acled_arcgis_monthly()
+    so compute_escalation_index() works without modification.
+    """
+    all_rows = []
+    page = 1
+    page_size = 5000
+
+    while True:
+        params = {
+            "key":      api_key.strip(),
+            "email":    api_email.strip(),
+            "fields":   "event_date,country,event_type,fatalities,latitude,longitude",
+            "limit":    page_size,
+            "page":     page,
+            "format":   "json",
+        }
+        r = requests.get(ACLED_API_URL, params=params, timeout=90,
+                         headers={"User-Agent": "Mozilla/5.0"})
+        r.raise_for_status()
+        payload = r.json()
+
+        if payload.get("status") != 200:
+            msg = payload.get("message", str(payload))
+            raise RuntimeError(f"ACLED API error: {msg}")
+
+        data = payload.get("data", [])
+        if not data:
+            break
+
+        all_rows.extend(data)
+        if len(data) < page_size:
+            break
+        page += 1
+        if page > 500:          # safety cap (~2.5 M events)
+            break
+
+    if not all_rows:
+        return pd.DataFrame()
+
+    raw = pd.DataFrame(all_rows)
+    raw["event_date"] = pd.to_datetime(raw["event_date"], errors="coerce")
+    raw["fatalities"] = pd.to_numeric(raw["fatalities"], errors="coerce").fillna(0)
+    raw["latitude"]   = pd.to_numeric(raw.get("latitude",  pd.Series(dtype=float)), errors="coerce")
+    raw["longitude"]  = pd.to_numeric(raw.get("longitude", pd.Series(dtype=float)), errors="coerce")
+    raw = raw.dropna(subset=["event_date", "country"])
+
+    # Add month column and event-type dummy columns
+    raw["event_month"] = raw["event_date"].dt.to_period("M").dt.to_timestamp()
+    today = pd.Timestamp.now().normalize()
+    raw = raw[raw["event_month"] <= today]
+
+    for col in ACLED_EVENT_TYPE_MAP.values():
+        raw[col] = 0
+
+    for api_type, col in ACLED_EVENT_TYPE_MAP.items():
+        mask = raw["event_type"].str.strip() == api_type
+        raw.loc[mask, col] = 1
+
+    # Aggregate to country × month
+    agg = (
+        raw.groupby(["country", "event_month"], as_index=False)
+        .agg(
+            battles=("battles", "sum"),
+            explosions_remote_violence=("explosions_remote_violence", "sum"),
+            protests=("protests", "sum"),
+            riots=("riots", "sum"),
+            strategic_developments=("strategic_developments", "sum"),
+            violence_against_civilians=("violence_against_civilians", "sum"),
+            fatalities=("fatalities", "sum"),
+            centroid_latitude=("latitude",  "median"),
+            centroid_longitude=("longitude", "median"),
+        )
+    )
+    agg["admin1"] = ""
+    agg["violent_actors"] = 0    # not available at this aggregation level
+    return agg
+
+
+# ----------------------------
 # Escalation Index computation
 # ----------------------------
 def compute_escalation_index(df: pd.DataFrame, country: str) -> pd.DataFrame:
@@ -338,6 +437,32 @@ country_name = st.sidebar.text_input(
     help="Must match the country name in ACLED exactly (e.g. 'Ukraine', 'Sudan', 'Myanmar').",
 )
 
+with st.sidebar.expander("🔑 ACLED API Key (full history)", expanded=False):
+    st.markdown(
+        "Free registration at [developer.acleddata.com](https://developer.acleddata.com). "
+        "Unlocks full event history back to 1997. Without a key, the plot uses the "
+        "public ArcGIS layer (~13 months of data).",
+        unsafe_allow_html=True,
+    )
+    acled_api_email = st.text_input(
+        "ACLED account email",
+        "",
+        key="acled_email",
+        help="The email address you registered with at developer.acleddata.com",
+    )
+    acled_api_key = st.text_input(
+        "ACLED API key",
+        "",
+        type="password",
+        key="acled_key",
+        help="Your personal ACLED API access key.",
+    )
+    use_api = bool(acled_api_key.strip() and acled_api_email.strip())
+    if use_api:
+        st.success("✓ API credentials provided — full history enabled.")
+    else:
+        st.caption("No key provided — using public ArcGIS layer (~13 months).")
+
 with st.sidebar.expander("Advanced Settings"):
     escalation_threshold = st.slider(
         "Escalation alert threshold (0–100)",
@@ -366,7 +491,7 @@ with st.sidebar.expander("Advanced Settings"):
         plot_start_date = st.date_input(
             "From",
             value=date(2020, 1, 1),
-            min_value=date(2016, 1, 1),
+            min_value=date(1997, 1, 1),
             max_value=date.today(),
             key="plot_start",
         )
@@ -512,12 +637,24 @@ else:
     if not selected_country:
         st.warning("Please enter a country name in the sidebar.")
     else:
-        with st.spinner(f"Loading ACLED data and computing Escalation Index for {selected_country}…"):
+        spinner_msg = (
+            f"Fetching full ACLED history for {selected_country} via API…"
+            if use_api else
+            f"Loading ACLED data and computing Escalation Index for {selected_country}…"
+        )
+        with st.spinner(spinner_msg):
             try:
-                df_acled = fetch_acled_arcgis_monthly()
+                if use_api:
+                    df_acled = fetch_acled_api_historical(acled_api_key, acled_api_email)
+                    data_label = "ACLED API (full history)"
+                else:
+                    df_acled = fetch_acled_arcgis_monthly()
+                    data_label = "ACLED ArcGIS layer (~13 months)"
+
                 if df_acled.empty:
                     st.error("No ACLED data returned. Please try again later.")
                 else:
+                    st.caption(f"Data source: {data_label} · {len(df_acled):,} country-month rows loaded.")
                     available_countries = sorted(df_acled["country"].dropna().unique().tolist())
 
                     if selected_country not in available_countries:
