@@ -868,10 +868,12 @@ if show_map:
                         grouped["hover_location"] = grouped["admin1"] + ", " + grouped["country"]
 
                         st.caption(
-                            f"Source: public ACLED ArcGIS monthly indicators. Showing {metric_labels[selected_metric]} from {start_dt} to {end_dt}."
+                            "This layer is monthly aggregated at the subnational level. Working towards individual strike-by-strike live telemetry."
+                        )
+
                         )
                         st.caption(
-                            "This layer is monthly aggregated at the subnational level. Working towards individual strike-by-strike live telemetry."
+                            "🗺️ How to read this map: Bubble color shows the dominant conflict category for each region — the event type that occurred most frequently. Bubble size reflects the selected map metric. These two can differ: a region colored red for Battles may still show a high Explosions count if that's the metric you've selected — both occurred in that region during the same period. Use the metric selector to surface different dimensions of the same underlying conflict data."
                         )
 
                         # ── Session state for focused country ─────────────
@@ -1085,6 +1087,10 @@ if show_map:
                                 "explosions_remote_violence": "Explosions / remote violence",
                                 "violence_against_civilians": "Violence against civilians",
                             }
+                        )
+
+                        st.caption(
+                            f"Source: Public ACLED ArcGIS monthly indicators. Showing {metric_labels[selected_metric]} from {start_dt} to {end_dt}."
                         )
 
                         with st.expander("Top hotspots in the current view"):
