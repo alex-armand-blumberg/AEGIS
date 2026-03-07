@@ -905,7 +905,7 @@ if show_map:
                                 xanchor="center",
                                 font=dict(color="white", size=22),
                             ),
-                            st.write("")
+                            st.write(""),
                             legend=dict(
                                 title_text="Categories (Click to Isolate): ",
                                 orientation="h",
