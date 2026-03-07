@@ -340,7 +340,7 @@ with st.sidebar.expander("Advanced Settings"):
         "Escalation alert threshold (0–100)",
         min_value=0,
         max_value=100,
-        value=50,
+        value=35,
         step=1,
         help="Months where the Escalation Index exceeds this are flagged as escalation events.",
     )
