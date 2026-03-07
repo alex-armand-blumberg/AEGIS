@@ -907,17 +907,7 @@ if show_map:
                                 yanchor="top",
                                 font=dict(color="white", size=22),
                             ),
-                            legend=dict(
-                                
-                                
-                                orientation="h",
-                                yanchor="bottom",
-                                y=-0.08,
-                                xanchor="left",
-                                x=0,
-                                bgcolor="rgba(2,6,23,0)",
-                                font=dict(color="white", size=13),
-                            ),
+                           
                             margin=dict(l=0, r=0, t=60, b=80),
                             height=780,
                             hoverlabel=dict(
