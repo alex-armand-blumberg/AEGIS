@@ -272,7 +272,7 @@ def fetch_acled_api_historical(
     }
 
     all_rows = []
-    offset = 0
+    page = 1
     page_size = 5000
     end_year_clamped = min(end_year, pd.Timestamp.now().year)
 
@@ -283,7 +283,7 @@ def fetch_acled_api_historical(
             "year_where": "BETWEEN",
             "fields":     "event_date|country|event_type|fatalities|latitude|longitude",
             "limit":      page_size,
-            "offset":     offset,
+            "page":       page,
         }
         r = requests.get(ACLED_API_URL, params=params, headers=headers, timeout=120)
         r.raise_for_status()
@@ -296,8 +296,8 @@ def fetch_acled_api_historical(
         all_rows.extend(data)
         if len(data) < page_size:
             break
-        offset += page_size
-        if offset > 300_000:   # safety cap
+        page += 1
+        if page > 60:   # safety cap ~300k events
             break
 
     if not all_rows:
@@ -688,7 +688,7 @@ else:
                         "Country names must match ACLED exactly."
                     )
                 else:
-                    st.caption(f"Data source: {data_label} · {len(df_acled):,} country-month rows loaded.")
+                    st.caption(f"Data source: {data_label} · {len(df_acled):,} country-month rows loaded ({df_acled['event_month'].min().strftime('%b %Y') if not df_acled.empty else '?'} – {df_acled['event_month'].max().strftime('%b %Y') if not df_acled.empty else '?'})")
                     idx_df = compute_escalation_index(df_acled, selected_country)
 
                     if idx_df.empty:
