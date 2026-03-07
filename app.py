@@ -465,6 +465,7 @@ with st.sidebar.expander("Advanced Settings"):
         help="Stacked bar chart showing each sub-index contribution.",
     )
     st.markdown("**Plot date range**")
+    st.caption("Data from Jan 2018 to Jan 2026.")
     help="Data from Jan 2018 to Jan 2025."
     plot_date_col1, plot_date_col2 = st.columns(2)
     with plot_date_col1:
