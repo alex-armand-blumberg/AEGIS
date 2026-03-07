@@ -342,7 +342,7 @@ def fetch_ticker_data() -> list:
         merged["prev_score"] = merged["score_prev"].fillna(0)
         merged["trend"] = merged["score_cur"] - merged["prev_score"]
 
-        top = merged.nlargest(10, "score_cur")
+        top = merged.nlargest(20, "score_cur")
 
         items = []
         for _, row in top.iterrows():
