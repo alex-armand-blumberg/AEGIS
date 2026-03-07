@@ -12,8 +12,6 @@ import feedparser
 # Optional: used for the interactive map.
 try:
     import plotly.express as px
-    import plotly.graph_objects as go
-    from streamlit_plotly_events import plotly_events
     _HAS_PLOTLY = True
 except Exception:
     _HAS_PLOTLY = False
@@ -714,185 +712,11 @@ def _build_dominant_category(row: pd.Series) -> str:
     return category_map[best_key]
 
 
-def _estimate_mapbox_zoom(lat_span: float, lon_span: float) -> float:
-    span = max(float(lat_span or 0), float(lon_span or 0), 0.01)
-    if span > 120:
-        return 0.9
-    if span > 80:
-        return 1.3
-    if span > 45:
-        return 2.0
-    if span > 25:
-        return 3.0
-    if span > 12:
-        return 4.0
-    if span > 6:
-        return 5.0
-    if span > 3:
-        return 6.0
-    return 7.0
-
-
-def _compute_view_for_country(df: pd.DataFrame, selected_country: str | None):
-    default_center = {"lat": 18, "lon": 10}
-    default_zoom = 0.95
-
-    if not selected_country:
-        return default_center, default_zoom
-
-    d = df[df["country"].astype(str).str.strip() == str(selected_country).strip()].copy()
-    if d.empty:
-        return default_center, default_zoom
-
-    lat_min = float(d["centroid_latitude"].min())
-    lat_max = float(d["centroid_latitude"].max())
-    lon_min = float(d["centroid_longitude"].min())
-    lon_max = float(d["centroid_longitude"].max())
-
-    center = {
-        "lat": (lat_min + lat_max) / 2,
-        "lon": (lon_min + lon_max) / 2,
-    }
-    zoom = _estimate_mapbox_zoom(lat_max - lat_min, lon_max - lon_min)
-    return center, zoom
-
-
-def _build_map_figure(grouped: pd.DataFrame, metric_labels: dict, selected_metric: str, size_max: int):
-    color_discrete_map = {
-        "Battles": "#ef4444",
-        "Explosions / remote violence": "#f59e0b",
-        "Violence against civilians": "#fde047",
-        "Strategic developments": "#60a5fa",
-        "Protests": "#a78bfa",
-        "Riots": "#f472b6",
-    }
-
-    selected_country = st.session_state.get("map_selected_country")
-    selected_admin1 = st.session_state.get("map_selected_admin1")
-    center, zoom = _compute_view_for_country(grouped, selected_country)
-
-    fig = go.Figure()
-    for category, color in color_discrete_map.items():
-        sub = grouped[grouped["dominant_category"] == category].copy()
-        if sub.empty:
-            continue
-
-        customdata = np.stack([
-            sub["country"].astype(str),
-            sub["admin1"].astype(str),
-            sub["metric_value"].astype(float),
-            sub["fatalities"].astype(float),
-            sub["battles"].astype(float),
-            sub["explosions_remote_violence"].astype(float),
-            sub["violence_against_civilians"].astype(float),
-            sub["strategic_developments"].astype(float),
-            sub["protests"].astype(float),
-            sub["riots"].astype(float),
-            sub["violent_actors"].astype(float),
-        ], axis=-1)
-
-        fig.add_trace(
-            go.Scattermapbox(
-                lat=sub["centroid_latitude"],
-                lon=sub["centroid_longitude"],
-                mode="markers",
-                name=category,
-                customdata=customdata,
-                text=(sub["admin1"].astype(str) + ", " + sub["country"].astype(str)),
-                hovertemplate=(
-                    "<b style='font-size:18px'>%{text}</b><br><br>"
-                    + f"{metric_labels[selected_metric]}: %{{customdata[2]:,.0f}}<br>"
-                    + "Fatalities: %{customdata[3]:,.0f}<br>"
-                    + "Battles: %{customdata[4]:,.0f}<br>"
-                    + "Explosions / remote violence: %{customdata[5]:,.0f}<br>"
-                    + "Violence against civilians: %{customdata[6]:,.0f}<br>"
-                    + "Strategic developments: %{customdata[7]:,.0f}<br>"
-                    + "Protests: %{customdata[8]:,.0f}<br>"
-                    + "Riots: %{customdata[9]:,.0f}<br>"
-                    + "Violent actors: %{customdata[10]:,.0f}"
-                    + "<extra></extra>"
-                ),
-                marker=dict(
-                    size=sub["bubble_size"].astype(float),
-                    sizemode="diameter",
-                    sizemin=4,
-                    color=color,
-                    opacity=0.82,
-                ),
-            )
-        )
-
-    if selected_country and selected_admin1:
-        selected_sub = grouped[
-            grouped["country"].astype(str).eq(str(selected_country))
-            & grouped["admin1"].astype(str).eq(str(selected_admin1))
-        ].copy()
-        if not selected_sub.empty:
-            fig.add_trace(
-                go.Scattermapbox(
-                    lat=selected_sub["centroid_latitude"],
-                    lon=selected_sub["centroid_longitude"],
-                    mode="markers",
-                    name="Selected hotspot",
-                    showlegend=False,
-                    hoverinfo="skip",
-                    marker=dict(
-                        size=(selected_sub["bubble_size"].astype(float) + 10),
-                        sizemode="diameter",
-                        color="rgba(255,255,255,0)",
-                        opacity=1,
-                        allowoverlap=True,
-                        symbol="circle",
-                    ),
-                )
-            )
-            fig.add_trace(
-                go.Scattermapbox(
-                    lat=selected_sub["centroid_latitude"],
-                    lon=selected_sub["centroid_longitude"],
-                    mode="markers",
-                    name="Selected hotspot fill",
-                    showlegend=False,
-                    hoverinfo="skip",
-                    marker=dict(
-                        size=(selected_sub["bubble_size"].astype(float) + 3),
-                        sizemode="diameter",
-                        color="rgba(255,255,255,0.22)",
-                        opacity=1,
-                        allowoverlap=True,
-                        symbol="circle",
-                    ),
-                )
-            )
-
-    fig.update_layout(
-        title="Current conflict-related hotspots",
-        clickmode="event+select",
-        paper_bgcolor="#020617",
-        plot_bgcolor="#020617",
-        font=dict(color="white"),
-        legend_title_text="Dominant category (Click on legend to (de)select categories)",
-        margin=dict(l=0, r=0, t=60, b=0),
-        mapbox=dict(
-            style="carto-darkmatter",
-            center=center,
-            zoom=zoom,
-        ),
-        height=700,
-        hoverlabel=dict(
-            bgcolor="rgba(20,20,20,0.96)",
-            font_size=16,
-            font_family="Arial",
-        ),
-    )
-    return fig
-
-
 if show_map:
     st.markdown("## Interactive map")
 
     if not _HAS_PLOTLY:
-        st.info("Interactive map requires Plotly and streamlit-plotly-events. Add both to requirements.txt to enable it.")
+        st.info("Interactive map requires Plotly. Add `plotly` to requirements.txt to enable it.")
     else:
         try:
             df_map = fetch_acled_arcgis_monthly()
@@ -918,11 +742,6 @@ if show_map:
                     "protests": "Protests",
                     "riots": "Riots",
                 }
-
-                if "map_selected_country" not in st.session_state:
-                    st.session_state["map_selected_country"] = None
-                if "map_selected_admin1" not in st.session_state:
-                    st.session_state["map_selected_admin1"] = None
 
                 with st.expander("Conflict map settings", expanded=False):
                     selected_metric = st.selectbox(
@@ -961,11 +780,6 @@ if show_map:
                         step=15,
                         disabled=not auto_refresh_map,
                     )
-                    reset_map = st.button("Reset map view", use_container_width=True)
-                    if reset_map:
-                        st.session_state["map_selected_country"] = None
-                        st.session_state["map_selected_admin1"] = None
-                        st.rerun()
 
                 if override_map_dates:
                     default_start = max(earliest_month.date(), (latest_month - pd.DateOffset(months=2)).date())
@@ -1023,74 +837,90 @@ if show_map:
                         st.info("No positive values were found for the selected map metric.")
                     else:
                         grouped["admin1"] = grouped["admin1"].fillna("Unknown")
-                        raw_metric = grouped["metric_value"].clip(lower=1)
-                        scaled = np.sqrt(raw_metric)
-                        grouped["bubble_size"] = np.interp(
-                            scaled,
-                            (scaled.min(), scaled.max()) if scaled.max() > scaled.min() else (scaled.min(), scaled.min() + 1),
-                            (7, size_max),
-                        )
+                        grouped["bubble_size"] = grouped["metric_value"].clip(lower=1)
+                        grouped["hover_location"] = grouped["admin1"] + ", " + grouped["country"]
 
                         st.caption(
                             f"Source: public ACLED ArcGIS monthly indicators. Showing {metric_labels[selected_metric]} from {start_dt} to {end_dt}."
                         )
                         st.caption(
-                            "Click any hotspot to zoom into its country and open a detail card. Hover still works for quick inspection."
+                            "This layer is monthly aggregated at the subnational level. Working towards individual strike-by-strike live telemetry."
                         )
 
-                        fig = _build_map_figure(grouped, metric_labels, selected_metric, size_max)
-                        selected_points = plotly_events(
-                            fig,
-                            click_event=True,
-                            hover_event=False,
-                            select_event=False,
-                            override_height=700,
-                            override_width="100%",
-                            key=f"aegis_map_{selected_metric}_{start_dt}_{end_dt}",
+                        fig = px.scatter_geo(
+                            grouped,
+                            lat="centroid_latitude",
+                            lon="centroid_longitude",
+                            color="dominant_category",
+                            size="bubble_size",
+                            size_max=size_max,
+                            hover_name="hover_location",
+                            hover_data={
+                                "metric_value": ":,",
+                                "fatalities": ":,",
+                                "battles": ":,",
+                                "explosions_remote_violence": ":,",
+                                "violence_against_civilians": ":,",
+                                "strategic_developments": ":,",
+                                "protests": ":,",
+                                "riots": ":,",
+                                "violent_actors": ":,",
+                                "centroid_latitude": False,
+                                "centroid_longitude": False,
+                                "admin1": False,
+                                "country": False,
+                                "bubble_size": False,
+                            },
+                            projection="natural earth",
+                            title="Current conflict-related hotspots",
+                            color_discrete_map={
+                                "Battles": "#ef4444",
+                                "Explosions / remote violence": "#f59e0b",
+                                "Violence against civilians": "#fde047",
+                                "Strategic developments": "#60a5fa",
+                                "Protests": "#a78bfa",
+                                "Riots": "#f472b6",
+                            },
                         )
 
-                        if selected_points:
-                            point = selected_points[0]
-                            curve_number = point.get("curveNumber")
-                            point_number = point.get("pointNumber")
-                            if curve_number is not None and point_number is not None:
-                                trace = fig.data[curve_number]
-                                custom = trace.customdata[point_number]
-                                st.session_state["map_selected_country"] = str(custom[0])
-                                st.session_state["map_selected_admin1"] = str(custom[1])
-                                st.rerun()
+                        fig.update_traces(
+                            marker=dict(line=dict(width=0.4, color="rgba(255,255,255,0.35)"), opacity=0.82),
+                            hovertemplate=(
+                                "<b style='font-size:16px'>%{hovertext}</b><br><br>"
+                                + f"{metric_labels[selected_metric]}: %{{customdata[0]:,}}<br>"
+                                + "Fatalities: %{customdata[1]:,}"
+                                + "<extra></extra>"
+                            ),
+                        )
 
-                        selected_country = st.session_state.get("map_selected_country")
-                        selected_admin1 = st.session_state.get("map_selected_admin1")
-                        selected_row = None
-                        if selected_country and selected_admin1:
-                            match = grouped[
-                                grouped["country"].astype(str).eq(str(selected_country))
-                                & grouped["admin1"].astype(str).eq(str(selected_admin1))
-                            ]
-                            if not match.empty:
-                                selected_row = match.sort_values("metric_value", ascending=False).iloc[0]
-
-                        if selected_row is not None:
-                            st.markdown(
-                                f"""
-<div style="background:rgba(15,23,42,0.82); border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:16px 18px; margin-top:10px; margin-bottom:18px;">
-  <div style="font-size:30px; font-weight:700; margin-bottom:8px;">{selected_row['admin1']}, {selected_row['country']}</div>
-  <div style="font-size:18px; line-height:1.6;">
-    <b>{metric_labels[selected_metric]}:</b> {int(selected_row['metric_value']):,}<br>
-    <b>Fatalities:</b> {int(selected_row['fatalities']):,}<br>
-    <b>Battles:</b> {int(selected_row['battles']):,}<br>
-    <b>Explosions / remote violence:</b> {int(selected_row['explosions_remote_violence']):,}<br>
-    <b>Violence against civilians:</b> {int(selected_row['violence_against_civilians']):,}<br>
-    <b>Strategic developments:</b> {int(selected_row['strategic_developments']):,}<br>
-    <b>Protests:</b> {int(selected_row['protests']):,}<br>
-    <b>Riots:</b> {int(selected_row['riots']):,}<br>
-    <b>Violent actors:</b> {int(selected_row['violent_actors']):,}
-  </div>
-</div>
-                                """,
-                                unsafe_allow_html=True,
+                        fig.update_layout(
+                            hoverlabel=dict(
+                                bgcolor="rgba(20,20,20,0.95)",
+                                font_size=14,
+                                font_family="Arial"
                             )
+                        )
+
+                        fig.update_geos(
+                            showframe=False,
+                            showcoastlines=True,
+                            coastlinecolor="rgba(180,180,180,0.35)",
+                            showcountries=True,
+                            countrycolor="rgba(180,180,180,0.35)",
+                            showland=True,
+                            landcolor="#111827",
+                            showocean=True,
+                            oceancolor="#020617",
+                            bgcolor="#020617",
+                        )
+                        fig.update_layout(
+                            paper_bgcolor="#020617",
+                            plot_bgcolor="#020617",
+                            font=dict(color="white"),
+                            legend_title_text="Dominant category (Click on legend to (de)select categories)",
+                            margin=dict(l=0, r=0, t=60, b=0),
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
 
                         summary_cols = [
                             "country",
@@ -1104,13 +934,7 @@ if show_map:
                         if selected_metric in {"battles", "explosions_remote_violence", "violence_against_civilians", "fatalities"}:
                             summary_cols = [c for c in summary_cols if c != selected_metric]
 
-                        top_hotspots_base = grouped.copy()
-                        if selected_country:
-                            only_country_view = top_hotspots_base[top_hotspots_base["country"].astype(str).eq(str(selected_country))].copy()
-                            if not only_country_view.empty:
-                                top_hotspots_base = only_country_view
-
-                        top_hotspots = top_hotspots_base.sort_values("metric_value", ascending=False)[summary_cols].head(25).copy()
+                        top_hotspots = grouped.sort_values("metric_value", ascending=False)[summary_cols].head(25).copy()
                         top_hotspots = top_hotspots.rename(
                             columns={
                                 "country": "Country",
