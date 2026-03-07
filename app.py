@@ -447,7 +447,7 @@ with st.sidebar.expander("Advanced Settings"):
         "Escalation alert threshold (0–100)",
         min_value=0,
         max_value=100,
-        value=50,
+        value=35,
         step=1,
         help="Months where the Escalation Index exceeds this are flagged as escalation events.",
     )
@@ -722,14 +722,17 @@ else:
                             import numpy as np
                             idx_df = idx_df.copy()
                             idx_df["_rising"] = (idx_df["index_smoothed"].diff() > 0).astype(int)
-                            idx_df["_rising2"] = (
-                                idx_df["_rising"] + idx_df["_rising"].shift(1).fillna(0)
-                            )
                             idx_df["_lead_signal"] = idx_df["c_strategic"] + idx_df["c_explosion"]
+                            # Fire when index is below threshold but approaching it (within 20pts),
+                            # at least one leading component is elevated (>50th pct), and index rising
                             warn_rows = idx_df[
                                 (idx_df["index_smoothed"] < escalation_threshold)
-                                & (idx_df["_lead_signal"] > 0.9)
-                                & (idx_df["_rising2"] >= 2)
+                                & (idx_df["index_smoothed"] > escalation_threshold - 20)
+                                & (
+                                    (idx_df["c_strategic"] > 0.5)
+                                    | (idx_df["c_explosion"] > 0.5)
+                                )
+                                & (idx_df["_rising"] == 1)
                             ]
 
                             # ── 3-month forecast (linear trend on last 6 months) ──
