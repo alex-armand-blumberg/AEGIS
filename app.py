@@ -3,7 +3,6 @@ import base64
 from pathlib import Path
 from datetime import date, datetime, timedelta, timezone
 
-import json
 import numpy as np
 import pandas as pd
 import requests
@@ -13,6 +12,8 @@ import feedparser
 # Optional: used for the interactive map.
 try:
     import plotly.express as px
+    import plotly.graph_objects as go
+    from streamlit_plotly_events import plotly_events
     _HAS_PLOTLY = True
 except Exception:
     _HAS_PLOTLY = False
@@ -26,21 +27,33 @@ st.set_page_config(
     layout="wide",
 )
 
+HF_WORLD_CSV_URL = "https://huggingface.co/datasets/alex-armand-blumberg/UCDP/resolve/main/GEDEvent_v25_1%203.csv"
+UKRAINE_SAMPLE_PATH = Path("ukraine_sample.csv")
+
 # Public ArcGIS layer for ACLED monthly subnational indicators
 ACLED_ARCGIS_QUERY_URL = (
     "https://services8.arcgis.com/xu983xJB6fIDCjpX/arcgis/rest/services/ACLED/FeatureServer/0/query"
 )
 ACLED_FIELDS = [
-    "country", "admin1", "event_month",
-    "battles", "explosions_remote_violence", "protests", "riots",
-    "strategic_developments", "violence_against_civilians",
-    "violent_actors", "fatalities",
-    "centroid_longitude", "centroid_latitude", "ObjectId",
+    "country",
+    "admin1",
+    "event_month",
+    "battles",
+    "explosions_remote_violence",
+    "protests",
+    "riots",
+    "strategic_developments",
+    "violence_against_civilians",
+    "violent_actors",
+    "fatalities",
+    "centroid_longitude",
+    "centroid_latitude",
+    "ObjectId",
 ]
 
 
 # ----------------------------
-# Live conflict news helpers
+# Live conflict news feed helpers
 # ----------------------------
 NEWS_FEED_URL = (
     "https://news.google.com/rss/search?"
@@ -58,28 +71,39 @@ def get_favicon(url: str) -> str:
 @st.cache_data(ttl=900, show_spinner=False)
 def load_live_conflict_news(max_items: int = 5):
     feed = feedparser.parse(NEWS_FEED_URL)
+
     items = []
     for entry in feed.entries[:max_items]:
+        published_raw = entry.get("published", "") or entry.get("updated", "")
         published_dt = None
+
         try:
             if hasattr(entry, "published_parsed") and entry.published_parsed:
                 published_dt = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
             elif hasattr(entry, "updated_parsed") and entry.updated_parsed:
                 published_dt = datetime(*entry.updated_parsed[:6], tzinfo=timezone.utc)
         except Exception:
-            pass
+            published_dt = None
+
         source = entry.get("source", {})
-        source_title = source.get("title", "Unknown source") if hasattr(source, "get") else "Unknown source"
-        items.append({
-            "title": entry.get("title", "Untitled"),
-            "link": entry.get("link", ""),
-            "source": source_title,
-            "published_raw": entry.get("published", ""),
-            "published_dt": published_dt,
-            "media_content": entry.get("media_content", []),
-            "media_thumbnail": entry.get("media_thumbnail", []),
-            "summary": entry.get("summary", ""),
-        })
+        if hasattr(source, 'get'):
+            source_title = source.get("title", "Unknown source")
+        else:
+            source_title = "Unknown source"
+
+        items.append(
+            {
+                "title": entry.get("title", "Untitled"),
+                "link": entry.get("link", ""),
+                "source": source_title,
+                "published_raw": published_raw,
+                "published_dt": published_dt,
+                "media_content": entry.get("media_content", []),
+                "media_thumbnail": entry.get("media_thumbnail", []),
+                "summary": entry.get("summary", ""),
+            }
+        )
+
     return items
 
 
@@ -88,65 +112,151 @@ def format_news_age(dt_obj):
         return ""
     now = datetime.now(timezone.utc)
     delta = now - dt_obj
+
     if delta < timedelta(minutes=1):
         return "just now"
     if delta < timedelta(hours=1):
-        return f"{int(delta.total_seconds() // 60)}m ago"
+        mins = int(delta.total_seconds() // 60)
+        return f"{mins}m ago"
     if delta < timedelta(days=1):
-        return f"{int(delta.total_seconds() // 3600)}h ago"
-    return f"{delta.days}d ago"
-
+        hrs = int(delta.total_seconds() // 3600)
+        return f"{hrs}h ago"
+    days = delta.days
+    return f"{days}d ago"
 
 def get_source_logo_url(source_name: str) -> str:
     source_map = {
-        "Reuters": "reuters.com", "Associated Press": "apnews.com", "AP News": "apnews.com",
-        "BBC News": "bbc.com", "BBC": "bbc.com", "CNN": "cnn.com",
-        "The New York Times": "nytimes.com", "New York Times": "nytimes.com",
-        "Financial Times": "ft.com", "Politico": "politico.com",
-        "Council on Foreign Relations": "cfr.org", "Foreign Affairs": "foreignaffairs.com",
-        "The Washington Post": "washingtonpost.com", "Wall Street Journal": "wsj.com",
-        "Al Jazeera": "aljazeera.com", "The Guardian": "theguardian.com",
-        "Bloomberg": "bloomberg.com", "CNBC": "cnbc.com", "Fox News": "foxnews.com",
-        "NBC News": "nbcnews.com", "CBS News": "cbsnews.com", "ABC News": "abcnews.go.com",
+        "Reuters": "reuters.com",
+        "Associated Press": "apnews.com",
+        "AP News": "apnews.com",
+        "BBC News": "bbc.com",
+        "BBC": "bbc.com",
+        "CNN": "cnn.com",
+        "The New York Times": "nytimes.com",
+        "New York Times": "nytimes.com",
+        "Financial Times": "ft.com",
+        "Politico": "politico.com",
+        "Council on Foreign Relations": "cfr.org",
+        "Foreign Affairs": "foreignaffairs.com",
+        "The Washington Post": "washingtonpost.com",
+        "Wall Street Journal": "wsj.com",
+        "Al Jazeera": "aljazeera.com",
+        "The Guardian": "theguardian.com",
+        "Bloomberg": "bloomberg.com",
+        "CNBC": "cnbc.com",
+        "Fox News": "foxnews.com",
+        "NBC News": "nbcnews.com",
+        "CBS News": "cbsnews.com",
+        "ABC News": "abcnews.go.com",
+        "KUOW": "kuow.org",
     }
+
     domain = source_map.get(source_name, "")
     if not domain:
         cleaned = (
             source_name.lower()
-            .replace("the ", "").replace(" news", "")
-            .replace(" ", "").replace(".", "")
+            .replace("the ", "")
+            .replace(" news", "")
+            .replace(" ", "")
+            .replace(".", "")
         )
         domain = f"{cleaned}.com"
+
     return f"https://www.google.com/s2/favicons?sz=128&domain={domain}"
 
+# ----------------------------
+# Robust CSV loading helpers
+# ----------------------------
+def _read_csv_attempt(data: bytes, *, encoding: str, sep):
+    bio = io.BytesIO(data)
+    if sep is None:
+        return pd.read_csv(bio, encoding=encoding, sep=None, engine="python", on_bad_lines="skip")
+    bio.seek(0)
+    return pd.read_csv(bio, encoding=encoding, sep=sep, engine="python", on_bad_lines="skip")
 
-@st.cache_data(ttl=900, show_spinner=False)
-def load_country_news(country: str, max_items: int = 5):
-    query = requests.utils.quote(f"{country} conflict war military")
-    url = f"https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
-    feed = feedparser.parse(url)
-    items = []
-    for entry in feed.entries[:max_items]:
-        published_dt = None
-        try:
-            if hasattr(entry, "published_parsed") and entry.published_parsed:
-                published_dt = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
-        except Exception:
-            pass
-        source = entry.get("source", {})
-        source_title = source.get("title", "Unknown source") if hasattr(source, "get") else "Unknown source"
-        items.append({
-            "title": entry.get("title", "Untitled"),
-            "link": entry.get("link", ""),
-            "source": source_title,
-            "published_dt": published_dt,
-        })
-    return items
+
+@st.cache_data(show_spinner=False)
+def read_csv_bytes_robust(data: bytes) -> pd.DataFrame:
+    encodings = ["utf-8", "utf-8-sig", "latin-1"]
+    seps = [None, ",", ";", "\t"]
+
+    last_err = None
+    for enc in encodings:
+        for sep in seps:
+            try:
+                df = _read_csv_attempt(data, encoding=enc, sep=sep)
+                if df.shape[1] >= 2 and df.shape[0] >= 1:
+                    return df
+            except Exception as e:
+                last_err = e
+
+    raise last_err if last_err else ValueError("Could not parse CSV (unknown error).")
+
+
+@st.cache_data(show_spinner=False)
+def read_csv_path_robust(path_str: str) -> pd.DataFrame:
+    p = Path(path_str)
+    return read_csv_bytes_robust(p.read_bytes())
+
+
+@st.cache_data(show_spinner=False)
+def download_bytes(url: str) -> bytes:
+    r = requests.get(url, timeout=60, headers={"User-Agent": "Mozilla/5.0"})
+    r.raise_for_status()
+    return r.content
 
 
 # ----------------------------
-# ACLED data fetcher
+# App helpers
 # ----------------------------
+def require_columns(df: pd.DataFrame, cols: list[str], label: str = "Dataset"):
+    missing = [c for c in cols if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"{label} is missing required columns: {missing}. Available columns: {list(df.columns)[:20]}"
+        )
+
+
+def parse_thresholds(raw: str) -> list[float]:
+    vals = []
+    for part in str(raw).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        vals.append(float(part))
+    return vals
+
+
+def build_country_daily(df: pd.DataFrame, country_col: str, date_col: str, fatal_col: str) -> pd.DataFrame:
+    d = df[[country_col, date_col, fatal_col]].copy()
+    d[date_col] = pd.to_datetime(d[date_col], errors="coerce")
+    d = d.dropna(subset=[date_col])
+    d[fatal_col] = pd.to_numeric(d[fatal_col], errors="coerce").fillna(0)
+
+    out = (
+        d.groupby([country_col, pd.Grouper(key=date_col, freq="D")], as_index=False)[fatal_col]
+        .sum()
+        .rename(columns={country_col: "country", date_col: "date", fatal_col: "fatalities"})
+        .sort_values(["country", "date"])
+    )
+    return out
+
+
+def compute_escalation_starts(series: pd.Series, threshold: float, persistence_days: int) -> pd.Series:
+    above = series > threshold
+    consec = above.groupby((~above).cumsum()).cumcount() + 1
+    consec = consec.where(above, 0)
+    in_escalation = consec >= persistence_days
+    starts = in_escalation & (~in_escalation.shift(1, fill_value=False))
+    return starts
+
+
+@st.cache_data(show_spinner=False)
+def load_world_dataset_for_map() -> pd.DataFrame:
+    b = download_bytes(HF_WORLD_CSV_URL)
+    return read_csv_bytes_robust(b)
+
+
 def _parse_arcgis_date_col(series: pd.Series) -> pd.Series:
     if pd.api.types.is_numeric_dtype(series):
         return pd.to_datetime(series, unit="ms", errors="coerce", utc=True).dt.tz_localize(None)
@@ -197,9 +307,16 @@ def fetch_acled_arcgis_monthly() -> pd.DataFrame:
 
     df = pd.DataFrame(rows)
     numeric_cols = [
-        "battles", "explosions_remote_violence", "protests", "riots",
-        "strategic_developments", "violence_against_civilians",
-        "violent_actors", "fatalities", "centroid_longitude", "centroid_latitude",
+        "battles",
+        "explosions_remote_violence",
+        "protests",
+        "riots",
+        "strategic_developments",
+        "violence_against_civilians",
+        "violent_actors",
+        "fatalities",
+        "centroid_longitude",
+        "centroid_latitude",
     ]
     for col in numeric_cols:
         if col in df.columns:
@@ -208,252 +325,7 @@ def fetch_acled_arcgis_monthly() -> pd.DataFrame:
     df["event_month"] = _parse_arcgis_date_col(df["event_month"]).dt.normalize()
     df = df.dropna(subset=["event_month", "centroid_longitude", "centroid_latitude"])
     df = df[df["centroid_latitude"].between(-90, 90) & df["centroid_longitude"].between(-180, 180)]
-    # Drop any future placeholder months the layer may contain
-    today = pd.Timestamp.now().normalize()
-    df = df[df["event_month"] <= today]
     return df
-
-
-# ----------------------------
-# ACLED API full-history fetch (new OAuth system — uses myACLED email + password)
-# No API key needed. Register free at acleddata.com/user/register
-# ----------------------------
-ACLED_OAUTH_URL  = "https://acleddata.com/oauth/token"
-ACLED_API_URL    = "https://acleddata.com/api/acled/read"
-
-ACLED_EVENT_TYPE_MAP = {
-    "Battles":                      "battles",
-    "Explosions/Remote violence":   "explosions_remote_violence",
-    "Violence against civilians":   "violence_against_civilians",
-    "Strategic developments":       "strategic_developments",
-    "Protests":                     "protests",
-    "Riots":                        "riots",
-}
-
-
-def _get_acled_oauth_token(email: str, password: str) -> str:
-    """Exchange myACLED credentials for a 24-hour bearer token."""
-    r = requests.post(
-        ACLED_OAUTH_URL,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        data={
-            "username":   email.strip(),
-            "password":   password.strip(),
-            "grant_type": "password",
-            "client_id":  "acled",
-        },
-        timeout=30,
-    )
-    if r.status_code != 200:
-        raise RuntimeError(
-            f"ACLED login failed ({r.status_code}). Check your email and password."
-        )
-    return r.json()["access_token"]
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_acled_api_historical(
-    email: str, password: str, country: str,
-    start_year: int = 2010, end_year: int = 2100
-) -> pd.DataFrame:
-    """
-    Pull ACLED events for a SINGLE country via the authenticated API,
-    filtered server-side by country and year so only relevant rows transfer.
-    Key fixes vs old version:
-      - fields separator is | not ,
-      - year filter passed to API so we don't fetch decades of data
-      - pagination uses offset not page
-      - JSON is default format, no _format param needed
-    """
-    token = _get_acled_oauth_token(email, password)
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "User-Agent": "Mozilla/5.0",
-    }
-
-    all_rows = []
-    page = 1
-    page_size = 5000
-    end_year_clamped = min(end_year, pd.Timestamp.now().year)
-
-    while True:
-        params = {
-            "country":    country,
-            "year":       f"{start_year}|{end_year_clamped}",
-            "year_where": "BETWEEN",
-            "fields":     "event_date|country|event_type|fatalities|latitude|longitude",
-            "limit":      page_size,
-            "page":       page,
-        }
-        r = requests.get(ACLED_API_URL, params=params, headers=headers, timeout=120)
-        r.raise_for_status()
-        payload = r.json()
-
-        data = payload.get("data", [])
-        if not data:
-            break
-
-        all_rows.extend(data)
-        if len(data) < page_size:
-            break
-        page += 1
-        if page > 60:   # safety cap ~300k events
-            break
-
-    if not all_rows:
-        return pd.DataFrame()
-
-    raw = pd.DataFrame(all_rows)
-
-    # Normalise column names — API may return with different casing
-    raw.columns = [c.lower().strip() for c in raw.columns]
-
-    # Find the date column (might be event_date or just date)
-    date_col = next((c for c in raw.columns if "date" in c), None)
-    if date_col is None:
-        return pd.DataFrame()
-
-    raw["event_date"] = pd.to_datetime(raw[date_col], errors="coerce")
-    raw["fatalities"] = pd.to_numeric(raw.get("fatalities", 0), errors="coerce").fillna(0)
-    raw["latitude"]   = pd.to_numeric(raw.get("latitude",  pd.Series(0, index=raw.index)), errors="coerce")
-    raw["longitude"]  = pd.to_numeric(raw.get("longitude", pd.Series(0, index=raw.index)), errors="coerce")
-
-    # Find event_type column
-    type_col = next((c for c in raw.columns if "event_type" in c), None)
-    if type_col:
-        raw["event_type"] = raw[type_col].astype(str).str.strip()
-    else:
-        raw["event_type"] = ""
-
-    # Find country column
-    country_col = next((c for c in raw.columns if c == "country"), None)
-    if country_col is None:
-        raw["country"] = country
-
-    raw = raw.dropna(subset=["event_date"])
-    raw["event_month"] = raw["event_date"].dt.to_period("M").dt.to_timestamp()
-    today = pd.Timestamp.now().normalize()
-    raw = raw[raw["event_month"] <= today]
-
-    for col in ACLED_EVENT_TYPE_MAP.values():
-        raw[col] = 0
-    for api_type, col in ACLED_EVENT_TYPE_MAP.items():
-        raw.loc[raw["event_type"] == api_type, col] = 1
-
-    agg = (
-        raw.groupby(["country", "event_month"], as_index=False)
-        .agg(
-            battles=("battles", "sum"),
-            explosions_remote_violence=("explosions_remote_violence", "sum"),
-            protests=("protests", "sum"),
-            riots=("riots", "sum"),
-            strategic_developments=("strategic_developments", "sum"),
-            violence_against_civilians=("violence_against_civilians", "sum"),
-            fatalities=("fatalities", "sum"),
-            centroid_latitude=("latitude",  "median"),
-            centroid_longitude=("longitude", "median"),
-        )
-    )
-    agg["admin1"] = ""
-    agg["violent_actors"] = 0
-    return agg
-
-
-# ----------------------------
-# Escalation Index computation
-# ----------------------------
-def compute_escalation_index(df: pd.DataFrame, country: str) -> pd.DataFrame:
-    """
-    Monthly Escalation Index (0-100) built from six ACLED components.
-
-    The key design principle: separate INTENSITY (how bad is it right now in
-    absolute terms) from ACCELERATION (is it getting worse). A steady-state
-    war like Ukraine scores high on intensity; a country entering conflict
-    scores high on acceleration. Both are dangerous for different reasons.
-
-      Component                        Weight   Signal type
-      ──────────────────────────────────────────────────────
-      Raw conflict intensity            30%     Lagging anchor — battles +
-        (battles + explosions)                  explosions normalised globally.
-                                                Ensures sustained wars like Ukraine
-                                                score high even with flat MoM change.
-      Event frequency acceleration      20%     Leading — MoM % change in total
-                                                events. Catches countries entering
-                                                or re-escalating conflict.
-      Explosions / remote violence      20%     Leading — shelling/airstrikes
-                                                precede ground battle fatalities.
-      Strategic developments            15%     Leading — troop moves, HQ changes,
-                                                peace deal collapses.
-      Civil unrest (protests + riots)   10%     Leading — social unrest precedes
-                                                armed conflict escalation.
-      Civilian targeting ratio           5%     Leading — shift to civilians signals
-                                                strategic deterioration.
-
-    All components normalised globally (all countries, all months in dataset).
-    """
-    event_cols = [
-        "battles", "explosions_remote_violence", "protests", "riots",
-        "strategic_developments", "violence_against_civilians", "violent_actors",
-    ]
-    agg = (
-        df.groupby(["country", "event_month"], as_index=False)[event_cols + ["fatalities"]]
-        .sum()
-        .sort_values(["country", "event_month"])
-    )
-
-    agg["total_events"] = agg[event_cols].sum(axis=1)
-    agg["violent_events"] = (
-        agg["battles"] + agg["explosions_remote_violence"] + agg["violence_against_civilians"]
-    )
-
-    # Component 1: raw conflict intensity (battles + explosions — absolute scale)
-    agg["intensity_raw"] = agg["battles"] + agg["explosions_remote_violence"]
-
-    # Component 2: event frequency acceleration (MoM % change, clipped to [-2, 10])
-    agg["event_accel_raw"] = (
-        agg.groupby("country")["total_events"]
-        .pct_change()
-        .clip(-2, 10)
-        .fillna(0)
-    )
-
-    # Component 3–5: raw counts
-    agg["explosions_raw"] = agg["explosions_remote_violence"]
-    agg["strategic_raw"]  = agg["strategic_developments"]
-    agg["unrest_raw"]     = agg["protests"] + agg["riots"]
-
-    # Component 6: civilian targeting ratio
-    agg["civ_ratio_raw"] = np.where(
-        agg["violent_events"] > 0,
-        agg["violence_against_civilians"] / agg["violent_events"],
-        0.0,
-    )
-
-    # Normalise every component using percentile rank (0→1) across all country-months.
-    # This prevents one extreme outlier country (e.g. Ukraine) from crushing every
-    # other country's score under min-max scaling. A country in the 80th percentile
-    # globally scores 0.8 regardless of absolute event volume.
-    def pct_rank(col):
-        return agg[col].rank(pct=True, method="average").fillna(0.0)
-
-    agg["c_intensity"]  = pct_rank("intensity_raw")
-    agg["c_accel"]      = pct_rank("event_accel_raw")
-    agg["c_explosion"]  = pct_rank("explosions_raw")
-    agg["c_strategic"]  = pct_rank("strategic_raw")
-    agg["c_unrest"]     = pct_rank("unrest_raw")
-    agg["c_civilian"]   = pct_rank("civ_ratio_raw")
-
-    # Weighted composite → 0–100
-    agg["escalation_index"] = (
-        0.30 * agg["c_intensity"]
-        + 0.20 * agg["c_accel"]
-        + 0.20 * agg["c_explosion"]
-        + 0.15 * agg["c_strategic"]
-        + 0.10 * agg["c_unrest"]
-        + 0.05 * agg["c_civilian"]
-    ) * 100
-
-    return agg[agg["country"] == country].copy().reset_index(drop=True)
 
 
 # ----------------------------
@@ -477,62 +349,69 @@ if VIDEO_PATH.exists():
 st.sidebar.markdown("---")
 st.sidebar.header("Inputs")
 
+use_demo = st.sidebar.checkbox(
+    "Use built-in dataset (recommended for demo)",
+    value=False,
+    help="A small number of countries may not have data.",
+)
+
+uploaded = None
+if not use_demo:
+    uploaded = st.sidebar.file_uploader(
+        "Upload CSV",
+        type=["csv"],
+        help="Upload any CSV that includes country/date/fatalities columns.",
+    )
+
 country_name = st.sidebar.text_input(
     "Country (exact match)",
     "",
-    help="Must match the country name in ACLED exactly (e.g. 'Ukraine', 'Sudan', 'Myanmar').",
+    help="Must match the country values in your dataset exactly (e.g., 'Ukraine').",
 )
 
-# Load ACLED credentials silently from Streamlit secrets
-try:
-    acled_api_email = st.secrets["acled"]["email"]
-    acled_api_key   = st.secrets["acled"]["password"]
-    use_api = bool(acled_api_email and acled_api_key)
-except Exception:
-    acled_api_email = ""
-    acled_api_key   = ""
-    use_api = False
-
+st.write("")
 with st.sidebar.expander("Advanced Settings"):
-    escalation_threshold = st.slider(
-        "Escalation alert threshold (0–100)",
-        min_value=0,
-        max_value=100,
-        value=35,
-        step=1,
-        help="Months where the Escalation Index exceeds this are flagged as escalation events.",
+    country_col = st.text_input(
+        "Name of Country Column",
+        "country",
+        help="Column name that contains the country name for each row.",
     )
-    smooth_window = st.number_input(
-        "Smoothing window (months)",
+
+    date_col = st.text_input(
+        "Name of Date Column",
+        "date_start",
+        help="Column name that contains the event date.",
+    )
+
+    fatalities_col = st.text_input(
+        "Name of Fatalities Column",
+        "best",
+        help="Column name that contains fatalities.",
+    )
+
+    rolling_window = st.number_input(
+        "Rolling window (days)",
         min_value=1,
-        max_value=12,
-        value=3,
+        max_value=365,
+        value=30,
         step=1,
-        help="Rolling average applied to reduce month-to-month noise.",
+        help="Number of days used to compute rolling fatalities.",
     )
-    show_components = st.checkbox(
-        "Show component breakdown chart",
-        value=True,
-        help="Stacked bar chart showing each sub-index contribution.",
+
+    thresholds_raw = st.text_input(
+        "Escalation threshold(s) (comma-separated)",
+        "25,1000",
+        help="One or two thresholds. Example: 25 or 25,50",
     )
-    st.markdown("**Plot date range**")
-    plot_date_col1, plot_date_col2 = st.columns(2)
-    with plot_date_col1:
-        plot_start_date = st.date_input(
-            "From",
-            value=date(2020, 1, 1),
-            min_value=date(1997, 1, 1),
-            max_value=date.today(),
-            key="plot_start",
-        )
-    with plot_date_col2:
-        plot_end_date = st.date_input(
-            "To",
-            value=date.today(),
-            min_value=date(2016, 1, 1),
-            max_value=date.today(),
-            key="plot_end",
-        )
+
+    persistence_days = st.number_input(
+        "Persistence (consecutive days above threshold)",
+        min_value=1,
+        max_value=60,
+        value=7,
+        step=1,
+        help="How many consecutive days the rolling fatalities must exceed the threshold.",
+    )
 
 run_btn = st.sidebar.button("Generate plot")
 
@@ -540,8 +419,8 @@ st.sidebar.markdown("---")
 st.sidebar.markdown(
     """
 <div style="opacity:0.6; font-size:13px;">
-Plot data source: ACLED (full history via API).<br>
-Map data source: public ACLED ArcGIS layer.
+Plot data source: UCDP GED (1989–present) via HuggingFace.<br>
+Map data source: public ACLED ArcGIS monthly indicators.
 </div>
 """,
     unsafe_allow_html=True,
@@ -556,7 +435,7 @@ show_map = st.sidebar.checkbox(
 override_map_dates = st.sidebar.checkbox(
     "Override map date range",
     value=False,
-    help="If off, the map automatically uses the latest month available.",
+    help="If off, the map automatically uses the latest month available in the map dataset.",
 )
 
 st.sidebar.markdown("---")
@@ -566,15 +445,11 @@ with st.sidebar.expander("Purpose"):
         """
 **Made as Demo for Palantir© Valley Forge Grants**
 
-AEGIS identifies and visualizes conflict escalation patterns using ACLED event data.
+AEGIS is designed to identify and visualize patterns of conflict escalation using structured event data.
 
-The Escalation Index combines five **leading indicators** — signals that tend to
-precede kinetic violence rather than confirm it after the fact:
-event frequency acceleration, explosions/remote violence, strategic developments,
-civil unrest, and civilian targeting ratio.
+By aggregating fatalities and applying rolling thresholds, the system highlights periods where violence intensifies beyond normal levels.
 
-Unlike fatality counts (a lagging indicator), these signals surface escalation
-pressure before it peaks.
+The goal is to provide analysts with an intuitive tool for exploring global conflict dynamics and detecting potential escalation signals early.
 """
     )
 
@@ -583,17 +458,18 @@ with st.sidebar.expander("Limitations"):
         """
 **Current limitations of AEGIS**
 
-- ACLED public ArcGIS layer is monthly aggregated at subnational level, not individual events.
-- Some countries may have sparse data in earlier months.
-- The Escalation Index is a weighted heuristic, not a trained predictive model.
-- Public map data is monthly and subnational, not individual strike-level event data.
+- Fatality totals aggregate all events since 1989.
+- Some conflicts may be overcounted due to event duplication in the datasets.
+- Escalation detection currently uses simple rolling thresholds.
+- Public ACLED map data is monthly and subnational, not individual strike-level event data.
+- Dataset upload currently limited to 200MB / file.
 
 **Planned improvements**
 
-- Direct ACLED API for weekly/event-level granularity
+- Subnational geolocation mapping for user-uploaded files
 - Actor-level escalation detection
-- ML-based index calibration against historical escalation outcomes
-- Subnational index breakdown
+- Higher-frequency conflict ingestion
+- Improved fatality normalization across datasets
 """
     )
 
@@ -604,38 +480,45 @@ with st.sidebar.expander("Limitations"):
 with st.expander("Live conflict news", expanded=False):
     try:
         news_items = load_live_conflict_news(max_items=5)
+
         if not news_items:
             st.info("No live news items available right now.")
         else:
             for item in news_items:
                 image_url = None
+
                 media_content = item.get("media_content") or []
                 media_thumbnail = item.get("media_thumbnail") or []
+
                 if media_content and isinstance(media_content[0], dict):
                     image_url = media_content[0].get("url")
                 elif media_thumbnail and isinstance(media_thumbnail[0], dict):
                     image_url = media_thumbnail[0].get("url")
 
                 age_txt = format_news_age(item.get("published_dt"))
-                meta = " • ".join(p for p in [item.get("source"), age_txt] if p)
+                meta_parts = [p for p in [item.get("source"), age_txt] if p]
+                meta = " • ".join(meta_parts)
 
                 col1, col2 = st.columns([1, 4])
+
                 with col1:
                     if image_url:
                         st.image(image_url, use_container_width=True)
                     else:
                         st.image(get_source_logo_url(item["source"]), width=500)
+
                 with col2:
                     st.markdown(
                         f"**[{item['title']}]({item['link']})**  \n"
                         f"<span style='opacity:0.75'>{meta}</span>",
                         unsafe_allow_html=True,
                     )
+
                 st.markdown("---")
+
             st.caption("Refreshes automatically every 15 minutes.")
     except Exception as e:
         st.warning(f"Could not load live news feed: {e}")
-
 
 # ----------------------------
 # Main header
@@ -645,232 +528,179 @@ with col1:
     st.image("logo.png", width=2000)
 with col2:
     st.title("AEGIS — Escalation Detection Demo")
-st.caption(
-    "Enter a country name and click Generate plot to see the ACLED-based Escalation Index. "
-    "The index combines five leading indicators — event frequency acceleration, explosions, "
-    "strategic developments, civil unrest, and civilian targeting — into a single 0–100 score."
-)
+st.caption("Upload a dataset (CSV) and choose a country to generate the rolling fatalities plot and escalation-start markers.")
 
 
 # ----------------------------
-# Escalation Index plot section
+# Load primary dataset for plot (demo or upload)
 # ----------------------------
-st.subheader("Escalation Index")
+def load_primary_dataset_for_plot():
+    if use_demo:
+        if not UKRAINE_SAMPLE_PATH.exists():
+            raise FileNotFoundError(
+                "Demo file not found. Put ukraine_sample.csv in the SAME folder as app.py (repo root)."
+            )
+        df_demo = read_csv_path_robust(str(UKRAINE_SAMPLE_PATH))
+        return df_demo, "Built-in demo (ukraine_sample.csv)"
 
-if not run_btn:
-    st.info(
-        "Enter a country name in the sidebar (e.g. **Ukraine**, **Sudan**, **Myanmar**) "
-        "and click **Generate plot**. The interactive map appears below."
-    )
+    if uploaded is None:
+        return None, None
+
+    df_up = read_csv_bytes_robust(uploaded.getvalue())
+    return df_up, "Uploaded CSV"
+
+
+# ----------------------------
+# Escalation plot section
+# ----------------------------
+st.subheader("Escalation plot")
+
+df_raw_plot, plot_source = (None, None)
+try:
+    df_raw_plot, plot_source = load_primary_dataset_for_plot()
+except Exception as e:
+    st.error(str(e))
+
+plot_ready = True
+
+if df_raw_plot is None:
+    st.info("Upload a CSV (or enable the demo), then click **Generate plot**. The interactive map appears below.")
+    plot_ready = False
 else:
-    selected_country = str(country_name).strip()
-    if not selected_country:
-        st.warning("Please enter a country name in the sidebar.")
-    else:
-        spinner_msg = (
-            f"Fetching ACLED history for {selected_country}…"
-            if use_api else
-            f"Loading ACLED data for {selected_country}…"
+    st.caption(f"Plot dataset source: {plot_source}")
+    st.caption("Source: Uppsala Conflict Data Program (UCDP) Georeferenced Event Dataset via HuggingFace.")
+
+    try:
+        require_columns(df_raw_plot, [country_col, date_col, fatalities_col], "Plot dataset")
+    except Exception as e:
+        st.error(str(e))
+        plot_ready = False
+
+    if plot_ready and (not run_btn):
+        st.info("CSV loaded — now click **Generate plot**.")
+        plot_ready = False
+
+if plot_ready:
+    try:
+        import matplotlib.pyplot as plt
+
+        _progress = st.progress(0, text="Loading data…")
+        df_plot = df_raw_plot[[country_col, date_col, fatalities_col]].copy()
+        df_plot = df_plot.rename(
+            columns={
+                country_col: "country",
+                date_col: "date",
+                fatalities_col: "fatalities",
+            }
         )
-        with st.spinner(spinner_msg):
-            try:
-                if use_api:
-                    df_acled = fetch_acled_api_historical(acled_api_email, acled_api_key, selected_country, start_year=plot_start_date.year, end_year=plot_end_date.year)
-                    data_label = "ACLED API (full history)"
-                else:
-                    df_acled = fetch_acled_arcgis_monthly()
-                    data_label = "ACLED ArcGIS layer (~13 months)"
 
-                if df_acled.empty:
-                    st.error(
-                        f"No data found for **{selected_country}**. "
-                        "Check spelling and capitalisation (e.g. 'Ukraine', not 'ukraine'). "
-                        "Country names must match ACLED exactly."
-                    )
-                else:
-                    st.caption(f"Data source: {data_label} · {len(df_acled):,} country-month rows loaded ({df_acled['event_month'].min().strftime('%b %Y') if not df_acled.empty else '?'} – {df_acled['event_month'].max().strftime('%b %Y') if not df_acled.empty else '?'})")
-                    idx_df = compute_escalation_index(df_acled, selected_country)
+        df_plot["country"] = df_plot["country"].astype(str).str.strip()
+        df_plot["date"] = pd.to_datetime(df_plot["date"], errors="coerce")
+        df_plot["fatalities"] = pd.to_numeric(df_plot["fatalities"], errors="coerce")
+        df_plot = df_plot.dropna(subset=["country", "date", "fatalities"])
+        df_plot = df_plot[df_plot["fatalities"] >= 0]
 
-                    if idx_df.empty:
-                        st.warning(f"No monthly data could be computed for {selected_country}.")
+        daily = (
+            df_plot.groupby(["country", "date"], as_index=False)["fatalities"]
+            .sum()
+            .sort_values(["country", "date"])
+        )
+        _progress.progress(30, text="Filtering country…")
+
+        selected_country = str(country_name).strip()
+        c_daily = daily[daily["country"] == selected_country].copy()
+
+        if c_daily.empty:
+            st.warning(
+                f"No rows found for country='{selected_country}'. Check spelling/case or rewrite in the following format: [Current Name] ([Previous Name])."
+            )
+        else:
+            c_daily = c_daily.sort_values("date").set_index("date")
+            full_index = pd.date_range(start=c_daily.index.min(), end=c_daily.index.max(), freq="D")
+            c_daily = c_daily.reindex(full_index)
+            c_daily.index.name = "date"
+            c_daily["country"] = selected_country
+            c_daily["fatalities"] = pd.to_numeric(c_daily["fatalities"], errors="coerce").fillna(0.0)
+
+            window_days = int(rolling_window)
+            c_daily["rolling"] = c_daily["fatalities"].rolling(window=window_days, min_periods=1).sum()
+            _progress.progress(60, text="Computing escalation thresholds…")
+
+            thresholds = parse_thresholds(thresholds_raw)
+            if not thresholds:
+                st.error("Please provide at least one threshold (e.g., 25 or 25,50).")
+            else:
+                fig, ax = plt.subplots(figsize=(10, 5))
+                ax.plot(c_daily.index, c_daily["rolling"], label="Rolling fatalities")
+                summary_frames = []
+
+                for i, thr in enumerate(thresholds):
+                    ax.axhline(y=thr, linestyle="--", linewidth=1, label=f"Threshold {i+1}: {thr:g}")
+                    starts = compute_escalation_starts(c_daily["rolling"], thr, int(persistence_days))
+
+                    if starts is None:
+                        starts = []
+                    elif isinstance(starts, pd.Series):
+                        starts = starts[starts].index if starts.dtype == bool else starts.tolist()
+                    elif isinstance(starts, pd.Index):
+                        starts = list(starts)
                     else:
-                        import matplotlib.pyplot as plt
-                        import matplotlib.dates as mdates
+                        starts = list(starts)
 
-                        w = int(smooth_window)
-                        idx_df["index_smoothed"] = (
-                            idx_df["escalation_index"]
-                            .rolling(window=w, min_periods=1)
-                            .mean()
-                        )
+                    if len(starts) > 0:
+                        if all(isinstance(x, int) for x in starts):
+                            start_dates = c_daily.index[starts]
+                        else:
+                            start_dates = pd.Index(starts)
 
-                        # Apply date range filter
-                        if plot_start_date <= plot_end_date:
-                            idx_df = idx_df[
-                                (idx_df["event_month"].dt.date >= plot_start_date)
-                                & (idx_df["event_month"].dt.date <= plot_end_date)
-                            ].copy()
+                        start_dates = start_dates.intersection(c_daily.index)
 
-                        if idx_df.empty:
-                            st.warning(
-                                f"No data for {selected_country} between "
-                                f"{plot_start_date} and {plot_end_date}. "
-                                "Try widening the date range in Advanced Settings."
+                        if len(start_dates) > 0:
+                            ax.scatter(
+                                start_dates,
+                                c_daily.loc[start_dates, "rolling"],
+                                s=40,
+                                label=f"Escalation starts (thr={thr:g})",
+                            )
+                            starts_df = (
+                                c_daily.loc[start_dates, ["rolling"]]
+                                .reset_index()
+                                .rename(columns={"index": "date"})
+                                .assign(threshold=thr)
+                                .sort_values("date")
                             )
                         else:
-                            dates     = pd.to_datetime(idx_df["event_month"])
-                            esc_rows  = idx_df[idx_df["index_smoothed"] > escalation_threshold]
+                            starts_df = pd.DataFrame(columns=["date", "rolling", "threshold"])
+                    else:
+                        starts_df = pd.DataFrame(columns=["date", "rolling", "threshold"])
 
-                            # ── Main escalation index chart ──────────────
-                            fig, ax = plt.subplots(figsize=(12, 5))
-                            fig.patch.set_facecolor("#020617")
-                            ax.set_facecolor("#0f172a")
+                    summary_frames.append((thr, starts_df))
 
-                            ax.axhspan(escalation_threshold, 100, alpha=0.07, color="#ef4444", zorder=0)
-                            ax.axhline(
-                                y=escalation_threshold, color="#ef4444",
-                                linestyle="--", linewidth=1.2,
-                                label=f"Alert threshold ({escalation_threshold})",
-                            )
-                            ax.plot(dates, idx_df["escalation_index"],
-                                    color="#60a5fa", alpha=0.25, linewidth=1)
-                            ax.plot(
-                                dates, idx_df["index_smoothed"],
-                                color="#60a5fa", linewidth=2.5,
-                                label=f"Escalation Index ({w}-month smoothed)",
-                            )
-                            if not esc_rows.empty:
-                                ax.scatter(
-                                    pd.to_datetime(esc_rows["event_month"]),
-                                    esc_rows["index_smoothed"],
-                                    color="#ef4444", s=60, zorder=5,
-                                    label=f"Escalation flagged ({len(esc_rows)} months)",
-                                )
+                ax.set_title(f"AEGIS Escalation Detection — {selected_country} (rolling={window_days}d)")
+                ax.set_xlabel("Date")
+                ax.set_ylabel("Rolling fatalities")
+                ax.grid(True, alpha=0.3)
+                ax.legend()
+                _progress.progress(90, text="Rendering chart…")
+                st.pyplot(fig, clear_figure=True)
+                _progress.progress(100, text="Done.")
+                _progress.empty()
 
-                            ax.set_title(
-                                f"AEGIS Escalation Index — {selected_country}",
-                                color="white", fontsize=15, pad=12,
-                            )
-                            ax.set_xlabel("Month", color="#94a3b8")
-                            ax.set_ylabel("Escalation Index (0–100)", color="#94a3b8")
-                            ax.tick_params(colors="#94a3b8")
-                            ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
-                            ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-                            plt.xticks(rotation=35, ha="right")
-                            ax.set_ylim(0, 105)
-                            ax.grid(True, alpha=0.15, color="#334155")
-                            for spine in ax.spines.values():
-                                spine.set_edgecolor("#334155")
-                            ax.legend(
-                                facecolor="#1e293b", edgecolor="#334155",
-                                labelcolor="white", fontsize=10,
-                            )
-                            fig.tight_layout()
-                            st.pyplot(fig, clear_figure=True)
+                with st.expander("Preview daily input used for the rolling calculation"):
+                    preview_df = (
+                        c_daily.reset_index()[["date", "fatalities", "rolling"]]
+                        .sort_values("date", ascending=False)
+                        .head(20)
+                    )
+                    st.dataframe(preview_df, use_container_width=True)
 
-                            # ── Component breakdown stacked bar ───────────
-                            if show_components:
-                                fig2, ax2 = plt.subplots(figsize=(12, 4))
-                                fig2.patch.set_facecolor("#020617")
-                                ax2.set_facecolor("#0f172a")
+                with st.expander("Flagged escalation events", expanded=False):
+                    for thr, starts_df in summary_frames:
+                        st.write(f"**Threshold {thr:g}: escalation starts detected = {len(starts_df)}**")
+                        st.dataframe(starts_df.head(10), use_container_width=True)
 
-                                component_data = {
-                                    "Conflict intensity (30%)":  idx_df["c_intensity"] * 30,
-                                    "Event accel. (20%)":        idx_df["c_accel"]     * 20,
-                                    "Explosions (20%)":          idx_df["c_explosion"] * 20,
-                                    "Strategic devs (15%)":      idx_df["c_strategic"] * 15,
-                                    "Unrest / Protests (10%)":   idx_df["c_unrest"]    * 10,
-                                    "Civilian targeting (5%)":   idx_df["c_civilian"]  * 5,
-                                }
-                                colors = ["#ef4444", "#f59e0b", "#f97316", "#60a5fa", "#a78bfa", "#fde047"]
-
-                                bottom = np.zeros(len(idx_df))
-                                for (label, values), color in zip(component_data.items(), colors):
-                                    ax2.bar(
-                                        dates, values.values, bottom=bottom,
-                                        color=color, alpha=0.85, label=label, width=20,
-                                    )
-                                    bottom += values.values
-
-                                ax2.set_title(
-                                    "Index Component Breakdown (weighted contribution per month)",
-                                    color="white", fontsize=13, pad=10,
-                                )
-                                ax2.set_xlabel("Month", color="#94a3b8")
-                                ax2.set_ylabel("Weighted score", color="#94a3b8")
-                                ax2.tick_params(colors="#94a3b8")
-                                ax2.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
-                                ax2.xaxis.set_major_locator(mdates.AutoDateLocator())
-                                plt.xticks(rotation=35, ha="right")
-                                ax2.grid(True, alpha=0.12, color="#334155", axis="y")
-                                for spine in ax2.spines.values():
-                                    spine.set_edgecolor("#334155")
-                                ax2.legend(
-                                    facecolor="#1e293b", edgecolor="#334155",
-                                    labelcolor="white", fontsize=9, loc="upper left",
-                                )
-                                fig2.tight_layout()
-                                st.pyplot(fig2, clear_figure=True)
-
-                            # ── Flagged months table ──────────────────────
-                            st.markdown("### Flagged escalation months")
-                            if esc_rows.empty:
-                                st.info(
-                                    f"No months exceeded the threshold of {escalation_threshold}. "
-                                    "Try lowering the threshold in Advanced Settings."
-                                )
-                            else:
-                                disp = esc_rows[[
-                                    "event_month", "escalation_index", "index_smoothed",
-                                    "battles", "explosions_remote_violence",
-                                    "strategic_developments", "protests", "riots",
-                                    "violence_against_civilians", "fatalities",
-                                ]].copy()
-                                disp["event_month"]      = disp["event_month"].dt.strftime("%b %Y")
-                                disp["escalation_index"] = disp["escalation_index"].round(1)
-                                disp["index_smoothed"]   = disp["index_smoothed"].round(1)
-                                disp = disp.rename(columns={
-                                    "event_month":                "Month",
-                                    "escalation_index":           "Raw Index",
-                                    "index_smoothed":             "Smoothed Index",
-                                    "battles":                    "Battles",
-                                    "explosions_remote_violence": "Explosions",
-                                    "strategic_developments":     "Strategic Devs",
-                                    "protests":                   "Protests",
-                                    "riots":                      "Riots",
-                                    "violence_against_civilians": "Civ. Violence",
-                                    "fatalities":                 "Fatalities",
-                                })
-                                st.dataframe(
-                                    disp.sort_values("Smoothed Index", ascending=False),
-                                    use_container_width=True,
-                                )
-
-                            with st.expander("Full monthly index data"):
-                                full = idx_df[[
-                                    "event_month", "escalation_index", "index_smoothed",
-                                    "total_events", "battles", "explosions_remote_violence",
-                                    "strategic_developments", "protests", "riots",
-                                    "violence_against_civilians", "fatalities",
-                                ]].copy()
-                                full["event_month"]      = full["event_month"].dt.strftime("%b %Y")
-                                full["escalation_index"] = full["escalation_index"].round(1)
-                                full["index_smoothed"]   = full["index_smoothed"].round(1)
-                                st.dataframe(full, use_container_width=True)
-
-                            st.caption(
-                                "Index formula: 30% Raw Conflict Intensity (Battles + Explosions) + "
-                                "20% Event Frequency Acceleration + "
-                                "20% Explosions/Remote Violence + "
-                                "15% Strategic Developments + "
-                                "10% Civil Unrest (Protests + Riots) + "
-                                "5% Civilian Targeting Ratio. "
-                                "All components normalised globally (0–1) across all ACLED countries and months. "
-                                "Source: ACLED via public ArcGIS layer (updated weekly)."
-                            )
-
-            except Exception as e:
-                st.error(f"Error computing escalation index: {e}")
+    except Exception as e:
+        st.error(str(e))
 
 
 # ----------------------------
@@ -886,14 +716,189 @@ def _build_dominant_category(row: pd.Series) -> str:
         "riots": "Riots",
     }
     vals = {k: float(row.get(k, 0) or 0) for k in category_map}
-    return category_map[max(vals, key=vals.get)]
+    best_key = max(vals, key=vals.get)
+    return category_map[best_key]
+
+
+def _estimate_mapbox_zoom(lat_span: float, lon_span: float) -> float:
+    span = max(float(lat_span or 0), float(lon_span or 0), 0.01)
+    if span > 120:
+        return 0.9
+    if span > 80:
+        return 1.3
+    if span > 45:
+        return 2.0
+    if span > 25:
+        return 3.0
+    if span > 12:
+        return 4.0
+    if span > 6:
+        return 5.0
+    if span > 3:
+        return 6.0
+    return 7.0
+
+
+def _compute_view_for_country(df: pd.DataFrame, selected_country: str | None):
+    default_center = {"lat": 18, "lon": 10}
+    default_zoom = 0.95
+
+    if not selected_country:
+        return default_center, default_zoom
+
+    d = df[df["country"].astype(str).str.strip() == str(selected_country).strip()].copy()
+    if d.empty:
+        return default_center, default_zoom
+
+    lat_min = float(d["centroid_latitude"].min())
+    lat_max = float(d["centroid_latitude"].max())
+    lon_min = float(d["centroid_longitude"].min())
+    lon_max = float(d["centroid_longitude"].max())
+
+    center = {
+        "lat": (lat_min + lat_max) / 2,
+        "lon": (lon_min + lon_max) / 2,
+    }
+    zoom = _estimate_mapbox_zoom(lat_max - lat_min, lon_max - lon_min)
+    return center, zoom
+
+
+def _build_map_figure(grouped: pd.DataFrame, metric_labels: dict, selected_metric: str, size_max: int):
+    color_discrete_map = {
+        "Battles": "#ef4444",
+        "Explosions / remote violence": "#f59e0b",
+        "Violence against civilians": "#fde047",
+        "Strategic developments": "#60a5fa",
+        "Protests": "#a78bfa",
+        "Riots": "#f472b6",
+    }
+
+    selected_country = st.session_state.get("map_selected_country")
+    selected_admin1 = st.session_state.get("map_selected_admin1")
+    center, zoom = _compute_view_for_country(grouped, selected_country)
+
+    fig = go.Figure()
+    for category, color in color_discrete_map.items():
+        sub = grouped[grouped["dominant_category"] == category].copy()
+        if sub.empty:
+            continue
+
+        customdata = np.stack([
+            sub["country"].astype(str),
+            sub["admin1"].astype(str),
+            sub["metric_value"].astype(float),
+            sub["fatalities"].astype(float),
+            sub["battles"].astype(float),
+            sub["explosions_remote_violence"].astype(float),
+            sub["violence_against_civilians"].astype(float),
+            sub["strategic_developments"].astype(float),
+            sub["protests"].astype(float),
+            sub["riots"].astype(float),
+            sub["violent_actors"].astype(float),
+        ], axis=-1)
+
+        fig.add_trace(
+            go.Scattermapbox(
+                lat=sub["centroid_latitude"],
+                lon=sub["centroid_longitude"],
+                mode="markers",
+                name=category,
+                customdata=customdata,
+                text=(sub["admin1"].astype(str) + ", " + sub["country"].astype(str)),
+                hovertemplate=(
+                    "<b style='font-size:18px'>%{text}</b><br><br>"
+                    + f"{metric_labels[selected_metric]}: %{{customdata[2]:,.0f}}<br>"
+                    + "Fatalities: %{customdata[3]:,.0f}<br>"
+                    + "Battles: %{customdata[4]:,.0f}<br>"
+                    + "Explosions / remote violence: %{customdata[5]:,.0f}<br>"
+                    + "Violence against civilians: %{customdata[6]:,.0f}<br>"
+                    + "Strategic developments: %{customdata[7]:,.0f}<br>"
+                    + "Protests: %{customdata[8]:,.0f}<br>"
+                    + "Riots: %{customdata[9]:,.0f}<br>"
+                    + "Violent actors: %{customdata[10]:,.0f}"
+                    + "<extra></extra>"
+                ),
+                marker=dict(
+                    size=sub["bubble_size"].astype(float),
+                    sizemode="diameter",
+                    sizemin=4,
+                    color=color,
+                    opacity=0.82,
+                ),
+            )
+        )
+
+    if selected_country and selected_admin1:
+        selected_sub = grouped[
+            grouped["country"].astype(str).eq(str(selected_country))
+            & grouped["admin1"].astype(str).eq(str(selected_admin1))
+        ].copy()
+        if not selected_sub.empty:
+            fig.add_trace(
+                go.Scattermapbox(
+                    lat=selected_sub["centroid_latitude"],
+                    lon=selected_sub["centroid_longitude"],
+                    mode="markers",
+                    name="Selected hotspot",
+                    showlegend=False,
+                    hoverinfo="skip",
+                    marker=dict(
+                        size=(selected_sub["bubble_size"].astype(float) + 10),
+                        sizemode="diameter",
+                        color="rgba(255,255,255,0)",
+                        opacity=1,
+                        allowoverlap=True,
+                        symbol="circle",
+                    ),
+                )
+            )
+            fig.add_trace(
+                go.Scattermapbox(
+                    lat=selected_sub["centroid_latitude"],
+                    lon=selected_sub["centroid_longitude"],
+                    mode="markers",
+                    name="Selected hotspot fill",
+                    showlegend=False,
+                    hoverinfo="skip",
+                    marker=dict(
+                        size=(selected_sub["bubble_size"].astype(float) + 3),
+                        sizemode="diameter",
+                        color="rgba(255,255,255,0.22)",
+                        opacity=1,
+                        allowoverlap=True,
+                        symbol="circle",
+                    ),
+                )
+            )
+
+    fig.update_layout(
+        title="Current conflict-related hotspots",
+        clickmode="event+select",
+        paper_bgcolor="#020617",
+        plot_bgcolor="#020617",
+        font=dict(color="white"),
+        legend_title_text="Dominant category (Click on legend to (de)select categories)",
+        margin=dict(l=0, r=0, t=60, b=0),
+        mapbox=dict(
+            style="carto-darkmatter",
+            center=center,
+            zoom=zoom,
+        ),
+        height=700,
+        hoverlabel=dict(
+            bgcolor="rgba(20,20,20,0.96)",
+            font_size=16,
+            font_family="Arial",
+        ),
+    )
+    return fig
 
 
 if show_map:
     st.markdown("## Interactive map")
 
     if not _HAS_PLOTLY:
-        st.info("Interactive map requires Plotly. Add `plotly` to requirements.txt to enable it.")
+        st.info("Interactive map requires Plotly and streamlit-plotly-events. Add both to requirements.txt to enable it.")
     else:
         try:
             df_map = fetch_acled_arcgis_monthly()
@@ -901,10 +906,12 @@ if show_map:
                 st.warning("No ACLED map data was returned from the public layer.")
             else:
                 violent_cols = [
-                    "battles", "explosions_remote_violence",
-                    "violence_against_civilians", "strategic_developments",
+                    "battles",
+                    "explosions_remote_violence",
+                    "violence_against_civilians",
+                    "strategic_developments",
                 ]
-                latest_month   = df_map["event_month"].max()
+                latest_month = df_map["event_month"].max()
                 earliest_month = df_map["event_month"].min()
 
                 metric_labels = {
@@ -918,39 +925,56 @@ if show_map:
                     "riots": "Riots",
                 }
 
+                if "map_selected_country" not in st.session_state:
+                    st.session_state["map_selected_country"] = None
+                if "map_selected_admin1" not in st.session_state:
+                    st.session_state["map_selected_admin1"] = None
+
                 with st.expander("Conflict map settings", expanded=False):
                     selected_metric = st.selectbox(
                         "Map metric",
                         options=list(metric_labels.keys()),
                         index=1,
                         format_func=lambda x: metric_labels[x],
-                        help="Explosions / remote violence is closest to airstrikes, missile strikes, and shelling.",
+                        help="Explosions / remote violence is the closest built-in category to airstrikes, missile strikes, and shelling.",
                     )
                     show_only_violent = st.checkbox(
                         "Hide rows with no violent activity",
                         value=True,
-                        help="Filters rows where battles, explosions, violence against civilians, and strategic developments are all zero.",
+                        help="Filters out rows where battles, explosions/remote violence, violence against civilians, and strategic developments are all zero.",
                     )
                     only_selected_country = st.checkbox(
                         "Only show the country entered above",
                         value=False,
                     )
-                    size_max = st.slider("Maximum marker size", min_value=10, max_value=45, value=24, step=1)
+                    size_max = st.slider(
+                        "Maximum marker size",
+                        min_value=10,
+                        max_value=45,
+                        value=24,
+                        step=1,
+                    )
                     auto_refresh_map = st.checkbox(
-                        "Auto-refresh map", value=True,
-                        help="Reload the app on a timer so the map picks up new layer updates.",
+                        "Auto-refresh map",
+                        value=True,
+                        help="Reload the app on a timer so the map picks up any new public layer updates.",
                     )
                     refresh_minutes = st.slider(
                         "Auto-refresh interval (minutes)",
-                        min_value=15, max_value=180, value=60, step=15,
+                        min_value=15,
+                        max_value=180,
+                        value=60,
+                        step=15,
                         disabled=not auto_refresh_map,
                     )
+                    reset_map = st.button("Reset map view", use_container_width=True)
+                    if reset_map:
+                        st.session_state["map_selected_country"] = None
+                        st.session_state["map_selected_admin1"] = None
+                        st.rerun()
 
                 if override_map_dates:
-                    default_start = max(
-                        earliest_month.date(),
-                        (latest_month - pd.DateOffset(months=2)).date(),
-                    )
+                    default_start = max(earliest_month.date(), (latest_month - pd.DateOffset(months=2)).date())
                     start_dt, end_dt = st.sidebar.date_input(
                         "Map date range",
                         value=(default_start, latest_month.date()),
@@ -964,16 +988,14 @@ if show_map:
                             & (df_map["event_month"].dt.date <= end_dt)
                         ]
                     else:
-                        start_dt = end_dt = latest_month.date()
+                        start_dt, end_dt = latest_month.date(), latest_month.date()
                         df_map = df_map[df_map["event_month"].dt.date == latest_month.date()]
                 else:
-                    start_dt = end_dt = latest_month.date()
+                    start_dt, end_dt = latest_month.date(), latest_month.date()
                     df_map = df_map[df_map["event_month"].dt.date == latest_month.date()]
 
                 if only_selected_country:
-                    df_map = df_map[
-                        df_map["country"].astype(str).str.strip() == str(country_name).strip()
-                    ]
+                    df_map = df_map[df_map["country"].astype(str).str.strip() == str(country_name).strip()]
 
                 if show_only_violent:
                     df_map = df_map[df_map[violent_cols].fillna(0).sum(axis=1) > 0]
@@ -985,263 +1007,127 @@ if show_map:
                         df_map.groupby(
                             ["country", "admin1", "centroid_latitude", "centroid_longitude"],
                             as_index=False,
-                        )[[
-                            "battles", "explosions_remote_violence", "protests", "riots",
-                            "strategic_developments", "violence_against_civilians",
-                            "violent_actors", "fatalities",
+                        )
+                        [[
+                            "battles",
+                            "explosions_remote_violence",
+                            "protests",
+                            "riots",
+                            "strategic_developments",
+                            "violence_against_civilians",
+                            "violent_actors",
+                            "fatalities",
                         ]]
                         .sum()
                     )
 
                     grouped["dominant_category"] = grouped.apply(_build_dominant_category, axis=1)
-                    grouped["metric_value"] = pd.to_numeric(
-                        grouped[selected_metric], errors="coerce"
-                    ).fillna(0)
+                    grouped["metric_value"] = pd.to_numeric(grouped[selected_metric], errors="coerce").fillna(0)
                     grouped = grouped[grouped["metric_value"] > 0].copy()
 
                     if grouped.empty:
-                        st.info("No positive values for the selected map metric.")
+                        st.info("No positive values were found for the selected map metric.")
                     else:
                         grouped["admin1"] = grouped["admin1"].fillna("Unknown")
-                        raw = grouped["metric_value"].clip(lower=1)
-                        grouped["bubble_size"] = raw.clip(lower=raw.max() * 0.08)
-                        grouped["hover_location"] = grouped["admin1"] + ", " + grouped["country"]
-
-                        st.caption(
-                            f"Source: public ACLED ArcGIS monthly indicators. "
-                            f"Showing {metric_labels[selected_metric]} from {start_dt} to {end_dt}."
-                        )
-                        st.caption(
-                            "This layer is monthly aggregated at the subnational level. "
-                            "Working towards individual strike-by-strike live telemetry."
-                        )
-                        st.caption(
-                            "🗺️ **How to read this map:** Bubble **color** shows the *dominant conflict category* "
-                            "for each region — the event type that occurred most frequently. Bubble **size** reflects "
-                            "the *selected map metric*. These two can differ: a region colored red for Battles may still "
-                            "show a high Explosions count if that's the metric you've selected — both occurred in that "
-                            "region during the same period. Use the metric selector to surface different dimensions of "
-                            "the same underlying conflict data."
+                        raw_metric = grouped["metric_value"].clip(lower=1)
+                        scaled = np.sqrt(raw_metric)
+                        grouped["bubble_size"] = np.interp(
+                            scaled,
+                            (scaled.min(), scaled.max()) if scaled.max() > scaled.min() else (scaled.min(), scaled.min() + 1),
+                            (7, size_max),
                         )
 
-                        # ── Session state for focused country ─────────────
-                        if "map_focused_country" not in st.session_state:
-                            st.session_state["map_focused_country"] = None
-                        focused = st.session_state["map_focused_country"]
+                        st.caption(
+                            f"Source: public ACLED ArcGIS monthly indicators. Showing {metric_labels[selected_metric]} from {start_dt} to {end_dt}."
+                        )
+                        st.caption(
+                            "Click any hotspot to zoom into its country and open a detail card. Hover still works for quick inspection."
+                        )
 
-                        # ── Country picker ────────────────────────────────
-                        country_list = sorted(grouped["country"].dropna().unique().tolist())
-                        col_pick, col_reset = st.columns([5, 1])
-                        with col_pick:
-                            sel = st.selectbox(
-                                "Select a country to zoom and see details",
-                                ["— World view —"] + country_list,
-                                index=(
-                                    0 if focused is None
-                                    else (country_list.index(focused) + 1 if focused in country_list else 0)
-                                ),
-                                label_visibility="collapsed",
-                                key=f"cpick_{selected_metric}_{start_dt}",
-                            )
-                            new_focus = None if sel == "— World view —" else sel
-                            if new_focus != focused:
-                                st.session_state["map_focused_country"] = new_focus
-                                focused = new_focus
-                                st.rerun()
-                        with col_reset:
-                            if focused and st.button("✕ Reset", use_container_width=True):
-                                st.session_state["map_focused_country"] = None
-                                focused = None
+                        fig = _build_map_figure(grouped, metric_labels, selected_metric, size_max)
+                        selected_points = plotly_events(
+                            fig,
+                            click_event=True,
+                            hover_event=False,
+                            select_event=False,
+                            override_height=700,
+                            override_width="100%",
+                            key=f"aegis_map_{selected_metric}_{start_dt}_{end_dt}",
+                        )
+
+                        if selected_points:
+                            point = selected_points[0]
+                            curve_number = point.get("curveNumber")
+                            point_number = point.get("pointNumber")
+                            if curve_number is not None and point_number is not None:
+                                trace = fig.data[curve_number]
+                                custom = trace.customdata[point_number]
+                                st.session_state["map_selected_country"] = str(custom[0])
+                                st.session_state["map_selected_admin1"] = str(custom[1])
                                 st.rerun()
 
-                        # ── Map center / zoom ─────────────────────────────
-                        if focused:
-                            c_rows = grouped[grouped["country"] == focused]
-                            if not c_rows.empty:
-                                clat = (c_rows["centroid_latitude"].min() + c_rows["centroid_latitude"].max()) / 2
-                                clon = (c_rows["centroid_longitude"].min() + c_rows["centroid_longitude"].max()) / 2
-                                span = max(
-                                    c_rows["centroid_latitude"].max() - c_rows["centroid_latitude"].min(),
-                                    c_rows["centroid_longitude"].max() - c_rows["centroid_longitude"].min(),
-                                    0.5,
-                                )
-                                map_center = {"lat": float(clat), "lon": float(clon)}
-                                map_zoom   = float(max(1.5, min(6.0, 5.8 - np.log2(span + 1))))
-                            else:
-                                map_center, map_zoom = {"lat": 20, "lon": 10}, 1.0
-                        else:
-                            map_center, map_zoom = {"lat": 20, "lon": 10}, 1.0
+                        selected_country = st.session_state.get("map_selected_country")
+                        selected_admin1 = st.session_state.get("map_selected_admin1")
+                        selected_row = None
+                        if selected_country and selected_admin1:
+                            match = grouped[
+                                grouped["country"].astype(str).eq(str(selected_country))
+                                & grouped["admin1"].astype(str).eq(str(selected_admin1))
+                            ]
+                            if not match.empty:
+                                selected_row = match.sort_values("metric_value", ascending=False).iloc[0]
 
-                        # ── Layout ────────────────────────────────────────
-                        if focused:
-                            map_col, panel_col = st.columns([3, 1], gap="small")
-                        else:
-                            map_col  = st.container()
-                            panel_col = None
-
-                        with map_col:
-                            fig = px.scatter_mapbox(
-                                grouped,
-                                lat="centroid_latitude",
-                                lon="centroid_longitude",
-                                color="dominant_category",
-                                size="bubble_size",
-                                size_max=size_max,
-                                hover_name="hover_location",
-                                hover_data={
-                                    "metric_value": ":,",
-                                    "fatalities": ":,",
-                                    "battles": ":,",
-                                    "explosions_remote_violence": ":,",
-                                    "violence_against_civilians": ":,",
-                                    "strategic_developments": ":,",
-                                    "protests": ":,",
-                                    "riots": ":,",
-                                    "violent_actors": ":,",
-                                    "centroid_latitude": False,
-                                    "centroid_longitude": False,
-                                    "admin1": False,
-                                    "country": False,
-                                    "bubble_size": False,
-                                    "dominant_category": False,
-                                },
-                                mapbox_style="carto-darkmatter",
-                                center=map_center,
-                                zoom=map_zoom,
-                                title="Current Conflict-Related Hotspots",
-                                color_discrete_map={
-                                    "Battles": "#ef4444",
-                                    "Explosions / remote violence": "#f59e0b",
-                                    "Violence against civilians": "#fde047",
-                                    "Strategic developments": "#60a5fa",
-                                    "Protests": "#a78bfa",
-                                    "Riots": "#f472b6",
-                                },
+                        if selected_row is not None:
+                            st.markdown(
+                                f"""
+<div style="background:rgba(15,23,42,0.82); border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:16px 18px; margin-top:10px; margin-bottom:18px;">
+  <div style="font-size:30px; font-weight:700; margin-bottom:8px;">{selected_row['admin1']}, {selected_row['country']}</div>
+  <div style="font-size:18px; line-height:1.6;">
+    <b>{metric_labels[selected_metric]}:</b> {int(selected_row['metric_value']):,}<br>
+    <b>Fatalities:</b> {int(selected_row['fatalities']):,}<br>
+    <b>Battles:</b> {int(selected_row['battles']):,}<br>
+    <b>Explosions / remote violence:</b> {int(selected_row['explosions_remote_violence']):,}<br>
+    <b>Violence against civilians:</b> {int(selected_row['violence_against_civilians']):,}<br>
+    <b>Strategic developments:</b> {int(selected_row['strategic_developments']):,}<br>
+    <b>Protests:</b> {int(selected_row['protests']):,}<br>
+    <b>Riots:</b> {int(selected_row['riots']):,}<br>
+    <b>Violent actors:</b> {int(selected_row['violent_actors']):,}
+  </div>
+</div>
+                                """,
+                                unsafe_allow_html=True,
                             )
-                            fig.update_traces(
-                                marker=dict(opacity=0.85),
-                                hovertemplate=(
-                                    "<b style='font-size:15px'>%{hovertext}</b><br>"
-                                    + "<span style='color:rgba(255,255,255,0.55);font-size:12px;'>"
-                                    + "Dominant category: %{customdata[14]}</span><br><br>"
-                                    + f"{metric_labels[selected_metric]}: %{{customdata[0]:,}}<br>"
-                                    + "Fatalities: %{customdata[1]:,}"
-                                    + "<extra></extra>"
-                                ),
-                            )
-                            map_h = 760 if focused else 790
-                            fig.update_layout(
-                                paper_bgcolor="#020617",
-                                plot_bgcolor="#020617",
-                                font=dict(color="white"),
-                                title=dict(
-                                    text="Current Conflict-Related Hotspots",
-                                    x=0.5, xanchor="center",
-                                    y=0.98, yanchor="top",
-                                    font=dict(color="white", size=20),
-                                ),
-                                legend=dict(
-                                    title=dict(text="<b>Categories:</b>", side="top", font=dict(color="white", size=12)),
-                                    orientation="h",
-                                    yanchor="bottom", y=-0.10,
-                                    xanchor="left", x=0,
-                                    bgcolor="rgba(2,6,23,0)",
-                                    font=dict(color="white", size=12),
-                                ),
-                                margin=dict(l=0, r=0, t=55, b=75),
-                                height=map_h,
-                                hoverlabel=dict(bgcolor="rgba(20,20,20,0.95)", font_size=13, font_family="Arial"),
-                            )
-                            st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": True})
-
-                        # ── Country info panel ────────────────────────────
-                        if focused and panel_col is not None:
-                            with panel_col:
-                                country_rows = grouped[grouped["country"] == focused]
-                                if not country_rows.empty:
-                                    t = country_rows[[
-                                        "battles", "explosions_remote_violence", "protests",
-                                        "riots", "strategic_developments", "violence_against_civilians",
-                                        "violent_actors", "fatalities",
-                                    ]].sum()
-
-                                    def _card(color, bg, border, val, lbl):
-                                        return (
-                                            f'<div style="background:{bg};border:1px solid {border};'
-                                            f'border-radius:8px;padding:10px 6px;text-align:center;margin-bottom:8px;">'
-                                            f'<div style="font-size:20px;font-weight:800;color:{color};">{val:,}</div>'
-                                            f'<div style="font-size:9px;color:rgba(255,255,255,0.5);margin-top:3px;letter-spacing:.8px;">{lbl}</div>'
-                                            f'</div>'
-                                        )
-
-                                    panel_html = (
-                                        f'<div style="background:linear-gradient(160deg,rgba(10,18,38,0.97),rgba(22,35,60,0.97));'
-                                        f'border-left:3px solid #f59e0b;border-radius:10px;padding:16px 14px;'
-                                        f'font-family:Arial,sans-serif;color:white;">'
-                                        f'<div style="font-size:17px;font-weight:800;margin-bottom:2px;">&#127758; {focused}</div>'
-                                        f'<div style="font-size:9px;color:rgba(255,255,255,0.35);margin-bottom:14px;letter-spacing:1px;">ACLED CONFLICT DATA</div>'
-                                        + _card("#ef4444","rgba(239,68,68,0.13)","rgba(239,68,68,0.3)",    int(t["fatalities"]),               "FATALITIES")
-                                        + _card("#f59e0b","rgba(245,158,11,0.13)","rgba(245,158,11,0.3)",  int(t["explosions_remote_violence"]), "EXPLOSIONS")
-                                        + _card("#f87171","rgba(248,113,113,0.13)","rgba(248,113,113,0.3)",int(t["battles"]),                   "BATTLES")
-                                        + _card("#fde047","rgba(253,224,71,0.13)","rgba(253,224,71,0.3)",  int(t["violence_against_civilians"]), "CIV. VIOLENCE")
-                                        + _card("#60a5fa","rgba(96,165,250,0.13)","rgba(96,165,250,0.3)",  int(t["strategic_developments"]),    "STRATEGIC")
-                                        + _card("#a78bfa","rgba(167,139,250,0.13)","rgba(167,139,250,0.3)",int(t["protests"]),                  "PROTESTS")
-                                        + _card("#f472b6","rgba(244,114,182,0.13)","rgba(244,114,182,0.3)",int(t["riots"]),                     "RIOTS")
-                                        + _card("white","rgba(255,255,255,0.05)","rgba(255,255,255,0.1)",  int(t["violent_actors"]),            "ACTORS")
-                                        + '</div>'
-                                    )
-                                    st.markdown(panel_html, unsafe_allow_html=True)
-
-                                    st.markdown(
-                                        '<div style="font-size:13px;font-weight:700;color:white;margin:14px 0 8px;">&#128240; Recent News</div>',
-                                        unsafe_allow_html=True,
-                                    )
-                                    try:
-                                        news = load_country_news(focused, max_items=5)
-                                        if news:
-                                            for article in news:
-                                                age = format_news_age(article["published_dt"])
-                                                meta = " · ".join(p for p in [article["source"], age] if p)
-                                                title_safe = article["title"]
-                                                link_safe  = article["link"]
-                                                st.markdown(
-                                                    f"[{title_safe}]({link_safe})  \n"
-                                                    f"<span style='opacity:0.45;font-size:10px;'>{meta}</span>",
-                                                    unsafe_allow_html=True,
-                                                )
-                                                st.markdown(
-                                                    "<hr style='border-color:rgba(255,255,255,0.06);margin:6px 0;'>",
-                                                    unsafe_allow_html=True,
-                                                )
-                                        else:
-                                            st.caption("No recent news found.")
-                                    except Exception:
-                                        st.caption("Could not load news.")
 
                         summary_cols = [
-                            "country", "admin1", "metric_value", "fatalities",
-                            "battles", "explosions_remote_violence", "violence_against_civilians",
+                            "country",
+                            "admin1",
+                            "metric_value",
+                            "fatalities",
+                            "battles",
+                            "explosions_remote_violence",
+                            "violence_against_civilians",
                         ]
-                        if selected_metric in {
-                            "battles", "explosions_remote_violence",
-                            "violence_against_civilians", "fatalities",
-                        }:
+                        if selected_metric in {"battles", "explosions_remote_violence", "violence_against_civilians", "fatalities"}:
                             summary_cols = [c for c in summary_cols if c != selected_metric]
 
-                        top_hotspots = (
-                            grouped.sort_values("metric_value", ascending=False)[summary_cols]
-                            .head(25)
-                            .copy()
+                        top_hotspots_base = grouped.copy()
+                        if selected_country:
+                            only_country_view = top_hotspots_base[top_hotspots_base["country"].astype(str).eq(str(selected_country))].copy()
+                            if not only_country_view.empty:
+                                top_hotspots_base = only_country_view
+
+                        top_hotspots = top_hotspots_base.sort_values("metric_value", ascending=False)[summary_cols].head(25).copy()
+                        top_hotspots = top_hotspots.rename(
+                            columns={
+                                "country": "Country",
+                                "admin1": "Admin1",
+                                "metric_value": f"Selected metric ({metric_labels[selected_metric]})",
+                                "fatalities": "Fatalities",
+                                "battles": "Battles",
+                                "explosions_remote_violence": "Explosions / remote violence",
+                                "violence_against_civilians": "Violence against civilians",
+                            }
                         )
-                        top_hotspots = top_hotspots.rename(columns={
-                            "country": "Country",
-                            "admin1": "Admin1",
-                            "metric_value": f"Selected metric ({metric_labels[selected_metric]})",
-                            "fatalities": "Fatalities",
-                            "battles": "Battles",
-                            "explosions_remote_violence": "Explosions / remote violence",
-                            "violence_against_civilians": "Violence against civilians",
-                        })
 
                         with st.expander("Top hotspots in the current view"):
                             st.dataframe(top_hotspots, use_container_width=True)
