@@ -909,6 +909,7 @@ if show_map:
                             ),
                             legend=dict(
                                 title=dict(text="<b>Categories (Double-Click to Isolate):</b>", side="top", font=dict(color="white", size=13)),
+                                help="To isolate one category, it is reccomended to open Conflict Map Settings and select the desired Map Metric.",
                                 orientation="h",
                                 yanchor="bottom",
                                 y=-0.08,
