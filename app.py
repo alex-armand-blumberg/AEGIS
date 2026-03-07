@@ -757,7 +757,7 @@ if show_map:
                         help="Filters out rows where battles, explosions/remote violence, violence against civilians, and strategic developments are all zero.",
                     )
                     only_selected_country = st.checkbox(
-                        "Only show the country entered in the sidebar",
+                        "Only show the country entered above",
                         value=False,
                     )
                     size_max = st.slider(
@@ -907,7 +907,16 @@ if show_map:
                                 yanchor="top",
                                 font=dict(color="white", size=22),
                             ),
-                           
+                            legend=dict(
+                                title=dict(text="<b>Categories (Click to Isolate):</b>", side="top", font=dict(color="white", size=13)),
+                                orientation="h",
+                                yanchor="bottom",
+                                y=-0.08,
+                                xanchor="left",
+                                x=0,
+                                bgcolor="rgba(2,6,23,0)",
+                                font=dict(color="white", size=13),
+                            ),
                             margin=dict(l=0, r=0, t=60, b=80),
                             height=780,
                             hoverlabel=dict(
