@@ -1,3 +1,4 @@
+
 import io
 import base64
 from pathlib import Path
@@ -782,10 +783,11 @@ def _build_map_figure(grouped: pd.DataFrame, metric_labels: dict, selected_metri
             & sub["admin1"].astype(str).eq(str(selected_admin1))
         ) if selected_country and selected_admin1 else pd.Series(False, index=sub.index)
 
-        marker_sizes = sub["bubble_size"].astype(float).tolist()
+        marker_sizes = [
+            float(size) + (8 if sel else 0)
+            for size, sel in zip(sub["bubble_size"].astype(float).tolist(), is_selected.tolist())
+        ]
         marker_opacity = [0.98 if sel else 0.82 for sel in is_selected.tolist()]
-        marker_line_width = [2.8 if sel else 0.5 for sel in is_selected.tolist()]
-        marker_line_color = ["#ffffff" if sel else "rgba(255,255,255,0.35)" for sel in is_selected.tolist()]
 
         customdata = np.stack([
             sub["country"].astype(str),
@@ -828,10 +830,6 @@ def _build_map_figure(grouped: pd.DataFrame, metric_labels: dict, selected_metri
                     "sizemin": 4,
                     "color": color,
                     "opacity": marker_opacity,
-                    "line": {
-                        "width": marker_line_width,
-                        "color": marker_line_color,
-                    },
                 },
             )
         )
@@ -1113,3 +1111,4 @@ if show_map:
 
         except Exception as e:
             st.error(f"Map error: {e}")
+
