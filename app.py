@@ -863,7 +863,7 @@ if show_map:
                     else:
                         grouped["admin1"] = grouped["admin1"].fillna("Unknown")
                         raw = grouped["metric_value"].clip(lower=1)
-                        min_display = raw.max() * 0.05
+                        min_display = raw.max() * 0.01
                         grouped["bubble_size"] = raw.clip(lower=min_display)
                         grouped["hover_location"] = grouped["admin1"] + ", " + grouped["country"]
 
