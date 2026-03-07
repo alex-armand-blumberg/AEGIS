@@ -863,7 +863,7 @@ if show_map:
                     else:
                         grouped["admin1"] = grouped["admin1"].fillna("Unknown")
                         raw = grouped["metric_value"].clip(lower=1)
-                        min_display = raw.max() * 0.01
+                        min_display = raw.max() * 0.08
                         grouped["bubble_size"] = raw.clip(lower=min_display)
                         grouped["hover_location"] = grouped["admin1"] + ", " + grouped["country"]
 
@@ -950,6 +950,7 @@ if show_map:
                                     "admin1": False,
                                     "country": False,
                                     "bubble_size": False,
+                                    "dominant_category": False,
                                 },
                                 mapbox_style="carto-darkmatter",
                                 center=map_center,
@@ -967,7 +968,8 @@ if show_map:
                             fig.update_traces(
                                 marker=dict(opacity=0.85),
                                 hovertemplate=(
-                                    "<b style='font-size:15px'>%{hovertext}</b><br><br>"
+                                    "<b style='font-size:15px'>%{hovertext}</b><br>"
+                                    + "<span style='color:rgba(255,255,255,0.55);font-size:12px;'>Category: %{customdata[14]}</span><br><br>"
                                     + f"{metric_labels[selected_metric]}: %{{customdata[0]:,}}<br>"
                                     + "Fatalities: %{customdata[1]:,}"
                                     + "<extra></extra>"
