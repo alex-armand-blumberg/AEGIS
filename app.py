@@ -357,6 +357,24 @@ with st.sidebar.expander("Advanced Settings"):
         value=True,
         help="Stacked bar chart showing each sub-index contribution.",
     )
+    st.markdown("**Plot date range**")
+    plot_date_col1, plot_date_col2 = st.columns(2)
+    with plot_date_col1:
+        plot_start_date = st.date_input(
+            "From",
+            value=date(2020, 1, 1),
+            min_value=date(2016, 1, 1),
+            max_value=date.today(),
+            key="plot_start",
+        )
+    with plot_date_col2:
+        plot_end_date = st.date_input(
+            "To",
+            value=date.today(),
+            min_value=date(2016, 1, 1),
+            max_value=date.today(),
+            key="plot_end",
+        )
 
 run_btn = st.sidebar.button("Generate plot")
 
@@ -522,159 +540,170 @@ else:
                                 .mean()
                             )
 
-                            dates = pd.to_datetime(idx_df["event_month"])
-                            esc_rows = idx_df[idx_df["index_smoothed"] > escalation_threshold]
+                            # Apply date range filter
+                            if plot_start_date <= plot_end_date:
+                                idx_df = idx_df[
+                                    (idx_df["event_month"].dt.date >= plot_start_date)
+                                    & (idx_df["event_month"].dt.date <= plot_end_date)
+                                ].copy()
 
-                            # ── Main escalation index chart ───────────────
-                            fig, ax = plt.subplots(figsize=(12, 5))
-                            fig.patch.set_facecolor("#020617")
-                            ax.set_facecolor("#0f172a")
-
-                            ax.axhspan(escalation_threshold, 100, alpha=0.07, color="#ef4444", zorder=0)
-                            ax.axhline(
-                                y=escalation_threshold, color="#ef4444",
-                                linestyle="--", linewidth=1.2,
-                                label=f"Alert threshold ({escalation_threshold})",
-                            )
-                            # Raw index (faint background line)
-                            ax.plot(dates, idx_df["escalation_index"],
-                                    color="#60a5fa", alpha=0.25, linewidth=1)
-                            # Smoothed index
-                            ax.plot(
-                                dates, idx_df["index_smoothed"],
-                                color="#60a5fa", linewidth=2.5,
-                                label=f"Escalation Index ({w}-month smoothed)",
-                            )
-                            # Escalation flags
-                            if not esc_rows.empty:
-                                ax.scatter(
-                                    pd.to_datetime(esc_rows["event_month"]),
-                                    esc_rows["index_smoothed"],
-                                    color="#ef4444", s=60, zorder=5,
-                                    label=f"Escalation flagged ({len(esc_rows)} months)",
-                                )
-
-                            ax.set_title(
-                                f"AEGIS Escalation Index — {selected_country}",
-                                color="white", fontsize=15, pad=12,
-                            )
-                            ax.set_xlabel("Month", color="#94a3b8")
-                            ax.set_ylabel("Escalation Index (0–100)", color="#94a3b8")
-                            ax.tick_params(colors="#94a3b8")
-                            ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
-                            ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-                            plt.xticks(rotation=35, ha="right")
-                            ax.set_ylim(0, 105)
-                            ax.grid(True, alpha=0.15, color="#334155")
-                            for spine in ax.spines.values():
-                                spine.set_edgecolor("#334155")
-                            ax.legend(
-                                facecolor="#1e293b", edgecolor="#334155",
-                                labelcolor="white", fontsize=10,
-                            )
-                            fig.tight_layout()
-                            st.pyplot(fig, clear_figure=True)
-
-                            # ── Component breakdown stacked bar ───────────
-                            if show_components:
-                                fig2, ax2 = plt.subplots(figsize=(12, 4))
-                                fig2.patch.set_facecolor("#020617")
-                                ax2.set_facecolor("#0f172a")
-
-                                component_data = {
-                                    "Conflict intensity (30%)":  idx_df["c_intensity"] * 30,
-                                    "Event accel. (20%)":        idx_df["c_accel"]     * 20,
-                                    "Explosions (20%)":          idx_df["c_explosion"] * 20,
-                                    "Strategic devs (15%)":      idx_df["c_strategic"] * 15,
-                                    "Unrest / Protests (10%)":   idx_df["c_unrest"]    * 10,
-                                    "Civilian targeting (5%)":   idx_df["c_civilian"]  * 5,
-                                }
-                                colors = ["#ef4444", "#f59e0b", "#f97316", "#60a5fa", "#a78bfa", "#fde047"]
-
-                                bottom = np.zeros(len(idx_df))
-                                for (label, values), color in zip(component_data.items(), colors):
-                                    ax2.bar(
-                                        dates, values.values, bottom=bottom,
-                                        color=color, alpha=0.85, label=label, width=20,
-                                    )
-                                    bottom += values.values
-
-                                ax2.set_title(
-                                    "Index Component Breakdown (weighted contribution per month)",
-                                    color="white", fontsize=13, pad=10,
-                                )
-                                ax2.set_xlabel("Month", color="#94a3b8")
-                                ax2.set_ylabel("Weighted score", color="#94a3b8")
-                                ax2.tick_params(colors="#94a3b8")
-                                ax2.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
-                                ax2.xaxis.set_major_locator(mdates.AutoDateLocator())
-                                plt.xticks(rotation=35, ha="right")
-                                ax2.grid(True, alpha=0.12, color="#334155", axis="y")
-                                for spine in ax2.spines.values():
-                                    spine.set_edgecolor("#334155")
-                                ax2.legend(
-                                    facecolor="#1e293b", edgecolor="#334155",
-                                    labelcolor="white", fontsize=9, loc="upper left",
-                                )
-                                fig2.tight_layout()
-                                st.pyplot(fig2, clear_figure=True)
-
-                            # ── Flagged months table ──────────────────────
-                            st.markdown("### Flagged escalation months")
-                            if esc_rows.empty:
-                                st.info(
-                                    f"No months exceeded the threshold of {escalation_threshold}. "
-                                    "Try lowering the threshold in Advanced Settings."
+                            if idx_df.empty:
+                                st.warning(
+                                    f"No data for {selected_country} between "
+                                    f"{plot_start_date} and {plot_end_date}. "
+                                    "Try widening the date range in Advanced Settings."
                                 )
                             else:
-                                disp = esc_rows[[
-                                    "event_month", "escalation_index", "index_smoothed",
-                                    "battles", "explosions_remote_violence",
-                                    "strategic_developments", "protests", "riots",
-                                    "violence_against_civilians", "fatalities",
-                                ]].copy()
-                                disp["event_month"] = disp["event_month"].dt.strftime("%b %Y")
-                                disp["escalation_index"] = disp["escalation_index"].round(1)
-                                disp["index_smoothed"]   = disp["index_smoothed"].round(1)
-                                disp = disp.rename(columns={
-                                    "event_month":                "Month",
-                                    "escalation_index":           "Raw Index",
-                                    "index_smoothed":             "Smoothed Index",
-                                    "battles":                    "Battles",
-                                    "explosions_remote_violence": "Explosions",
-                                    "strategic_developments":     "Strategic Devs",
-                                    "protests":                   "Protests",
-                                    "riots":                      "Riots",
-                                    "violence_against_civilians": "Civ. Violence",
-                                    "fatalities":                 "Fatalities",
-                                })
-                                st.dataframe(
-                                    disp.sort_values("Smoothed Index", ascending=False),
-                                    use_container_width=True,
+                                dates = pd.to_datetime(idx_df["event_month"])
+                                esc_rows = idx_df[idx_df["index_smoothed"] > escalation_threshold]
+
+                                # ── Main escalation index chart ───────────────
+                                fig, ax = plt.subplots(figsize=(12, 5))
+                                fig.patch.set_facecolor("#020617")
+                                ax.set_facecolor("#0f172a")
+
+                                ax.axhspan(escalation_threshold, 100, alpha=0.07, color="#ef4444", zorder=0)
+                                ax.axhline(
+                                    y=escalation_threshold, color="#ef4444",
+                                    linestyle="--", linewidth=1.2,
+                                    label=f"Alert threshold ({escalation_threshold})",
                                 )
+                                ax.plot(dates, idx_df["escalation_index"],
+                                        color="#60a5fa", alpha=0.25, linewidth=1)
+                                ax.plot(
+                                    dates, idx_df["index_smoothed"],
+                                    color="#60a5fa", linewidth=2.5,
+                                    label=f"Escalation Index ({w}-month smoothed)",
+                                )
+                                if not esc_rows.empty:
+                                    ax.scatter(
+                                        pd.to_datetime(esc_rows["event_month"]),
+                                        esc_rows["index_smoothed"],
+                                        color="#ef4444", s=60, zorder=5,
+                                        label=f"Escalation flagged ({len(esc_rows)} months)",
+                                    )
 
-                            with st.expander("Full monthly index data"):
-                                full = idx_df[[
-                                    "event_month", "escalation_index", "index_smoothed",
-                                    "total_events", "battles", "explosions_remote_violence",
-                                    "strategic_developments", "protests", "riots",
-                                    "violence_against_civilians", "fatalities",
-                                ]].copy()
-                                full["event_month"] = full["event_month"].dt.strftime("%b %Y")
-                                full["escalation_index"] = full["escalation_index"].round(1)
-                                full["index_smoothed"]   = full["index_smoothed"].round(1)
-                                st.dataframe(full, use_container_width=True)
+                                ax.set_title(
+                                    f"AEGIS Escalation Index — {selected_country}",
+                                    color="white", fontsize=15, pad=12,
+                                )
+                                ax.set_xlabel("Month", color="#94a3b8")
+                                ax.set_ylabel("Escalation Index (0–100)", color="#94a3b8")
+                                ax.tick_params(colors="#94a3b8")
+                                ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
+                                ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+                                plt.xticks(rotation=35, ha="right")
+                                ax.set_ylim(0, 105)
+                                ax.grid(True, alpha=0.15, color="#334155")
+                                for spine in ax.spines.values():
+                                    spine.set_edgecolor("#334155")
+                                ax.legend(
+                                    facecolor="#1e293b", edgecolor="#334155",
+                                    labelcolor="white", fontsize=10,
+                                )
+                                fig.tight_layout()
+                                st.pyplot(fig, clear_figure=True)
 
-                            st.caption(
-                                "Index formula: 30% Raw Conflict Intensity (Battles + Explosions) + "
-                                "20% Event Frequency Acceleration + "
-                                "20% Explosions/Remote Violence + "
-                                "15% Strategic Developments + "
-                                "10% Civil Unrest (Protests + Riots) + "
-                                "5% Civilian Targeting Ratio. "
-                                "All components normalised globally (0–1) across all ACLED countries and months. "
-                                "Source: ACLED via public ArcGIS layer (updated weekly)."
-                            )
+                                # ── Component breakdown stacked bar ───────────
+                                if show_components:
+                                    fig2, ax2 = plt.subplots(figsize=(12, 4))
+                                    fig2.patch.set_facecolor("#020617")
+                                    ax2.set_facecolor("#0f172a")
+
+                                    component_data = {
+                                        "Conflict intensity (30%)":  idx_df["c_intensity"] * 30,
+                                        "Event accel. (20%)":        idx_df["c_accel"]     * 20,
+                                        "Explosions (20%)":          idx_df["c_explosion"] * 20,
+                                        "Strategic devs (15%)":      idx_df["c_strategic"] * 15,
+                                        "Unrest / Protests (10%)":   idx_df["c_unrest"]    * 10,
+                                        "Civilian targeting (5%)":   idx_df["c_civilian"]  * 5,
+                                    }
+                                    colors = ["#ef4444", "#f59e0b", "#f97316", "#60a5fa", "#a78bfa", "#fde047"]
+
+                                    bottom = np.zeros(len(idx_df))
+                                    for (label, values), color in zip(component_data.items(), colors):
+                                        ax2.bar(
+                                            dates, values.values, bottom=bottom,
+                                            color=color, alpha=0.85, label=label, width=20,
+                                        )
+                                        bottom += values.values
+
+                                    ax2.set_title(
+                                        "Index Component Breakdown (weighted contribution per month)",
+                                        color="white", fontsize=13, pad=10,
+                                    )
+                                    ax2.set_xlabel("Month", color="#94a3b8")
+                                    ax2.set_ylabel("Weighted score", color="#94a3b8")
+                                    ax2.tick_params(colors="#94a3b8")
+                                    ax2.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
+                                    ax2.xaxis.set_major_locator(mdates.AutoDateLocator())
+                                    plt.xticks(rotation=35, ha="right")
+                                    ax2.grid(True, alpha=0.12, color="#334155", axis="y")
+                                    for spine in ax2.spines.values():
+                                        spine.set_edgecolor("#334155")
+                                    ax2.legend(
+                                        facecolor="#1e293b", edgecolor="#334155",
+                                        labelcolor="white", fontsize=9, loc="upper left",
+                                    )
+                                    fig2.tight_layout()
+                                    st.pyplot(fig2, clear_figure=True)
+
+                                # ── Flagged months table ──────────────────────
+                                st.markdown("### Flagged escalation months")
+                                if esc_rows.empty:
+                                    st.info(
+                                        f"No months exceeded the threshold of {escalation_threshold}. "
+                                        "Try lowering the threshold in Advanced Settings."
+                                    )
+                                else:
+                                    disp = esc_rows[[
+                                        "event_month", "escalation_index", "index_smoothed",
+                                        "battles", "explosions_remote_violence",
+                                        "strategic_developments", "protests", "riots",
+                                        "violence_against_civilians", "fatalities",
+                                    ]].copy()
+                                    disp["event_month"] = disp["event_month"].dt.strftime("%b %Y")
+                                    disp["escalation_index"] = disp["escalation_index"].round(1)
+                                    disp["index_smoothed"]   = disp["index_smoothed"].round(1)
+                                    disp = disp.rename(columns={
+                                        "event_month":                "Month",
+                                        "escalation_index":           "Raw Index",
+                                        "index_smoothed":             "Smoothed Index",
+                                        "battles":                    "Battles",
+                                        "explosions_remote_violence": "Explosions",
+                                        "strategic_developments":     "Strategic Devs",
+                                        "protests":                   "Protests",
+                                        "riots":                      "Riots",
+                                        "violence_against_civilians": "Civ. Violence",
+                                        "fatalities":                 "Fatalities",
+                                    })
+                                    st.dataframe(
+                                        disp.sort_values("Smoothed Index", ascending=False),
+                                        use_container_width=True,
+                                    )
+
+                                with st.expander("Full monthly index data"):
+                                    full = idx_df[[
+                                        "event_month", "escalation_index", "index_smoothed",
+                                        "total_events", "battles", "explosions_remote_violence",
+                                        "strategic_developments", "protests", "riots",
+                                        "violence_against_civilians", "fatalities",
+                                    ]].copy()
+                                    full["event_month"] = full["event_month"].dt.strftime("%b %Y")
+                                    full["escalation_index"] = full["escalation_index"].round(1)
+                                    full["index_smoothed"]   = full["index_smoothed"].round(1)
+                                    st.dataframe(full, use_container_width=True)
+
+                                st.caption(
+                                    "Index formula: 30% Raw Conflict Intensity (Battles + Explosions) + "
+                                    "20% Event Frequency Acceleration + "
+                                    "20% Explosions/Remote Violence + "
+                                    "15% Strategic Developments + "
+                                    "10% Civil Unrest (Protests + Riots) + "
+                                    "5% Civilian Targeting Ratio. "
+                                    "All components normalised globally (0–1) across all ACLED countries and months. "
+                                    "Source: ACLED via public ArcGIS layer (updated weekly)."
+                                )
 
             except Exception as e:
                 st.error(f"Error computing escalation index: {e}")
