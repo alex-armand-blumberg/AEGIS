@@ -906,7 +906,7 @@ if show_map:
                                 font=dict(color="white", size=22),
                             ),
                             legend=dict(
-                                title_text="Dominant category (Click on legend to (de)select categories)",
+                                title_text="**Categories (Click to Isolate): **",
                                 orientation="h",
                                 yanchor="bottom",
                                 y=1.02,
