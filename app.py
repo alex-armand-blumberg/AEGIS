@@ -309,6 +309,133 @@ def _process_acled_rows(all_rows: list, country: str) -> pd.DataFrame:
 
 
 # ----------------------------
+# Ticker bar — top escalating countries (ArcGIS, no login needed)
+# ----------------------------
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_ticker_data() -> list:
+    """
+    Pull the latest month from the ArcGIS layer, compute a simple
+    intensity score per country, and return the top 10 as ticker items.
+    """
+    try:
+        df = fetch_acled_arcgis_monthly()
+        if df.empty:
+            return []
+
+        latest = df["event_month"].max()
+        prev   = latest - pd.DateOffset(months=1)
+
+        cur  = df[df["event_month"] == latest].copy()
+        prev_df = df[df["event_month"] == prev].copy()
+
+        event_cols = ["battles", "explosions_remote_violence",
+                      "violence_against_civilians", "protests",
+                      "riots", "strategic_developments"]
+
+        cur["score"] = cur[event_cols].sum(axis=1)
+        prev_df["score"] = prev_df[event_cols].sum(axis=1)
+
+        cur_agg  = cur.groupby("country")["score"].sum().reset_index()
+        prev_agg = prev_df.groupby("country")["score"].sum().reset_index()
+
+        merged = cur_agg.merge(prev_agg, on="country", suffixes=("_cur", "_prev"), how="left")
+        merged["prev_score"] = merged["score_prev"].fillna(0)
+        merged["trend"] = merged["score_cur"] - merged["prev_score"]
+
+        top = merged.nlargest(10, "score_cur")
+
+        items = []
+        for _, row in top.iterrows():
+            score = int(row["score_cur"])
+            if row["trend"] > 5:
+                arrow, color = "▲", "#ef4444"
+            elif row["trend"] < -5:
+                arrow, color = "▼", "#60a5fa"
+            else:
+                arrow, color = "→", "#f59e0b"
+            items.append({
+                "country": row["country"],
+                "score":   score,
+                "arrow":   arrow,
+                "color":   color,
+            })
+        return items
+    except Exception:
+        return []
+
+
+def render_ticker(items: list, month_label: str = "") -> None:
+    """Render a scrolling ticker bar using st.components HTML."""
+    if not items:
+        return
+
+    # Build the inner text spans
+    parts = []
+    for it in items:
+        parts.append(
+            f'<span style="color:{it["color"]};font-weight:600;">'
+            f'&#11044;&nbsp;{it["country"]}</span>'
+            f'&nbsp;<span style="opacity:0.7;">{it["score"]} events</span>'
+            f'&nbsp;<span style="color:{it["color"]};">{it["arrow"]}</span>'
+        )
+    # Join with a separator
+    sep = '&nbsp;&nbsp;<span style="opacity:0.3;">|</span>&nbsp;&nbsp;'
+    content = sep.join(parts)
+    # Duplicate for seamless loop
+    content_double = content + sep + content
+
+    label = f"&nbsp;&nbsp;🌐 LIVE CONFLICT TICKER — Top 10 active conflict zones · {month_label}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
+
+    html = f"""
+<div style="
+    background: linear-gradient(90deg,#0f172a 0%,#1e293b 100%);
+    border:1px solid #334155;
+    border-radius:6px;
+    padding:0;
+    overflow:hidden;
+    display:flex;
+    align-items:center;
+    height:36px;
+    margin-bottom:8px;
+    font-family:'Inter',sans-serif;
+    font-size:13px;
+    color:#e2e8f0;
+">
+  <div style="
+    flex-shrink:0;
+    background:#ef4444;
+    color:white;
+    font-weight:700;
+    font-size:11px;
+    letter-spacing:0.05em;
+    padding:0 10px;
+    height:100%;
+    display:flex;
+    align-items:center;
+    white-space:nowrap;
+  ">LIVE</div>
+  <div style="overflow:hidden;flex:1;height:100%;position:relative;">
+    <div style="
+      display:inline-block;
+      white-space:nowrap;
+      animation:ticker 35s linear infinite;
+      padding-left:100%;
+      height:100%;
+      line-height:36px;
+    ">{content_double}</div>
+  </div>
+</div>
+<style>
+@keyframes ticker {{
+  0%   {{ transform: translateX(0); }}
+  100% {{ transform: translateX(-50%); }}
+}}
+</style>
+"""
+    st.components.v1.html(html, height=44, scrolling=False)
+
+
+# ----------------------------
 # Escalation Index computation
 # ----------------------------
 def compute_escalation_index(df: pd.DataFrame, country: str) -> pd.DataFrame:
@@ -602,6 +729,15 @@ st.caption(
     "The index combines five leading indicators — event frequency acceleration, explosions, "
     "strategic developments, civil unrest, and civilian targeting — into a single 0–100 score."
 )
+
+# ── Ticker bar ───────────────────────────────────────────────────────────────
+_ticker_items = fetch_ticker_data()
+if _ticker_items:
+    try:
+        _ticker_month = fetch_acled_arcgis_monthly()["event_month"].max().strftime("%b %Y")
+    except Exception:
+        _ticker_month = ""
+    render_ticker(_ticker_items, _ticker_month)
 
 
 # ----------------------------
@@ -1321,8 +1457,6 @@ if show_map:
 
                         with st.expander("Top hotspots in the current view"):
                             st.dataframe(top_hotspots, use_container_width=True)
-
-                        st.caption("")
 
                         if auto_refresh_map:
                             refresh_ms = int(refresh_minutes) * 60 * 1000
