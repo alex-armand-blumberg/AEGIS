@@ -1485,7 +1485,7 @@ if show_map:
                             "Working towards individual strike-by-strike live telemetry."
                         )
                         st.caption(
-                            "🗺️ **How to read this map:** Bubble **color** shows the *dominant conflict category* "
+                            " **How to read this map:** Bubble **color** shows the *dominant conflict category* "
                             "for each region — the event type that occurred most frequently. Bubble **size** reflects "
                             "the *selected map metric*. These two can differ: a region colored red for Battles may still "
                             "show a high Explosions count if that's the metric you've selected — both occurred in that "
