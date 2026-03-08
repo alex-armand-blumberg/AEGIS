@@ -1083,7 +1083,7 @@ if "aegis_plot" in st.session_state:
         )
 
     # ── Month drill-down ─────────────────────────
-    with st.expander("Drill down — what drove a specific month?", expanded=False):
+    with st.expander("Drill down — what drove a specific month?", expanded=True):
         st.markdown("### Drill down — what drove a specific month?")
 
         # Build option list: flagged months first, then all months
