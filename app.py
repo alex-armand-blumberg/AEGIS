@@ -1083,112 +1083,114 @@ if "aegis_plot" in st.session_state:
         )
 
     # ── Month drill-down ─────────────────────────
-    st.markdown("### Drill down — what drove a specific month?")
+    with st.expander("Drill down — what drove a specific month?", expanded=False):
+        st.markdown("### Drill down — what drove a specific month?")
 
-    # Build option list: flagged months first, then all months
-    all_month_labels = idx_df["event_month"].dt.strftime("%b %Y").tolist()
-    flagged_labels   = esc_rows["event_month"].dt.strftime("%b %Y").tolist()
-    warn_labels      = warn_rows["event_month"].dt.strftime("%b %Y").tolist()
+        # Build option list: flagged months first, then all months
+        all_month_labels = idx_df["event_month"].dt.strftime("%b %Y").tolist()
+        flagged_labels   = esc_rows["event_month"].dt.strftime("%b %Y").tolist()
+        warn_labels      = warn_rows["event_month"].dt.strftime("%b %Y").tolist()
 
-    # Tag each option so user knows its status
-    def _tag(m):
-        if m in flagged_labels:   return f"🔴 {m} — escalation flagged"
-        if m in warn_labels:      return f"🟠 {m} — pre-escalation warning"
-        return f"⬜ {m}"
+        # Tag each option so user knows its status
+        def _tag(m):
+            if m in flagged_labels:   return f"🔴 {m} — escalation flagged"
+            if m in warn_labels:      return f"🟠 {m} — pre-escalation warning"
+            return f"⬜ {m}"
 
-    options = [_tag(m) for m in all_month_labels]
-    # Default to highest-scoring flagged month
-    if flagged_labels:
-        best_month = (
-            esc_rows.loc[esc_rows["index_smoothed"].idxmax(), "event_month"]
-            .strftime("%b %Y")
-        )
-        default_idx = all_month_labels.index(best_month)
-    else:
-        default_idx = len(options) - 1
-
-    selected_opt = st.selectbox(
-        "Select a month to inspect:",
-        options=options,
-        index=default_idx,
-        key="drilldown_month",
-    )
-    # Extract the plain month label back out
-    selected_label = selected_opt.split("—")[0].strip().lstrip("🔴🟠⬜ ")
-
-    drill_row = idx_df[
-        idx_df["event_month"].dt.strftime("%b %Y") == selected_label
-    ]
-
-    if not drill_row.empty:
-        dr = drill_row.iloc[0]
-
-        # Determine status tag
-        if selected_label in flagged_labels:
-            status_html = '<span style="background:#ef4444;color:white;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;">ESCALATION FLAGGED</span>'
-        elif selected_label in warn_labels:
-            status_html = '<span style="background:#f97316;color:white;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;">PRE-ESCALATION WARNING</span>'
+        options = [_tag(m) for m in all_month_labels]
+        # Default to highest-scoring flagged month
+        if flagged_labels:
+            best_month = (
+                esc_rows.loc[esc_rows["index_smoothed"].idxmax(), "event_month"]
+                .strftime("%b %Y")
+            )
+            default_idx = all_month_labels.index(best_month)
         else:
-            status_html = '<span style="background:#334155;color:#94a3b8;padding:2px 8px;border-radius:4px;font-size:12px;">BELOW THRESHOLD</span>'
+            default_idx = len(options) - 1
 
-        st.markdown(
-            f"**{selected_label}** &nbsp; {status_html} &nbsp; "
-            f"Index: **{dr['escalation_index']:.1f}** (smoothed: **{dr['index_smoothed']:.1f}**)",
-            unsafe_allow_html=True,
+        selected_opt = st.selectbox(
+            "Select a month to inspect:",
+            options=options,
+            index=default_idx,
+            key="drilldown_month",
         )
+        # Extract the plain month label back out
+        selected_label = selected_opt.split("—")[0].strip().lstrip("🔴🟠⬜ ")
 
-        # 6 event-type counts with context sentences
-        event_types = [
-            ("battles",                    "Battles",                    "#ef4444", 30,
-             "Direct armed confrontations between organised forces."),
-            ("explosions_remote_violence", "Explosions / Remote violence","#f97316", 20,
-             "Shelling, airstrikes, IEDs, drone strikes. Often precedes ground battles."),
-            ("strategic_developments",     "Strategic developments",      "#60a5fa", 15,
-             "Troop movements, HQ changes, peace deal collapses, ceasefires."),
-            ("protests",                   "Protests",                    "#a78bfa", 10,
-             "Non-violent demonstrations. Social unrest often precedes armed conflict."),
-            ("riots",                      "Riots",                       "#fde047", 10,
-             "Violent but non-armed demonstrations and looting."),
-            ("violence_against_civilians", "Violence vs. civilians",      "#f59e0b",  5,
-             "Targeted attacks on non-combatants. Signals strategic deterioration."),
+        drill_row = idx_df[
+            idx_df["event_month"].dt.strftime("%b %Y") == selected_label
         ]
 
-        # Find max count for bar scaling
-        max_count = max(int(dr.get(col, 0)) for col, *_ in event_types) or 1
+        if not drill_row.empty:
+            dr = drill_row.iloc[0]
 
-        cols_drill = st.columns(2)
-        for i, (col, label, color, weight, desc) in enumerate(event_types):
-            count = int(dr.get(col, 0))
-            pct   = int(count / max_count * 100)
-            with cols_drill[i % 2]:
-                st.markdown(
-                    f"<div style='margin-bottom:12px;'>"
-                    f"<div style='display:flex;justify-content:space-between;margin-bottom:3px;'>"
-                    f"<span style='color:{color};font-weight:600;font-size:13px;'>{label}</span>"
-                    f"<span style='color:#94a3b8;font-size:13px;'><b style='color:white;'>{count:,}</b> events &nbsp;·&nbsp; {weight}% weight</span>"
-                    f"</div>"
-                    f"<div style='background:#1e293b;border-radius:4px;height:8px;'>"
-                    f"<div style='background:{color};width:{pct}%;height:8px;border-radius:4px;'></div>"
-                    f"</div>"
-                    f"<div style='color:#64748b;font-size:11px;margin-top:3px;'>{desc}</div>"
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
+            # Determine status tag
+            if selected_label in flagged_labels:
+                status_html = '<span style="background:#ef4444;color:white;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;">ESCALATION FLAGGED</span>'
+            elif selected_label in warn_labels:
+                status_html = '<span style="background:#f97316;color:white;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;">PRE-ESCALATION WARNING</span>'
+            else:
+                status_html = '<span style="background:#334155;color:#94a3b8;padding:2px 8px;border-radius:4px;font-size:12px;">BELOW THRESHOLD</span>'
 
-        # Fatalities callout
-        fat = int(dr.get("fatalities", 0))
-        total = int(dr.get("total_events", 0))
-        st.markdown(
-            f"<div style='background:#1e293b;border:1px solid #334155;border-radius:6px;"
-            f"padding:10px 16px;margin-top:4px;display:flex;gap:32px;'>"
-            f"<span style='color:#94a3b8;font-size:13px;'>Total events: "
-            f"<b style='color:white;font-size:16px;'>{total:,}</b></span>"
-            f"<span style='color:#94a3b8;font-size:13px;'>Recorded fatalities: "
-            f"<b style='color:#ef4444;font-size:16px;'>{fat:,}</b></span>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
+            st.markdown(
+                f"**{selected_label}** &nbsp; {status_html} &nbsp; "
+                f"Index: **{dr['escalation_index']:.1f}** (smoothed: **{dr['index_smoothed']:.1f}**)",
+                unsafe_allow_html=True,
+            )
 
+            # 6 event-type counts with context sentences
+            event_types = [
+                ("battles",                    "Battles",                    "#ef4444", 30,
+                 "Direct armed confrontations between organised forces."),
+                ("explosions_remote_violence", "Explosions / Remote violence","#f97316", 20,
+                 "Shelling, airstrikes, IEDs, drone strikes. Often precedes ground battles."),
+                ("strategic_developments",     "Strategic developments",      "#60a5fa", 15,
+                 "Troop movements, HQ changes, peace deal collapses, ceasefires."),
+                ("protests",                   "Protests",                    "#a78bfa", 10,
+                 "Non-violent demonstrations. Social unrest often precedes armed conflict."),
+                ("riots",                      "Riots",                       "#fde047", 10,
+                 "Violent but non-armed demonstrations and looting."),
+                ("violence_against_civilians", "Violence vs. civilians",      "#f59e0b",  5,
+                 "Targeted attacks on non-combatants. Signals strategic deterioration."),
+            ]
+
+            # Find max count for bar scaling
+            max_count = max(int(dr.get(col, 0)) for col, *_ in event_types) or 1
+
+            cols_drill = st.columns(2)
+            for i, (col, label, color, weight, desc) in enumerate(event_types):
+                count = int(dr.get(col, 0))
+                pct   = int(count / max_count * 100)
+                with cols_drill[i % 2]:
+                    st.markdown(
+                        f"<div style='margin-bottom:12px;'>"
+                        f"<div style='display:flex;justify-content:space-between;margin-bottom:3px;'>"
+                        f"<span style='color:{color};font-weight:600;font-size:13px;'>{label}</span>"
+                        f"<span style='color:#94a3b8;font-size:13px;'><b style='color:white;'>{count:,}</b> events &nbsp;·&nbsp; {weight}% weight</span>"
+                        f"</div>"
+                        f"<div style='background:#1e293b;border-radius:4px;height:8px;'>"
+                        f"<div style='background:{color};width:{pct}%;height:8px;border-radius:4px;'></div>"
+                        f"</div>"
+                        f"<div style='color:#64748b;font-size:11px;margin-top:3px;'>{desc}</div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+
+            # Fatalities callout
+            fat = int(dr.get("fatalities", 0))
+            total = int(dr.get("total_events", 0))
+            st.markdown(
+                f"<div style='background:#1e293b;border:1px solid #334155;border-radius:6px;"
+                f"padding:10px 16px;margin-top:4px;display:flex;gap:32px;'>"
+                f"<span style='color:#94a3b8;font-size:13px;'>Total events: "
+                f"<b style='color:white;font-size:16px;'>{total:,}</b></span>"
+                f"<span style='color:#94a3b8;font-size:13px;'>Recorded fatalities: "
+                f"<b style='color:#ef4444;font-size:16px;'>{fat:,}</b></span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
     # ── Component breakdown stacked bar ───────────
     if show_components:
         fig2, ax2 = plt.subplots(figsize=(12, 4))
@@ -1271,24 +1273,6 @@ if "aegis_plot" in st.session_state:
                 disp.sort_values("Smoothed Index", ascending=False),
                 use_container_width=True,
             )
-
-            st.markdown("**Search news coverage for a flagged month:**")
-            search_cols = st.columns([3, 2, 1])
-            with search_cols[0]:
-                search_month = st.selectbox(
-                    "Month",
-                    options=disp.sort_values("Smoothed Index", ascending=False)["Month"].tolist(),
-                    key="news_search_month",
-                    label_visibility="collapsed",
-                )
-            with search_cols[2]:
-                import urllib.parse
-                query = urllib.parse.quote(f"{selected_country} conflict {search_month}")
-                st.link_button(
-                    "🔍 Google News",
-                    f"https://news.google.com/search?q={query}&hl=en",
-                    use_container_width=True,
-                )
 
     with st.expander("Full monthly index data"):
         full = idx_df[[
