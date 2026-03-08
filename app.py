@@ -929,7 +929,7 @@ else:
                                 mode="lines",
                                 line=dict(color="#60a5fa", width=1),
                                 opacity=0.25,
-                                name="Raw index",
+                                name="Raw ACLED Index",
                                 hoverinfo="skip",
                             ))
 
