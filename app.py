@@ -1063,8 +1063,6 @@ if "aegis_plot" in st.session_state:
     )
 
     st.plotly_chart(pfig, use_container_width=True)
-    _prog.progress(100, text="Done.")
-    _prog.empty()
 
     # ── How to read the signals ───────────────────
     with st.expander("How to read the signals", expanded=False):
