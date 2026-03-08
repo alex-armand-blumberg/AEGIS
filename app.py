@@ -1688,7 +1688,7 @@ if show_map:
                                         st.caption("Could not load news.")
 
                         summary_cols = [
-                            "country", "admin1", "metric_value", "fatalities",
+                            "country", "region", "metric_value", "fatalities",
                             "battles", "explosions_remote_violence", "violence_against_civilians",
                         ]
                         if selected_metric in {
