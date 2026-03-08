@@ -537,6 +537,46 @@ def compute_escalation_index(df: pd.DataFrame, country: str) -> pd.DataFrame:
 # ----------------------------
 st.sidebar.header("AEGIS Control Bar")
 
+with st.sidebar.expander("Purpose", expanded=False):
+    st.markdown(
+        """
+**Made as Demo for Palantir© Valley Forge Grants**
+
+AEGIS identifies and visualizes conflict escalation patterns using ACLED event data.
+
+The Escalation Index combines five **leading indicators** — signals that tend to
+precede kinetic violence rather than confirm it after the fact:
+event frequency acceleration, explosions/remote violence, strategic developments,
+civil unrest, and civilian targeting ratio.
+
+Unlike fatality counts (a lagging indicator), these signals surface escalation
+pressure before it peaks.
+"""
+    )
+
+with st.sidebar.expander("Limitations", expanded=False):
+    st.markdown(
+        """
+**Current limitations of AEGIS**
+
+- Data limited to Jan 2018 onwards due to Researcher Tier ACLED access (full history to 1997 requires Partner/Enterprise license).
+- ACLED public ArcGIS layer for the map is monthly aggregated at subnational level, not individual events.
+- Some countries may have sparse data in earlier months.
+- The **pre-escalation warning signal** is designed for **conflict onset detection** — it fires when a country is approaching the threshold for the first time or returning from a dip. It is less sensitive for conflicts already in sustained high-intensity phases. This is a known and deliberate design choice: re-escalation within an ongoing war is a distinct and harder problem.
+- The strategic developments component, a key leading indicator, has a **known blind spot for covert state military buildups** (e.g. troop repositioning inside an aggressor's own territory before a cross-border invasion). It works best for civil wars, insurgencies, and coup dynamics where precursor activity is publicly visible and coded by ACLED.
+
+**Planned improvements**
+
+- Higher ACLED tier for data back to 1997 and reduced time lag.
+- Direct ACLED API for weekly/event-level granularity.
+- Actor-level escalation detection.
+- ML-based index calibration against historical escalation outcomes.
+- Subnational index breakdown.
+"""
+    )
+
+st.sidebar.markdown("---")
+
 VIDEO_PATH = Path("logo1.mp4")
 if VIDEO_PATH.exists():
     video_bytes = open(VIDEO_PATH, "rb").read()
@@ -639,42 +679,7 @@ override_map_dates = st.sidebar.checkbox(
 
 st.sidebar.markdown("---")
 
-with st.sidebar.expander("Purpose"):
-    st.markdown(
-        """
-**Made as Demo for Palantir© Valley Forge Grants**
 
-AEGIS identifies and visualizes conflict escalation patterns using ACLED event data.
-
-The Escalation Index combines five **leading indicators** — signals that tend to
-precede kinetic violence rather than confirm it after the fact:
-event frequency acceleration, explosions/remote violence, strategic developments,
-civil unrest, and civilian targeting ratio.
-
-Unlike fatality counts (a lagging indicator), these signals surface escalation
-pressure before it peaks.
-"""
-    )
-
-with st.sidebar.expander("Limitations"):
-    st.markdown(
-        """
-**Current limitations of AEGIS**
-
-- Only have access to data from Jan 2018 to exactly One Year Ago for Escalation Index, as I currently only have Researcher Tier ACLED access.
-- ACLED public ArcGIS layer for the map is monthly aggregated at subnational level, not individual events.
-- Some countries may have sparse data in earlier months.
-- Public map data is monthly and subnational, not individual strike-level event data.
-
-**Planned improvements**
-
-- Get a higher ACLED Tier, giving me access to more data for Escalation Index.
-- Direct ACLED API for weekly/event-level granularity
-- Actor-level escalation detection
-- ML-based index calibration against historical escalation outcomes
-- Subnational index breakdown
-"""
-    )
 
 
 # ----------------------------
@@ -883,24 +888,58 @@ if "aegis_plot" in st.session_state:
     esc_rows  = idx_df[idx_df["index_smoothed"] > escalation_threshold]
 
     # ── Pre-escalation warning signal ─────────────
-    # Fires when index is BELOW threshold but:
-    #   - strategic + explosion components both elevated (sum > 0.9)
-    #   - index has been rising for 2+ consecutive months
+    # TWO modes:
+    # 1. ONSET: index is below threshold but approaching (within 20pts),
+    #    leading indicators elevated, and index rising.
+    # 2. RE-ESCALATION: index was above threshold, dipped below, and is
+    #    now climbing back up with leading indicators elevated.
     import numpy as np
     idx_df = idx_df.copy()
     idx_df["_rising"] = (idx_df["index_smoothed"].diff() > 0).astype(int)
     idx_df["_lead_signal"] = idx_df["c_strategic"] + idx_df["c_explosion"]
-    # Fire when index is below threshold but approaching it (within 20pts),
-    # at least one leading component is elevated (>50th pct), and index rising
-    warn_rows = idx_df[
+
+    # Track whether the index was above threshold in the previous month
+    idx_df["_prev_above"] = (
+        idx_df["index_smoothed"].shift(1) > escalation_threshold
+    ).fillna(False)
+    # Track whether the index was above threshold at any point in the
+    # preceding 6 months (conflict has a recent history of escalation)
+    idx_df["_recently_above"] = (
+        (idx_df["index_smoothed"] > escalation_threshold)
+        .shift(1)
+        .rolling(window=6, min_periods=1)
+        .max()
+        .fillna(0)
+        .astype(bool)
+    )
+
+    # Onset warning: approaching threshold for the first time / from low base
+    onset_warn = idx_df[
         (idx_df["index_smoothed"] < escalation_threshold)
         & (idx_df["index_smoothed"] > escalation_threshold - 20)
+        & (~idx_df["_recently_above"])
         & (
             (idx_df["c_strategic"] > 0.25)
             | (idx_df["c_explosion"] > 0.25)
         )
         & (idx_df["_rising"] == 1)
     ]
+
+    # Re-escalation warning: conflict had been above threshold, dipped below,
+    # and is now climbing back with elevated leading indicators
+    reesc_warn = idx_df[
+        (idx_df["index_smoothed"] < escalation_threshold)
+        & (idx_df["index_smoothed"] > escalation_threshold - 25)
+        & idx_df["_recently_above"]
+        & (
+            (idx_df["c_strategic"] > 0.25)
+            | (idx_df["c_explosion"] > 0.25)
+        )
+        & (idx_df["_rising"] == 1)
+    ]
+
+    import pandas as pd
+    warn_rows = pd.concat([onset_warn, reesc_warn]).drop_duplicates().sort_values("event_month")
 
     # ── 3-month forecast (linear trend on last 6 months) ──
     forecast_dates, forecast_vals, forecast_lo, forecast_hi = [], [], [], []
@@ -1071,11 +1110,12 @@ if "aegis_plot" in st.session_state:
             "Combines 6 conflict indicators into one score.\n\n"
             "**Red dots** \u2014 months where the smoothed index exceeded "
             "your alert threshold. Indicates sustained elevated conflict.\n\n"
-            "**Orange diamonds** \u2014 pre-escalation warning. The index is "
-            "still *below* the threshold, but strategic developments and "
-            "explosions/remote violence are both elevated, and the index "
-            "has been rising for 2+ consecutive months. This signal fires "
-            "*before* red dots appear \u2014 it is the early warning.\n\n"
+            "**Orange diamonds** \u2014 pre-escalation warning (two modes). "
+            "*Onset:* index is below threshold but approaching it, leading indicators "
+            "(strategic developments or explosions) are elevated, and the index is rising. "
+            "*Re-escalation:* the conflict was already above threshold, dipped below during "
+            "a lull, and is now climbing back up with leading indicators elevated again. "
+            "Both fire *before* the index crosses back above the threshold.\n\n"
             "**Purple dotted line** \u2014 3-month linear forecast based on "
             "the last 6 months of the smoothed index. The shaded band shows "
             "the uncertainty range. Treat as a directional signal, not a "
