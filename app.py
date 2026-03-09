@@ -129,10 +129,10 @@ if st.session_state["page"] == "landing":
     # Landing page content using real Streamlit widgets
     st.markdown(
         """
-        <div style="text-align:center; padding: 20vh 24px 8px;">
+        <div style="text-align:center; padding: 0 24px 8px;">
           <div class="landing-tag">&#9632;&nbsp; Palantir Valley Forge Grant Demo</div>
           <div class="landing-title">AEGIS</div>
-          <div class="landing-sub" style="margin-top:12px; margin-bottom:36px;">
+          <div class="landing-sub" style="margin-top:12px;">
             Advanced Early-Warning &nbsp;&amp;&nbsp; Geostrategic Intelligence System
           </div>
         </div>
@@ -665,44 +665,6 @@ def compute_escalation_index(df: pd.DataFrame, country: str) -> pd.DataFrame:
 # ----------------------------
 # Sidebar: branding + inputs
 # ----------------------------
-with st.sidebar.expander("Purpose"):
-    st.markdown(
-        """
-**Made as Demo for Palantir© Valley Forge Grants**
-
-AEGIS identifies and visualizes conflict escalation patterns using ACLED event data.
-
-The Escalation Index combines five **leading indicators** — signals that tend to
-precede kinetic violence rather than confirm it after the fact:
-event frequency acceleration, explosions/remote violence, strategic developments,
-civil unrest, and civilian targeting ratio.
-
-Unlike fatality counts (a lagging indicator), these signals surface escalation
-pressure before it peaks.
-"""
-    )
-
-with st.sidebar.expander("Limitations"):
-    st.markdown(
-        """
-**Current limitations of AEGIS**
-
-- Only have access to data from Jan 2018 to exactly One Year Ago for Escalation Index, as I currently only have Researcher Tier ACLED access.
-- ACLED public ArcGIS layer for the map is monthly aggregated at subnational level, not individual events.
-- Some countries may have sparse data in earlier months.
-- Public map data is monthly and subnational, not individual strike-level event data.
-
-**Planned improvements**
-
-- Get a higher ACLED Tier, giving me access to more data for Escalation Index.
-- Direct ACLED API for weekly/event-level granularity
-- Actor-level escalation detection
-- ML-based index calibration against historical escalation outcomes
-- Subnational index breakdown
-"""
-    )
-
-st.sidebar.markdown("---")
 st.sidebar.header("AEGIS Control Bar")
 
 VIDEO_PATH = Path("logo1.mp4")
@@ -793,26 +755,65 @@ Map data source: Public ACLED ArcGIS layer.
     unsafe_allow_html=True,
 )
 
-if st.session_state.get("page") != "index":
-    show_map = st.sidebar.checkbox(
-        "Show interactive map",
-        value=True,
-        help="Turn the map section on/off.",
-    )
-    override_map_dates = st.sidebar.checkbox(
-        "Override map date range",
-        value=False,
-        help="If off, the map automatically uses the latest month available.",
-    )
-else:
-    show_map = False
-    override_map_dates = False
+show_map = st.sidebar.checkbox(
+    "Show interactive map",
+    value=(st.session_state.get("page") != "index"),
+    help="Turn the map section on/off.",
+)
 
+override_map_dates = st.sidebar.checkbox(
+    "Override map date range",
+    value=False,
+    help="If off, the map automatically uses the latest month available.",
+)
+
+st.sidebar.markdown("---")
+
+with st.sidebar.expander("Purpose"):
+    st.markdown(
+        """
+**Made as Demo for Palantir© Valley Forge Grants**
+
+AEGIS identifies and visualizes conflict escalation patterns using ACLED event data.
+
+The Escalation Index combines five **leading indicators** — signals that tend to
+precede kinetic violence rather than confirm it after the fact:
+event frequency acceleration, explosions/remote violence, strategic developments,
+civil unrest, and civilian targeting ratio.
+
+Unlike fatality counts (a lagging indicator), these signals surface escalation
+pressure before it peaks.
+"""
+    )
+
+with st.sidebar.expander("Limitations"):
+    st.markdown(
+        """
+**Current limitations of AEGIS**
+
+- Only have access to data from Jan 2018 to exactly One Year Ago for Escalation Index, as I currently only have Researcher Tier ACLED access.
+- ACLED public ArcGIS layer for the map is monthly aggregated at subnational level, not individual events.
+- Some countries may have sparse data in earlier months.
+- Public map data is monthly and subnational, not individual strike-level event data.
+
+**Planned improvements**
+
+- Get a higher ACLED Tier, giving me access to more data for Escalation Index.
+- Direct ACLED API for weekly/event-level granularity
+- Actor-level escalation detection
+- ML-based index calibration against historical escalation outcomes
+- Subnational index breakdown
+"""
+    )
 
 
 # ----------------------------
 # Live news feed
 # ----------------------------
+if st.button("← Back to AEGIS", key="back_btn"):
+    st.session_state["page"] = "landing"
+    st.rerun()
+
 with st.expander("Live conflict news", expanded=False):
     try:
         news_items = load_live_conflict_news(max_items=5)
@@ -852,27 +853,16 @@ with st.expander("Live conflict news", expanded=False):
 # ----------------------------
 # Main header
 # ----------------------------
-if st.button("← Back to AEGIS", key="back_btn"):
-    st.session_state["page"] = "landing"
-    st.rerun()
-
 col1, col2 = st.columns([1, 12])
 with col1:
     st.image("logo.png", width=2000)
 with col2:
     st.title("AEGIS — Escalation Detection Demo")
-if st.session_state.get("page") == "map":
-    st.caption(
-        "Explore the interactive global conflict map powered by the ACLED ArcGIS public layer. "
-        "Bubble color shows the dominant conflict category per region; bubble size reflects the selected metric. "
-        "Updated weekly."
-    )
-else:
-    st.caption(
-        "WAIT A COUPLE SECONDS FOR THE SOFTWARE TO LOAD. Enter a country name and click Generate plot to see the ACLED-based Escalation Index. "
-        "The index combines five leading indicators — event frequency acceleration, explosions, "
-        "strategic developments, civil unrest, and civilian targeting — into a single 0–100 score."
-    )
+st.caption(
+    "Enter a country name and click Generate plot to see the ACLED-based Escalation Index. "
+    "The index combines five leading indicators — event frequency acceleration, explosions, "
+    "strategic developments, civil unrest, and civilian targeting — into a single 0–100 score."
+)
 
 # ── Ticker bar ───────────────────────────────────────────────────────────────
 _ticker_items = fetch_ticker_data()
