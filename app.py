@@ -1902,7 +1902,8 @@ fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
 
 // ACLED conflict dots
 const points = {points_json};
-const dotMeshes = [], dotData = [];
+const dotMeshes = [], dotData = [], dotBaseSizes = [];
+const BASE_CAM_Z = 2.6;
 points.forEach(function(p){{
   const sz = 0.005 + 0.022 * (p.size / 28);
   const col = new THREE.Color(p.color);
@@ -1914,6 +1915,7 @@ points.forEach(function(p){{
   globe.add(mesh);
   dotMeshes.push(mesh);
   dotData.push(p);
+  dotBaseSizes.push(sz);
 }});
 
 // Orient globe toward conflict hotspot
@@ -1964,6 +1966,12 @@ function animate(){{
   requestAnimationFrame(animate);
   if(!drag){{ globe.rotation.y += vy*0.90; vy*=0.90; }}
   camera.position.z += (tz - camera.position.z)*0.08;
+  // Keep dots same apparent size regardless of zoom
+  const zoomRatio = camera.position.z / BASE_CAM_Z;
+  for(let i=0;i<dotMeshes.length;i++){{
+    const s = zoomRatio;
+    dotMeshes[i].scale.set(s, s, s);
+  }}
   renderer.render(scene, camera);
 }}
 animate();
