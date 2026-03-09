@@ -1760,20 +1760,13 @@ if (CESIUM_TOKEN) {{ Cesium.Ion.defaultAccessToken = CESIUM_TOKEN; }}
 
 async function initViewer() {{
 
-// Build imagery provider before creating viewer
-let baseLayer;
-try {{
-  const ionProvider = await Cesium.IonImageryProvider.fromAssetId(2);
-  baseLayer = new Cesium.ImageryLayer(ionProvider);
-}} catch(e) {{
-  const arcgis = new Cesium.ArcGisMapServerImageryProvider({{
-    url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"
-  }});
-  baseLayer = new Cesium.ImageryLayer(arcgis);
-}}
-
+// Use synchronous ArcGIS satellite imagery — guaranteed to work, no token needed
 const viewer = new Cesium.Viewer("cesiumContainer", {{
-  baseLayer: baseLayer,
+  imageryProvider: new Cesium.ArcGisMapServerImageryProvider({{
+    url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer",
+    enablePickFeatures: false
+  }}),
+  terrainProvider: new Cesium.EllipsoidTerrainProvider(),
   baseLayerPicker: false,
   geocoder: false,
   homeButton: false,
@@ -1785,12 +1778,14 @@ const viewer = new Cesium.Viewer("cesiumContainer", {{
   contextOptions: {{ webgl: {{ preserveDrawingBuffer: true }} }}
 }});
 
-// Terrain
-try {{
-  viewer.scene.setTerrain(
-    new Cesium.Terrain(Cesium.CesiumTerrainProvider.fromIonAssetId(1))
-  );
-}} catch(e) {{ console.warn("Terrain failed", e); }}
+// Try to upgrade terrain to Cesium World Terrain if token available
+if (CESIUM_TOKEN) {{
+  try {{
+    viewer.scene.setTerrain(
+      new Cesium.Terrain(Cesium.CesiumTerrainProvider.fromIonAssetId(1))
+    );
+  }} catch(e) {{ console.warn("Ion terrain unavailable, using ellipsoid"); }}
+}}
 
 viewer.scene.globe.enableLighting = true;
 viewer.scene.fog.enabled = true;
