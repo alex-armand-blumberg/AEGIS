@@ -855,6 +855,7 @@ if run_btn:
                                 "date_min":             df_acled["event_month"].min().strftime("%b %Y"),
                                 "date_max":             df_acled["event_month"].max().strftime("%b %Y"),
                             }
+                            st.session_state["aegis_prog"] = _prog
         except Exception as e:
             _prog.empty()
             st.error(f"Error computing escalation index: {e}")
@@ -1063,6 +1064,14 @@ if "aegis_plot" in st.session_state:
     )
 
     st.plotly_chart(pfig, use_container_width=True)
+    if "aegis_prog" in st.session_state:
+        try:
+            st.session_state["aegis_prog"].progress(100, text="Complete.")
+            import time; time.sleep(0.6)
+            st.session_state["aegis_prog"].empty()
+            del st.session_state["aegis_prog"]
+        except Exception:
+            pass
 
     # ── How to read the signals ───────────────────
     with st.expander("How to read the signals", expanded=False):
