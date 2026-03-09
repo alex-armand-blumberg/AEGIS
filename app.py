@@ -537,6 +537,45 @@ def compute_escalation_index(df: pd.DataFrame, country: str) -> pd.DataFrame:
 # ----------------------------
 st.sidebar.header("AEGIS Control Bar")
 
+with st.sidebar.expander("Purpose"):
+    st.markdown(
+        """
+**Made as Demo for Palantir© Valley Forge Grants**
+
+AEGIS identifies and visualizes conflict escalation patterns using ACLED event data.
+
+The Escalation Index combines five **leading indicators** — signals that tend to
+precede kinetic violence rather than confirm it after the fact:
+event frequency acceleration, explosions/remote violence, strategic developments,
+civil unrest, and civilian targeting ratio.
+
+Unlike fatality counts (a lagging indicator), these signals surface escalation
+pressure before it peaks.
+"""
+    )
+
+with st.sidebar.expander("Limitations"):
+    st.markdown(
+        """
+**Current limitations of AEGIS**
+
+- Only have access to data from Jan 2018 to exactly One Year Ago for Escalation Index, as I currently only have Researcher Tier ACLED access.
+- ACLED public ArcGIS layer for the map is monthly aggregated at subnational level, not individual events.
+- Some countries may have sparse data in earlier months.
+- Public map data is monthly and subnational, not individual strike-level event data.
+
+**Planned improvements**
+
+- Get a higher ACLED Tier, giving me access to more data for Escalation Index.
+- Direct ACLED API for weekly/event-level granularity
+- Actor-level escalation detection
+- ML-based index calibration against historical escalation outcomes
+- Subnational index breakdown
+"""
+    )
+
+st.sidebar.markdown("---")
+
 VIDEO_PATH = Path("logo1.mp4")
 if VIDEO_PATH.exists():
     video_bytes = open(VIDEO_PATH, "rb").read()
@@ -637,44 +676,6 @@ override_map_dates = st.sidebar.checkbox(
     help="If off, the map automatically uses the latest month available.",
 )
 
-st.sidebar.markdown("---")
-
-with st.sidebar.expander("Purpose"):
-    st.markdown(
-        """
-**Made as Demo for Palantir© Valley Forge Grants**
-
-AEGIS identifies and visualizes conflict escalation patterns using ACLED event data.
-
-The Escalation Index combines five **leading indicators** — signals that tend to
-precede kinetic violence rather than confirm it after the fact:
-event frequency acceleration, explosions/remote violence, strategic developments,
-civil unrest, and civilian targeting ratio.
-
-Unlike fatality counts (a lagging indicator), these signals surface escalation
-pressure before it peaks.
-"""
-    )
-
-with st.sidebar.expander("Limitations"):
-    st.markdown(
-        """
-**Current limitations of AEGIS**
-
-- Only have access to data from Jan 2018 to exactly One Year Ago for Escalation Index, as I currently only have Researcher Tier ACLED access.
-- ACLED public ArcGIS layer for the map is monthly aggregated at subnational level, not individual events.
-- Some countries may have sparse data in earlier months.
-- Public map data is monthly and subnational, not individual strike-level event data.
-
-**Planned improvements**
-
-- Get a higher ACLED Tier, giving me access to more data for Escalation Index.
-- Direct ACLED API for weekly/event-level granularity
-- Actor-level escalation detection
-- ML-based index calibration against historical escalation outcomes
-- Subnational index breakdown
-"""
-    )
 
 
 # ----------------------------
