@@ -1664,6 +1664,15 @@ if show_map and st.session_state.get("page") != "index":
                             panel_col = None
 
                         with map_col:
+                            map_mode = st.radio(
+                                "Map view",
+                                ["🌐  3D Globe", "🗺️  2D Map"],
+                                horizontal=True,
+                                label_visibility="collapsed",
+                                key="map_mode_toggle",
+                            )
+                            use_3d = map_mode == "🌐  3D Globe"
+
                             # ── CesiumJS 3D Globe ─────────────────────────
                             try:
                                 cesium_token = st.secrets["cesium"]["token"]
@@ -1712,7 +1721,8 @@ if show_map and st.session_state.get("page") != "index":
                             points_json = _json.dumps(cesium_points)
                             map_h = 760 if focused else 790
 
-                            globe_html = f"""<!DOCTYPE html>
+                            if use_3d:
+                                globe_html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <style>
   *{{margin:0;padding:0;box-sizing:border-box;}}
@@ -1951,7 +1961,83 @@ function animate(){{
 }}
 animate();
 </script></body></html>"""
-                            st.components.v1.html(globe_html, height=map_h, scrolling=False)
+                                st.components.v1.html(globe_html, height=map_h, scrolling=False)
+
+                            else:
+                                # ── 2D Flat Map ───────────────────────────────
+                                import plotly.express as _px
+                                fig2d = _px.scatter_mapbox(
+                                    grouped,
+                                    lat="centroid_latitude",
+                                    lon="centroid_longitude",
+                                    color="dominant_category",
+                                    size="bubble_size",
+                                    size_max=size_max,
+                                    hover_name="hover_location",
+                                    hover_data={
+                                        "metric_value": ":,",
+                                        "fatalities": ":,",
+                                        "battles": ":,",
+                                        "explosions_remote_violence": ":,",
+                                        "violence_against_civilians": ":,",
+                                        "strategic_developments": ":,",
+                                        "protests": ":,",
+                                        "riots": ":,",
+                                        "violent_actors": ":,",
+                                        "centroid_latitude": False,
+                                        "centroid_longitude": False,
+                                        "admin1": False,
+                                        "country": False,
+                                        "bubble_size": False,
+                                        "dominant_category": False,
+                                    },
+                                    mapbox_style="carto-darkmatter",
+                                    center=map_center,
+                                    zoom=map_zoom,
+                                    title="Current Conflict-Related Hotspots",
+                                    color_discrete_map={
+                                        "Battles": "#ef4444",
+                                        "Explosions / remote violence": "#f59e0b",
+                                        "Violence against civilians": "#fde047",
+                                        "Strategic developments": "#60a5fa",
+                                        "Protests": "#a78bfa",
+                                        "Riots": "#f472b6",
+                                    },
+                                )
+                                fig2d.update_traces(
+                                    marker=dict(opacity=0.85),
+                                    hovertemplate=(
+                                        "<b style='font-size:15px'>%{hovertext}</b><br>"
+                                        + "<span style='color:rgba(255,255,255,0.55);font-size:12px;'>"
+                                        + "Dominant category: %{customdata[14]}</span><br><br>"
+                                        + f"{metric_labels[selected_metric]}: %{{customdata[0]:,}}<br>"
+                                        + "Fatalities: %{customdata[1]:,}"
+                                        + "<extra></extra>"
+                                    ),
+                                )
+                                fig2d.update_layout(
+                                    paper_bgcolor="#020617",
+                                    plot_bgcolor="#020617",
+                                    font=dict(color="white"),
+                                    title=dict(
+                                        text="Current Conflict-Related Hotspots",
+                                        x=0.5, xanchor="center",
+                                        y=0.98, yanchor="top",
+                                        font=dict(color="white", size=20),
+                                    ),
+                                    legend=dict(
+                                        title=dict(text="<b>Categories:</b>", side="top", font=dict(color="white", size=12)),
+                                        orientation="h",
+                                        yanchor="bottom", y=-0.10,
+                                        xanchor="left", x=0,
+                                        bgcolor="rgba(2,6,23,0)",
+                                        font=dict(color="white", size=12),
+                                    ),
+                                    margin=dict(l=0, r=0, t=55, b=75),
+                                    height=map_h,
+                                    hoverlabel=dict(bgcolor="rgba(20,20,20,0.95)", font_size=13, font_family="Arial"),
+                                )
+                                st.plotly_chart(fig2d, use_container_width=True, config={"scrollZoom": True})
 
                         # ── Country info panel ────────────────────────────
                         if focused and panel_col is not None:
