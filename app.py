@@ -26,6 +26,103 @@ st.set_page_config(
     layout="wide",
 )
 
+# ── Page navigation state ─────────────────────────────────────────────────────
+if "page" not in st.session_state:
+    st.session_state["page"] = "landing"
+
+# ── Landing page ──────────────────────────────────────────────────────────────
+if st.session_state["page"] == "landing":
+    # Hide sidebar entirely on landing page
+    st.markdown(
+        """<style>
+        [data-testid="stSidebar"] { display: none; }
+        [data-testid="stSidebarCollapsedControl"] { display: none; }
+        .block-container { padding-top: 0 !important; padding-bottom: 0 !important; max-width: 100% !important; }
+        header { display: none; }
+        </style>""",
+        unsafe_allow_html=True,
+    )
+
+    LANDING_VIDEO = Path("landing.mp4")
+    if LANDING_VIDEO.exists():
+        v64 = base64.b64encode(open(LANDING_VIDEO, "rb").read()).decode()
+        video_tag = f'<source src="data:video/mp4;base64,{v64}" type="video/mp4">'
+    else:
+        video_tag = ""
+
+    st.components.v1.html(
+        f"""
+        <style>
+          * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+          body {{ background: #000; overflow: hidden; }}
+          .wrap {{
+            position: relative; width: 100vw; height: 100vh;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            font-family: 'Inter', sans-serif;
+          }}
+          video {{
+            position: absolute; inset: 0; width: 100%; height: 100%;
+            object-fit: cover; opacity: 0.35; filter: grayscale(60%);
+          }}
+          .overlay {{
+            position: absolute; inset: 0;
+            background: linear-gradient(180deg, rgba(2,6,23,0.5) 0%, rgba(2,6,23,0.7) 100%);
+          }}
+          .content {{
+            position: relative; z-index: 10; text-align: center; padding: 0 24px;
+          }}
+          .tag {{
+            font-size: 11px; letter-spacing: 0.2em; color: #ef4444;
+            font-weight: 700; text-transform: uppercase; margin-bottom: 18px;
+          }}
+          h1 {{
+            font-size: clamp(28px, 5vw, 64px); font-weight: 800;
+            color: #f8fafc; letter-spacing: -0.02em; margin-bottom: 10px;
+            text-shadow: 0 2px 40px rgba(0,0,0,0.8);
+          }}
+          .sub {{
+            font-size: clamp(11px, 1.5vw, 15px); color: #94a3b8;
+            letter-spacing: 0.12em; text-transform: uppercase;
+            margin-bottom: 48px;
+          }}
+          .nodash {{ color: #475569; margin: 0 8px; }}
+        </style>
+        <div class="wrap">
+          {"<video autoplay loop muted playsinline>" + video_tag + "</video>" if video_tag else "<div style='position:absolute;inset:0;background:radial-gradient(ellipse at 50% 40%,#0f1e3a 0%,#020617 70%)'></div>"}
+          <div class="overlay"></div>
+          <div class="content">
+            <div class="tag">&#9632; Palantir Valley Forge Grant Demo</div>
+            <h1>AEGIS</h1>
+            <div class="sub">Advanced Early-warning
+              <span class="nodash">&amp;</span>
+              Geostrategic Intelligence System</div>
+          </div>
+        </div>
+        """,
+        height=520,
+        scrolling=False,
+    )
+
+    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+
+    _, c1, c2, _ = st.columns([2, 1, 1, 2])
+    with c1:
+        if st.button("📊  Escalation Index", use_container_width=True, type="primary"):
+            st.session_state["page"] = "index"
+            st.rerun()
+    with c2:
+        if st.button("🗺️  Interactive Map", use_container_width=True):
+            st.session_state["page"] = "map"
+            st.rerun()
+
+    st.markdown(
+        "<div style='text-align:center;color:#334155;font-size:11px;margin-top:12px;'>"
+        "© 2026 Alexander Armand-Blumberg · AEGIS</div>",
+        unsafe_allow_html=True,
+    )
+    st.stop()
+
 # Public ArcGIS layer for ACLED monthly subnational indicators
 ACLED_ARCGIS_QUERY_URL = (
     "https://services8.arcgis.com/xu983xJB6fIDCjpX/arcgis/rest/services/ACLED/FeatureServer/0/query"
@@ -626,7 +723,7 @@ Map data source: Public ACLED ArcGIS layer.
 
 show_map = st.sidebar.checkbox(
     "Show interactive map",
-    value=True,
+    value=(st.session_state.get("page") != "index"),
     help="Turn the map section on/off.",
 )
 
@@ -718,6 +815,10 @@ with st.expander("Live conflict news", expanded=False):
 # ----------------------------
 # Main header
 # ----------------------------
+if st.button("← Back to AEGIS", key="back_btn"):
+    st.session_state["page"] = "landing"
+    st.rerun()
+
 col1, col2 = st.columns([1, 12])
 with col1:
     st.image("logo.png", width=2000)
