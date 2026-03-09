@@ -419,7 +419,6 @@ def render_ticker(items: list, month_label: str = "") -> None:
       display:inline-block;
       white-space:nowrap;
       animation:ticker 35s linear infinite;
-      padding-left:100%;
       height:100%;
       line-height:36px;
     ">{content_double}</div>
