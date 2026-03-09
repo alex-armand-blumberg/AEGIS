@@ -1909,7 +1909,7 @@ const points = {points_json};
 const dotMeshes = [], dotData = [], dotBaseSizes = [];
 const BASE_CAM_Z = 2.6;
 points.forEach(function(p){{
-  const sz = 0.003 + 0.009 * (p.size / 28);
+  const sz = 0.005 + 0.022 * (p.size / 28);
   const col = new THREE.Color(p.color);
   const mesh = new THREE.Mesh(
     new THREE.SphereGeometry(sz, 8, 8),
@@ -1968,7 +1968,10 @@ cvs.addEventListener('mousemove', e=>{{
 // Animate
 function animate(){{
   requestAnimationFrame(animate);
-  if(!drag){{ globe.rotation.y += vy*0.90; vy*=0.90; }}
+  if(!drag){{
+    globe.rotation.y += vy*0.90; vy*=0.90;
+    globe.rotation.y += 0.0008; // auto-rotate
+  }}
   camera.position.z += (tz - camera.position.z)*0.08;
   // Keep dots same apparent size regardless of zoom
   const zoomRatio = camera.position.z / BASE_CAM_Z;
