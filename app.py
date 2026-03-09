@@ -1760,12 +1760,15 @@ if (CESIUM_TOKEN) {{ Cesium.Ion.defaultAccessToken = CESIUM_TOKEN; }}
 
 async function initViewer() {{
 
-// Use synchronous ArcGIS satellite imagery — guaranteed to work, no token needed
+// OpenStreetMap — synchronous, no auth, always works
+const osmProvider = new Cesium.OpenStreetMapImageryProvider({{
+  url: "https://tile.openstreetmap.org/",
+  maximumLevel: 18,
+  credit: "OpenStreetMap contributors"
+}});
+
 const viewer = new Cesium.Viewer("cesiumContainer", {{
-  imageryProvider: new Cesium.ArcGisMapServerImageryProvider({{
-    url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer",
-    enablePickFeatures: false
-  }}),
+  imageryProvider: osmProvider,
   terrainProvider: new Cesium.EllipsoidTerrainProvider(),
   baseLayerPicker: false,
   geocoder: false,
@@ -1778,13 +1781,17 @@ const viewer = new Cesium.Viewer("cesiumContainer", {{
   contextOptions: {{ webgl: {{ preserveDrawingBuffer: true }} }}
 }});
 
-// Try to upgrade terrain to Cesium World Terrain if token available
+// Upgrade to ion satellite imagery if token present
 if (CESIUM_TOKEN) {{
+  Cesium.IonImageryProvider.fromAssetId(2).then(function(p) {{
+    viewer.imageryLayers.removeAll();
+    viewer.imageryLayers.addImageryProvider(p);
+  }}).catch(function(e) {{
+    console.warn("Ion imagery failed, keeping OSM:", e);
+  }});
   try {{
-    viewer.scene.setTerrain(
-      new Cesium.Terrain(Cesium.CesiumTerrainProvider.fromIonAssetId(1))
-    );
-  }} catch(e) {{ console.warn("Ion terrain unavailable, using ellipsoid"); }}
+    viewer.scene.setTerrain(Cesium.Terrain.fromWorldTerrain());
+  }} catch(e) {{ console.warn("Terrain failed:", e); }}
 }}
 
 viewer.scene.globe.enableLighting = true;
