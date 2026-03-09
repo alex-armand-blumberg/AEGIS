@@ -1710,6 +1710,7 @@ if show_map and st.session_state.get("page") != "index":
 
                             import json as _json
                             points_json = _json.dumps(cesium_points)
+                            map_h = 760 if focused else 790
 
                             threejs_html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
