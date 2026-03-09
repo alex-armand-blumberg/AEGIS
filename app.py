@@ -32,23 +32,32 @@ if "page" not in st.session_state:
 
 # ── Landing page ──────────────────────────────────────────────────────────────
 if st.session_state["page"] == "landing":
-    # Strip all Streamlit chrome; hide the real buttons (clicked via JS postMessage)
+    # Kill every pixel of Streamlit chrome and overflow
     st.markdown(
         """<style>
         [data-testid="stSidebar"],
         [data-testid="stSidebarCollapsedControl"],
-        header, footer { display: none !important; }
-        .main .block-container {
-            padding: 0 !important; margin: 0 !important;
-            max-width: 100vw !important; width: 100vw !important;
+        header, footer, .stDeployButton { display: none !important; }
+        html, body,
+        [data-testid="stApp"],
+        [data-testid="stAppViewContainer"],
+        [data-testid="stMain"],
+        .main, section.main,
+        .block-container {
+            overflow: hidden !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            max-width: 100vw !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            max-height: 100vh !important;
         }
-        .main { padding: 0 !important; }
         [data-testid="stButton"] { display: none !important; }
         </style>""",
         unsafe_allow_html=True,
     )
 
-    # Hidden Streamlit buttons — triggered by JS postMessage from the iframe
+    # Hidden Streamlit buttons — JS clicks them from inside the iframe
     if st.button("__index__", key="btn_index"):
         st.session_state["page"] = "index"
         st.rerun()
@@ -58,7 +67,7 @@ if st.session_state["page"] == "landing":
 
     LANDING_VIDEO = Path("landing.mp4")
     if LANDING_VIDEO.exists():
-        v64  = base64.b64encode(open(LANDING_VIDEO, "rb").read()).decode()
+        v64 = base64.b64encode(open(LANDING_VIDEO, "rb").read()).decode()
         video_html = f"<video id='bg' autoplay loop muted playsinline><source src='data:video/mp4;base64,{v64}' type='video/mp4'></video>"
     else:
         video_html = "<div id='bg' style='position:fixed;inset:0;background:radial-gradient(ellipse at 50% 35%,#0f1e3a 0%,#020617 70%)'></div>"
@@ -69,9 +78,11 @@ if st.session_state["page"] == "landing":
 <head><meta charset="utf-8">
 <style>
   *, *::before, *::after {{ margin:0; padding:0; box-sizing:border-box; }}
-  html, body {{ width:100%; height:100%; overflow:hidden; background:#000;
-    font-family:-apple-system,'Inter','Helvetica Neue',sans-serif; }}
-
+  html, body {{
+    width:100%; height:100%;
+    overflow:hidden; background:#000;
+    font-family:-apple-system,'Inter','Helvetica Neue',sans-serif;
+  }}
   #bg {{
     position:fixed; inset:0; width:100%; height:100%;
     object-fit:cover; opacity:0.42;
@@ -80,11 +91,10 @@ if st.session_state["page"] == "landing":
   #overlay {{
     position:fixed; inset:0; z-index:1;
     background:linear-gradient(180deg,
-      rgba(2,6,23,0.38) 0%, rgba(2,6,23,0.55) 50%, rgba(2,6,23,0.80) 100%);
+      rgba(2,6,23,0.38) 0%,rgba(2,6,23,0.55) 50%,rgba(2,6,23,0.80) 100%);
   }}
   #content {{
-    position:relative; z-index:2;
-    width:100%; height:100vh;
+    position:relative; z-index:2; width:100%; height:100vh;
     display:flex; flex-direction:column;
     align-items:center; justify-content:center;
     text-align:center; padding:0 24px;
@@ -108,7 +118,7 @@ if st.session_state["page"] == "landing":
   .btn {{
     padding:13px 34px; font-size:15px; font-weight:600;
     letter-spacing:0.03em; border-radius:7px; border:none;
-    cursor:pointer; transition:transform .15s, opacity .15s;
+    cursor:pointer; transition:transform .15s,opacity .15s;
   }}
   .btn:hover {{ transform:translateY(-2px); opacity:0.90; }}
   .btn-p {{ background:#ef4444; color:#fff; }}
@@ -136,19 +146,25 @@ if st.session_state["page"] == "landing":
     <div class="copy">&copy; 2026 Alexander Armand-Blumberg &middot; AEGIS</div>
   </div>
   <script>
-    // Resize iframe to exactly fill the parent viewport — no scrolling needed
     (function() {{
-      var ph = window.parent.innerHeight;
-      window.parent.document.querySelectorAll('iframe').forEach(function(f) {{
-        if (f.contentWindow === window) {{
-          f.style.height = ph + 'px';
-          f.style.display = 'block';
-        }}
-      }});
+      function fill() {{
+        var p = window.parent;
+        var ph = p.innerHeight;
+        p.document.querySelectorAll('iframe').forEach(function(f) {{
+          if (f.contentWindow === window) {{
+            f.style.cssText = 'height:'+ph+'px !important;width:100vw !important;display:block !important;border:none !important;position:fixed !important;top:0 !important;left:0 !important;z-index:9999 !important;';
+          }}
+        }});
+        // Nuke scrollbars on parent
+        p.document.documentElement.style.cssText += ';overflow:hidden !important;height:100vh !important;';
+        p.document.body.style.cssText += ';overflow:hidden !important;height:100vh !important;';
+      }}
+      fill();
+      window.addEventListener('resize', fill);
+      setTimeout(fill, 100);
     }})();
 
     function nav(dest) {{
-      // Click the corresponding hidden Streamlit button in the parent
       var label = dest === 'index' ? '__index__' : '__map__';
       window.parent.document.querySelectorAll('[data-testid="stButton"] button')
         .forEach(function(b) {{ if (b.innerText.trim() === label) b.click(); }});
@@ -156,7 +172,7 @@ if st.session_state["page"] == "landing":
   </script>
 </body>
 </html>""",
-        height=10,   # JS overrides this to 100vh immediately
+        height=10,
         scrolling=False,
     )
     st.stop()
