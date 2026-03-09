@@ -1709,7 +1709,7 @@ if show_map:
 st.markdown(
     """
 <div style="text-align:center; color:#e2e8f0; font-size:12px; padding: 8px 0 16px 0;">
-    © 2026 Alexander Blumberg · AEGIS · Palantir Valley Forge Grant Demo
+    © 2026 Alexander Armand-Blumberg · AEGIS
 </div>
 """,
     unsafe_allow_html=True,
