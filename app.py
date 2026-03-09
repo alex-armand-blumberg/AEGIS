@@ -685,8 +685,6 @@ if VIDEO_PATH.exists():
         unsafe_allow_html=True,
     )
 
-st.sidebar.markdown("---")
-
 # Load ACLED credentials silently from Streamlit secrets
 try:
     acled_api_email = st.secrets["acled"]["email"]
@@ -838,7 +836,7 @@ if st.session_state.get("page") == "map":
     st.caption(
         "Explore the interactive global conflict map powered by the ACLED ArcGIS public layer. "
         "Bubble color shows the dominant conflict category for each region. "
-        "Bubble size reflects the selected metric. Updated weekly."
+        "Bubble size reflects the selected metric. Automatically updated weekly."
     )
 else:
     st.caption(
