@@ -1760,10 +1760,11 @@ if (CESIUM_TOKEN) {{ Cesium.Ion.defaultAccessToken = CESIUM_TOKEN; }}
 
 async function initViewer() {{
 
-// OpenStreetMap — fromUrl is the non-deprecated async constructor in 1.114
-const osmProvider = await Cesium.OpenStreetMapImageryProvider.fromUrl(
-  "https://tile.openstreetmap.org/"
-);
+// OpenStreetMap imagery — plain constructor, works in all iframe contexts
+const osmProvider = new Cesium.OpenStreetMapImageryProvider({{
+  url: "https://tile.openstreetmap.org/",
+  maximumLevel: 18
+}});
 
 const viewer = new Cesium.Viewer("cesiumContainer", {{
   baseLayer: new Cesium.ImageryLayer(osmProvider),
