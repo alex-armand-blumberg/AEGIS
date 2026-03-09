@@ -1797,7 +1797,11 @@ if show_map and st.session_state.get("page") != "index":
                                 hoverlabel=dict(bgcolor="rgba(20,20,20,0.95)", font_size=13),
                             )
 
-                            st.plotly_chart(fig3d, use_container_width=True, config={"scrollZoom": True})
+                            st.plotly_chart(fig3d, use_container_width=True, config={
+                                "scrollZoom": False,
+                                "displayModeBar": True,
+                                "modeBarButtonsToRemove": ["select2d", "lasso2d"],
+                            })
 
                         # ── Country info panel ────────────────────────────
                         if focused and panel_col is not None:
