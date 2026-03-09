@@ -1713,41 +1713,33 @@ if show_map and st.session_state.get("page") != "index":
 
                             map_h = 760 if focused else 790
 
-                            cesium_html = f"""
-<!DOCTYPE html><html><head>
+                            threejs_html = f"""<!DOCTYPE html>
+<html><head>
 <meta charset="utf-8">
 <style>
-  html,body,#cesiumContainer{{width:100%;height:{map_h}px;margin:0;padding:0;overflow:hidden;background:#000;}}
-  #tooltip{{
-    position:absolute;pointer-events:none;background:rgba(10,15,30,0.96);
+  html,body{{margin:0;padding:0;background:#000;overflow:hidden;width:100%;height:{map_h}px;}}
+  canvas{{display:block;}}
+  #tooltip{{position:absolute;pointer-events:none;background:rgba(10,15,30,0.96);
     color:#fff;padding:10px 14px;border-radius:8px;font-family:Arial,sans-serif;
     font-size:13px;border:1px solid rgba(255,255,255,0.15);max-width:240px;
-    display:none;z-index:999;line-height:1.6;
-    box-shadow:0 4px 20px rgba(0,0,0,0.6);
-  }}
-  #legend{{
-    position:absolute;bottom:28px;left:14px;background:rgba(2,6,23,0.85);
+    display:none;z-index:999;line-height:1.6;box-shadow:0 4px 20px rgba(0,0,0,0.6);}}
+  #legend{{position:absolute;bottom:14px;left:14px;background:rgba(2,6,23,0.85);
     color:#fff;padding:10px 14px;border-radius:8px;font-family:Arial,sans-serif;
-    font-size:12px;border:1px solid rgba(255,255,255,0.1);z-index:10;
-  }}
+    font-size:12px;border:1px solid rgba(255,255,255,0.1);z-index:10;}}
   #legend div{{display:flex;align-items:center;gap:8px;margin:3px 0;}}
-  #legend span{{width:12px;height:12px;border-radius:50%;display:inline-block;flex-shrink:0;}}
-  #title{{
-    position:absolute;top:14px;left:50%;transform:translateX(-50%);
-    color:white;font-family:Arial,sans-serif;font-size:18px;font-weight:700;
+  #legend span{{width:11px;height:11px;border-radius:50%;display:inline-block;flex-shrink:0;}}
+  #title{{position:absolute;top:12px;left:50%;transform:translateX(-50%);
+    color:white;font-family:Arial,sans-serif;font-size:17px;font-weight:700;
     text-shadow:0 2px 8px rgba(0,0,0,0.9);z-index:10;white-space:nowrap;
-    background:rgba(2,6,23,0.5);padding:6px 18px;border-radius:6px;
-  }}
+    background:rgba(2,6,23,0.55);padding:5px 16px;border-radius:6px;}}
+  #hint{{position:absolute;bottom:14px;right:14px;color:rgba(255,255,255,0.35);
+    font-family:Arial,sans-serif;font-size:11px;z-index:10;}}
 </style>
-<script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
-<link href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
 </head><body>
-<div id="cesiumContainer"></div>
 <div id="tooltip"></div>
-<div id="debug" style="position:absolute;top:50px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.85);color:#0f0;font-family:monospace;font-size:11px;padding:8px 12px;border-radius:6px;z-index:999;display:none;max-width:500px;text-align:left;"></div>
 <div id="title">&#127758; Current Conflict-Related Hotspots</div>
 <div id="legend">
-  <div style="font-weight:700;margin-bottom:6px;font-size:13px;">Categories</div>
+  <div style="font-weight:700;margin-bottom:5px;">Categories</div>
   <div><span style="background:#ef4444"></span>Battles</div>
   <div><span style="background:#f59e0b"></span>Explosions / Remote Violence</div>
   <div><span style="background:#fde047"></span>Violence Against Civilians</div>
@@ -1755,133 +1747,166 @@ if show_map and st.session_state.get("page") != "index":
   <div><span style="background:#a78bfa"></span>Protests</div>
   <div><span style="background:#f472b6"></span>Riots</div>
 </div>
+<div id="hint">Drag to rotate &nbsp;·&nbsp; Scroll to zoom</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-const CESIUM_TOKEN = "{cesium_token}";
-if (CESIUM_TOKEN) {{ Cesium.Ion.defaultAccessToken = CESIUM_TOKEN; }}
+const W = window.innerWidth, H = {map_h};
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, W/H, 0.1, 1000);
+camera.position.z = 2.8;
 
-async function initViewer() {{
+const renderer = new THREE.WebGLRenderer({{antialias:true}});
+renderer.setSize(W, H);
+renderer.setPixelRatio(window.devicePixelRatio);
+document.body.appendChild(renderer.domElement);
 
-const dbg = document.getElementById("debug");
-function log(msg) {{ dbg.innerHTML += msg + "<br>"; dbg.style.display="block"; }}
-
-log("TOKEN: " + (CESIUM_TOKEN ? CESIUM_TOKEN.substring(0,12)+"..." : "MISSING"));
-
-// Try createWorldImageryAsync — simplest high-level Cesium 1.114 API
-let baseImageryProvider;
-try {{
-  baseImageryProvider = await Cesium.createWorldImageryAsync({{
-    style: Cesium.IonWorldImageryStyle.AERIAL_WITH_LABELS
-  }});
-  log("✅ createWorldImageryAsync succeeded");
-}} catch(e) {{
-  log("❌ createWorldImageryAsync failed: " + e.message);
-  baseImageryProvider = null;
+// Stars
+const starGeo = new THREE.BufferGeometry();
+const starVerts = [];
+for(let i=0;i<12000;i++){{
+  const r=400, t=2*Math.PI*Math.random(), p=Math.acos(2*Math.random()-1);
+  starVerts.push(r*Math.sin(p)*Math.cos(t), r*Math.sin(p)*Math.sin(t), r*Math.cos(p));
 }}
+starGeo.setAttribute('position',new THREE.Float32BufferAttribute(starVerts,3));
+scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({{color:0xffffff,size:0.7}})));
 
-if (!baseImageryProvider) {{
-  // Last resort: use ArcGIS public tiles (no auth needed)
-  try {{
-    baseImageryProvider = await Cesium.ArcGisMapServerImageryProvider.fromUrl(
-      "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"
-    );
-    log("✅ ArcGIS fallback loaded");
-  }} catch(e2) {{
-    log("❌ ArcGIS failed: " + e2.message);
-    // Absolute last resort — plain color globe so at least it renders
-    baseImageryProvider = new Cesium.SingleTileImageryProvider({{
-      url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
-      rectangle: Cesium.Rectangle.fromDegrees(-180,-90,180,90)
-    }});
-    log("⚠️ Using solid color fallback");
-  }}
-}}
+// Earth globe — load high-res texture from NASA (CORS-open)
+const loader = new THREE.TextureLoader();
+const earthGeo = new THREE.SphereGeometry(1, 64, 64);
 
-const viewer = new Cesium.Viewer("cesiumContainer", {{
-  baseLayer: new Cesium.ImageryLayer(baseImageryProvider),
-  terrainProvider: new Cesium.EllipsoidTerrainProvider(),
-  baseLayerPicker: false,
-  geocoder: false,
-  homeButton: false,
-  sceneModePicker: false,
-  navigationHelpButton: false,
-  animation: false,
-  timeline: false,
-  fullscreenButton: false,
-  contextOptions: {{ webgl: {{ preserveDrawingBuffer: true }} }}
-}});
-log("✅ Viewer created");
-
-viewer.scene.globe.enableLighting = true;
-viewer.scene.fog.enabled = true;
-viewer.scene.fog.density = 0.00012;
-viewer.scene.globe.atmosphereLightIntensity = 20.0;
-viewer.scene.skyAtmosphere.show = true;
-viewer.scene.globe.showGroundAtmosphere = true;
-
-// Set camera looking down at Earth
-viewer.camera.setView({{
-  destination: Cesium.Cartesian3.fromDegrees({cam_lon}, {cam_lat}, {cam_alt}),
-  orientation: {{
-    heading: Cesium.Math.toRadians(0),
-    pitch: Cesium.Math.toRadians(-90),
-    roll: 0.0
-  }}
+// Use NASA Blue Marble texture (CORS enabled)
+const earthMat = new THREE.MeshPhongMaterial({{
+  map: loader.load(
+    "https://eoimages.gsfc.nasa.gov/images/imagerecords/74000/74117/world.200408.3x5400x2700.jpg",
+    undefined, undefined,
+    function() {{
+      // fallback: procedural blue-green globe if NASA blocked
+      const canvas = document.createElement('canvas');
+      canvas.width=1024; canvas.height=512;
+      const ctx = canvas.getContext('2d');
+      const grd = ctx.createLinearGradient(0,0,0,512);
+      grd.addColorStop(0,'#1a3a5c');
+      grd.addColorStop(0.3,'#2d6a8a');
+      grd.addColorStop(0.5,'#1e5c3a');
+      grd.addColorStop(0.7,'#2d6a8a');
+      grd.addColorStop(1,'#1a3a5c');
+      ctx.fillStyle=grd;
+      ctx.fillRect(0,0,1024,512);
+      earthMat.map = new THREE.CanvasTexture(canvas);
+      earthMat.needsUpdate = true;
+    }}
+  ),
+  specular: new THREE.Color(0x333333),
+  shininess: 15,
 }});
 
-// Plot ACLED points
+const earth = new THREE.Mesh(earthGeo, earthMat);
+scene.add(earth);
+
+// Atmosphere glow
+const atmosGeo = new THREE.SphereGeometry(1.02, 64, 64);
+const atmosMat = new THREE.MeshPhongMaterial({{
+  color: 0x4488ff, transparent: true, opacity: 0.08, side: THREE.FrontSide
+}});
+scene.add(new THREE.Mesh(atmosGeo, atmosMat));
+
+// Lighting
+scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+sun.position.set(5, 3, 5);
+scene.add(sun);
+
+// Convert lat/lon to 3D point on sphere
+function latLonTo3D(lat, lon, r) {{
+  const phi = (90 - lat) * Math.PI / 180;
+  const theta = (lon + 180) * Math.PI / 180;
+  return new THREE.Vector3(
+    -r * Math.sin(phi) * Math.cos(theta),
+     r * Math.cos(phi),
+     r * Math.sin(phi) * Math.sin(theta)
+  );
+}}
+
+// Plot ACLED points as glowing spheres
 const points = {points_json};
-const entities = [];
+const dotMeshes = [];
+const dotData = [];
 
 points.forEach(function(p) {{
-  const hex = p.color.replace("#","");
-  const r = parseInt(hex.substring(0,2),16)/255;
-  const g = parseInt(hex.substring(2,4),16)/255;
-  const b = parseInt(hex.substring(4,6),16)/255;
-
-  const entity = viewer.entities.add({{
-    position: Cesium.Cartesian3.fromDegrees(p.lon, p.lat, 5000),
-    point: {{
-      pixelSize: p.size,
-      color: new Cesium.Color(r, g, b, 0.88),
-      outlineColor: new Cesium.Color(r*1.2, g*1.2, b*1.2, 0.5),
-      outlineWidth: 1.5,
-      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-      scaleByDistance: new Cesium.NearFarScalar(1.5e5, 1.8, 8.0e6, 0.4),
-      translucencyByDistance: new Cesium.NearFarScalar(1.5e5, 1.0, 8.0e6, 0.85),
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
-    }},
-    properties: p,
-  }});
-  entities.push(entity);
+  const color = new THREE.Color(p.color);
+  const size = 0.004 + 0.018 * (p.size / 28);
+  const geo = new THREE.SphereGeometry(size, 8, 8);
+  const mat = new THREE.MeshBasicMaterial({{color: color}});
+  const mesh = new THREE.Mesh(geo, mat);
+  const pos = latLonTo3D(p.lat, p.lon, 1.01);
+  mesh.position.copy(pos);
+  scene.add(mesh);
+  dotMeshes.push(mesh);
+  dotData.push(p);
 }});
 
-// Tooltip on hover
-const tooltip = document.getElementById("tooltip");
-const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-handler.setInputAction(function(movement) {{
-  const picked = viewer.scene.pick(movement.endPosition);
-  if (Cesium.defined(picked) && picked.id && picked.id.properties) {{
-    const p = picked.id.properties;
-    tooltip.style.display = "block";
-    tooltip.style.left = (movement.endPosition.x + 16) + "px";
-    tooltip.style.top  = (movement.endPosition.y - 10) + "px";
-    tooltip.innerHTML = "<b style='font-size:14px'>" + p.label.getValue() + "</b><br>"
-      + "<span style='color:rgba(255,255,255,0.5);font-size:11px'>" + p.category.getValue() + "</span><br><br>"
-      + p.metric_name.getValue() + ": <b>" + p.metric.getValue().toLocaleString() + "</b><br>"
-      + "Fatalities: <b>" + p.fatalities.getValue().toLocaleString() + "</b>";
+// Orbit controls (manual implementation)
+let isDragging = false, prevX = 0, prevY = 0;
+let rotX = 0.3, rotY = 0;
+let targetZ = 2.8;
+
+renderer.domElement.addEventListener('mousedown', e => {{ isDragging=true; prevX=e.clientX; prevY=e.clientY; }});
+renderer.domElement.addEventListener('mouseup', () => isDragging=false);
+renderer.domElement.addEventListener('mouseleave', () => isDragging=false);
+renderer.domElement.addEventListener('mousemove', e => {{
+  if(!isDragging) return;
+  rotY += (e.clientX - prevX) * 0.005;
+  rotX += (e.clientY - prevY) * 0.005;
+  rotX = Math.max(-1.4, Math.min(1.4, rotX));
+  prevX=e.clientX; prevY=e.clientY;
+}});
+renderer.domElement.addEventListener('wheel', e => {{
+  targetZ = Math.max(1.3, Math.min(5.0, targetZ + e.deltaY * 0.003));
+}});
+
+// Tooltip raycasting
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+const tooltip = document.getElementById('tooltip');
+renderer.domElement.addEventListener('mousemove', e => {{
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(dotMeshes);
+  if(hits.length > 0) {{
+    const idx = dotMeshes.indexOf(hits[0].object);
+    const p = dotData[idx];
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.clientX + 14) + 'px';
+    tooltip.style.top = (e.clientY - 10) + 'px';
+    tooltip.innerHTML = '<b style="font-size:14px">' + p.label + '</b><br>'
+      + '<span style="color:rgba(255,255,255,0.5);font-size:11px">' + p.category + '</span><br><br>'
+      + p.metric_name + ': <b>' + p.metric.toLocaleString() + '</b><br>'
+      + 'Fatalities: <b>' + p.fatalities.toLocaleString() + '</b>';
   }} else {{
-    tooltip.style.display = "none";
+    tooltip.style.display = 'none';
   }}
-}}, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+}});
 
-// Remove default Cesium credits
-viewer._cesiumWidget._creditContainer.style.display = "none";
+// Set initial camera to look at conflict zone
+const initPos = latLonTo3D({cam_lat}, {cam_lon}, 1);
+const angle = Math.atan2(initPos.x, initPos.z);
+rotY = -angle;
 
-}} // end initViewer
-initViewer();
+// Animate
+function animate() {{
+  requestAnimationFrame(animate);
+  camera.position.z += (targetZ - camera.position.z) * 0.08;
+  earth.rotation.x = rotX;
+  earth.rotation.y = rotY;
+  dotMeshes.forEach(m => {{ m.rotation.x = rotX; m.rotation.y = rotY; }});
+  renderer.render(scene, camera);
+}}
+animate();
 </script>
 </body></html>"""
-                            st.components.v1.html(cesium_html, height=map_h, scrolling=False)
+                            st.components.v1.html(threejs_html, height=map_h, scrolling=False)
 
                         # ── Country info panel ────────────────────────────
                         if focused and panel_col is not None:
