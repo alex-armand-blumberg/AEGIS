@@ -1760,14 +1760,33 @@ if (CESIUM_TOKEN) {{ Cesium.Ion.defaultAccessToken = CESIUM_TOKEN; }}
 
 async function initViewer() {{
 
-// OpenStreetMap imagery — plain constructor, works in all iframe contexts
-const osmProvider = new Cesium.OpenStreetMapImageryProvider({{
-  url: "https://tile.openstreetmap.org/",
-  maximumLevel: 18
-}});
+// Await ion imagery BEFORE creating viewer so it's ready as the base layer
+let baseImageryProvider;
+if (CESIUM_TOKEN) {{
+  try {{
+    baseImageryProvider = await Cesium.IonImageryProvider.fromAssetId(2);
+    console.log("Ion satellite imagery loaded");
+  }} catch(e) {{
+    console.warn("Ion imagery failed:", e);
+    baseImageryProvider = null;
+  }}
+}}
+
+// If ion failed or no token, use Bing Maps aerial (free tier, no key needed in Cesium)
+if (!baseImageryProvider) {{
+  try {{
+    baseImageryProvider = await Cesium.IonImageryProvider.fromAssetId(3);  // Bing aerial
+    console.log("Bing aerial loaded as fallback");
+  }} catch(e) {{
+    baseImageryProvider = new Cesium.SingleTileImageryProvider({{
+      url: "https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Assets/Textures/NaturalEarthII/2/0/0.jpg",
+      rectangle: Cesium.Rectangle.fromDegrees(-180, -90, 180, 90)
+    }});
+  }}
+}}
 
 const viewer = new Cesium.Viewer("cesiumContainer", {{
-  baseLayer: new Cesium.ImageryLayer(osmProvider),
+  baseLayer: new Cesium.ImageryLayer(baseImageryProvider),
   terrainProvider: new Cesium.EllipsoidTerrainProvider(),
   baseLayerPicker: false,
   geocoder: false,
@@ -1780,14 +1799,8 @@ const viewer = new Cesium.Viewer("cesiumContainer", {{
   contextOptions: {{ webgl: {{ preserveDrawingBuffer: true }} }}
 }});
 
-// Upgrade to ion satellite imagery if token present
+// Add terrain on top
 if (CESIUM_TOKEN) {{
-  Cesium.IonImageryProvider.fromAssetId(2).then(function(p) {{
-    viewer.imageryLayers.removeAll();
-    viewer.imageryLayers.addImageryProvider(p);
-  }}).catch(function(e) {{
-    console.warn("Ion imagery failed, keeping OSM:", e);
-  }});
   try {{
     viewer.scene.setTerrain(Cesium.Terrain.fromWorldTerrain());
   }} catch(e) {{ console.warn("Terrain failed:", e); }}
