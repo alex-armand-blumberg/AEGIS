@@ -1747,7 +1747,7 @@ if show_map and st.session_state.get("page") != "index":
   <div class="row"><div class="dot" style="background:#f472b6"></div>Riots</div>
 </div>
 <div id="hint">Drag to rotate &nbsp;·&nbsp; Scroll to zoom</div>
-<script src="https://unpkg.com/globe.gl@2.31.1/dist/globe.gl.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/globe.gl@2.31.1/dist/globe.gl.min.js"></script>
 <script>
 const points = {points_json};
 const tooltip = document.getElementById('tooltip');
@@ -1758,8 +1758,8 @@ const world = Globe({{
   .width(window.innerWidth)
   .height({map_h})
   .backgroundColor('#020617')
-  .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-night.jpg')
-  .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
+  .globeImageUrl('https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-night.jpg')
+  .bumpImageUrl('https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-topology.png')
   .showAtmosphere(true)
   .atmosphereColor('#1a4a8a')
   .atmosphereAltitude(0.18)
