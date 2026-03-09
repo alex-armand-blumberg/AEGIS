@@ -1706,11 +1706,10 @@ if show_map:
 # ----------------------------
 # Footer
 # ----------------------------
-st.markdown("---")
 st.markdown(
     """
-<div style="text-align:center; color:#475569; font-size:12px; padding: 8px 0 16px 0;">
-    © 2026 Alexander Blum · AEGIS · Palantir Valley Forge Grant Demo
+<div style="text-align:center; color:#e2e8f0; font-size:12px; padding: 8px 0 16px 0;">
+    © 2026 Alexander Blumberg · AEGIS · Palantir Valley Forge Grant Demo
 </div>
 """,
     unsafe_allow_html=True,
