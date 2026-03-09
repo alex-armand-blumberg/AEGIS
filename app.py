@@ -574,9 +574,9 @@ with st.sidebar.expander("Advanced Settings"):
         "Escalation alert threshold (0–100)",
         min_value=0,
         max_value=100,
-        value=35,
+        value=50,
         step=1,
-        help="Months where the Escalation Index exceeds this are flagged as escalation events.",
+        help="Recommended: 50 for major conflicts (Ukraine, Palestine, Sudan). Lower to 35–40 for smaller or less-covered conflicts (Mali, CAR, Myanmar pre-2021) where the index rarely exceeds 50 even during significant escalation. The pre-escalation warning signal works best when there is room below the threshold — if too many months are already flagged red, consider raising the threshold.",
     )
     smooth_window = st.number_input(
         "Smoothing window (months)",
