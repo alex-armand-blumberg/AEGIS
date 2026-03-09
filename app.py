@@ -32,93 +32,142 @@ if "page" not in st.session_state:
 
 # ── Landing page ──────────────────────────────────────────────────────────────
 if st.session_state["page"] == "landing":
-    # Hide sidebar entirely on landing page
+    # ── Strip ALL Streamlit chrome so video can go edge-to-edge ──────────────
+    LANDING_VIDEO = Path("landing.mp4")
+    if LANDING_VIDEO.exists():
+        v64  = base64.b64encode(open(LANDING_VIDEO, "rb").read()).decode()
+        vtag = f'<video autoplay loop muted playsinline id="aegis-bg"><source src="data:video/mp4;base64,{v64}" type="video/mp4"></video>'
+    else:
+        vtag = ""
+
     st.markdown(
-        """<style>
-        [data-testid="stSidebar"] { display: none; }
-        [data-testid="stSidebarCollapsedControl"] { display: none; }
-        .block-container { padding-top: 0 !important; padding-bottom: 0 !important; max-width: 100% !important; }
-        header { display: none; }
-        </style>""",
+        f"""
+<style>
+  /* Hide all Streamlit chrome */
+  [data-testid="stSidebar"],
+  [data-testid="stSidebarCollapsedControl"],
+  header, footer {{ display: none !important; }}
+
+  /* Remove all page padding */
+  .main .block-container {{
+    padding: 0 !important; margin: 0 !important;
+    max-width: 100vw !important; width: 100vw !important;
+  }}
+  .main {{ padding: 0 !important; }}
+  html, body {{ background: #000 !important; margin: 0; padding: 0; overflow-x: hidden; }}
+
+  /* Fullscreen video background */
+  #aegis-bg {{
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    object-fit: cover;
+    opacity: 0.38;
+    filter: grayscale(55%) contrast(1.1);
+    z-index: 0;
+    pointer-events: none;
+  }}
+
+  /* Dark gradient overlay */
+  #aegis-overlay {{
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background: linear-gradient(
+      180deg,
+      rgba(2,6,23,0.45) 0%,
+      rgba(2,6,23,0.60) 55%,
+      rgba(2,6,23,0.85) 100%
+    );
+    z-index: 1;
+    pointer-events: none;
+  }}
+
+  /* Landing content layer */
+  #aegis-content {{
+    position: relative;
+    z-index: 2;
+    min-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 0 24px;
+    font-family: 'Inter', -apple-system, sans-serif;
+  }}
+  #aegis-tag {{
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    color: #ef4444;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }}
+  #aegis-title {{
+    font-size: clamp(52px, 9vw, 110px);
+    font-weight: 900;
+    color: #ffffff;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    margin-bottom: 16px;
+    text-shadow: 0 0 60px rgba(0,0,0,0.9), 0 2px 4px rgba(0,0,0,0.8);
+  }}
+  #aegis-sub {{
+    font-size: clamp(12px, 1.6vw, 16px);
+    color: #cbd5e1;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 400;
+    text-shadow: 0 1px 8px rgba(0,0,0,0.9);
+  }}
+  #aegis-sub .dim {{ color: #475569; margin: 0 10px; }}
+
+  /* Style the two Streamlit buttons on landing */
+  #aegis-buttons {{
+    position: relative;
+    z-index: 2;
+    margin-top: 8px;
+  }}
+  /* Override default Streamlit button look on landing page */
+  [data-testid="stButton"] button {{
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.04em !important;
+    height: 48px !important;
+    border-radius: 6px !important;
+  }}
+</style>
+
+{vtag}
+<div id="aegis-overlay"></div>
+<div id="aegis-content">
+  <div id="aegis-tag">&#9632;&nbsp; Palantir Valley Forge Grant Demo</div>
+  <div id="aegis-title">AEGIS</div>
+  <div id="aegis-sub">
+    Advanced Early-Warning
+    <span class="dim">&amp;</span>
+    Geostrategic Intelligence System
+  </div>
+</div>
+""",
         unsafe_allow_html=True,
     )
 
-    LANDING_VIDEO = Path("landing.mp4")
-    if LANDING_VIDEO.exists():
-        v64 = base64.b64encode(open(LANDING_VIDEO, "rb").read()).decode()
-        video_tag = f'<source src="data:video/mp4;base64,{v64}" type="video/mp4">'
-    else:
-        video_tag = ""
-
-    st.components.v1.html(
-        f"""
-        <style>
-          * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-          body {{ background: #000; overflow: hidden; }}
-          .wrap {{
-            position: relative; width: 100vw; height: 100vh;
-            display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-            font-family: 'Inter', sans-serif;
-          }}
-          video {{
-            position: absolute; inset: 0; width: 100%; height: 100%;
-            object-fit: cover; opacity: 0.35; filter: grayscale(60%);
-          }}
-          .overlay {{
-            position: absolute; inset: 0;
-            background: linear-gradient(180deg, rgba(2,6,23,0.5) 0%, rgba(2,6,23,0.7) 100%);
-          }}
-          .content {{
-            position: relative; z-index: 10; text-align: center; padding: 0 24px;
-          }}
-          .tag {{
-            font-size: 11px; letter-spacing: 0.2em; color: #ef4444;
-            font-weight: 700; text-transform: uppercase; margin-bottom: 18px;
-          }}
-          h1 {{
-            font-size: clamp(28px, 5vw, 64px); font-weight: 800;
-            color: #f8fafc; letter-spacing: -0.02em; margin-bottom: 10px;
-            text-shadow: 0 2px 40px rgba(0,0,0,0.8);
-          }}
-          .sub {{
-            font-size: clamp(11px, 1.5vw, 15px); color: #94a3b8;
-            letter-spacing: 0.12em; text-transform: uppercase;
-            margin-bottom: 48px;
-          }}
-          .nodash {{ color: #475569; margin: 0 8px; }}
-        </style>
-        <div class="wrap">
-          {"<video autoplay loop muted playsinline>" + video_tag + "</video>" if video_tag else "<div style='position:absolute;inset:0;background:radial-gradient(ellipse at 50% 40%,#0f1e3a 0%,#020617 70%)'></div>"}
-          <div class="overlay"></div>
-          <div class="content">
-            <div class="tag">&#9632; Palantir Valley Forge Grant Demo</div>
-            <h1>AEGIS</h1>
-            <div class="sub">Advanced Early-warning
-              <span class="nodash">&amp;</span>
-              Geostrategic Intelligence System</div>
-          </div>
-        </div>
-        """,
-        height=520,
-        scrolling=False,
-    )
-
-    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
-
+    # Buttons rendered as normal Streamlit widgets (z-index handled by CSS above)
     _, c1, c2, _ = st.columns([2, 1, 1, 2])
     with c1:
-        if st.button("📊  Escalation Index", use_container_width=True, type="primary"):
+        if st.button("📊  Escalation Index", use_container_width=True, type="primary", key="btn_index"):
             st.session_state["page"] = "index"
             st.rerun()
     with c2:
-        if st.button("🗺️  Interactive Map", use_container_width=True):
+        if st.button("🗺️  Interactive Map", use_container_width=True, key="btn_map"):
             st.session_state["page"] = "map"
             st.rerun()
 
     st.markdown(
-        "<div style='text-align:center;color:#334155;font-size:11px;margin-top:12px;'>"
-        "© 2026 Alexander Armand-Blumberg · AEGIS</div>",
+        "<div style='position:relative;z-index:2;text-align:center;color:#334155;"
+        "font-size:11px;margin-top:16px;'>© 2026 Alexander Armand-Blumberg · AEGIS</div>",
         unsafe_allow_html=True,
     )
     st.stop()
@@ -631,6 +680,110 @@ def compute_escalation_index(df: pd.DataFrame, country: str) -> pd.DataFrame:
 # ----------------------------
 # Sidebar: branding + inputs
 # ----------------------------
+st.sidebar.header("AEGIS Control Bar")
+
+VIDEO_PATH = Path("logo1.mp4")
+if VIDEO_PATH.exists():
+    video_bytes = open(VIDEO_PATH, "rb").read()
+    video_base64 = base64.b64encode(video_bytes).decode()
+    st.sidebar.markdown(
+        f"""
+        <video autoplay loop muted playsinline style="width:100%; border-radius:12px;">
+            <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
+        </video>
+        """,
+        unsafe_allow_html=True,
+    )
+
+st.sidebar.markdown("---")
+st.sidebar.header("Inputs")
+
+country_name = st.sidebar.text_input(
+    "Country (exact match)",
+    "",
+    help="Must match the country name in ACLED exactly (e.g. 'Ukraine', 'Sudan', 'Myanmar').",
+)
+
+# Load ACLED credentials silently from Streamlit secrets
+try:
+    acled_api_email = st.secrets["acled"]["email"]
+    acled_api_key   = st.secrets["acled"]["password"]
+    use_api = bool(acled_api_email and acled_api_key)
+except Exception:
+    acled_api_email = ""
+    acled_api_key   = ""
+    use_api = False
+
+with st.sidebar.expander("Advanced Settings"):
+    escalation_threshold = st.slider(
+        "Escalation alert threshold (0–100)",
+        min_value=0,
+        max_value=100,
+        value=45,
+        step=1,
+        help="Recommended: 45 for major conflicts. Lower to 35–40 for smaller or less-covered conflicts.",
+    )
+    smooth_window = st.number_input(
+        "Smoothing window (months)",
+        min_value=1,
+        max_value=12,
+        value=3,
+        step=1,
+        help="Rolling average applied to reduce month-to-month noise.",
+    )
+    show_components = st.checkbox(
+        "Show component breakdown chart",
+        value=False,
+        help="Stacked bar chart showing each sub-index contribution.",
+    )
+    st.markdown("**Plot date range**")
+    st.caption("Data from Jan 2018 to Jan 2026.")
+    help="Data from Jan 2018 to Jan 2025."
+    plot_date_col1, plot_date_col2 = st.columns(2)
+    with plot_date_col1:
+        plot_start_date = st.date_input(
+            "From",
+            value=date(2018, 1, 1),
+            min_value=date(2018, 1, 1),
+            max_value=date.today(),
+            key="plot_start",
+        )
+    with plot_date_col2:
+        plot_end_date = st.date_input(
+            "To",
+            value=date.today(),
+            min_value=date(2018, 1, 1),
+            max_value=date.today(),
+            key="plot_end",
+        )
+
+run_btn = st.sidebar.button("Generate plot")
+
+st.sidebar.markdown("---")
+st.sidebar.markdown(
+    """
+<div style="opacity:0.6; font-size:13px;">
+Plot data source: ACLED (2018-2025 history via Researcher-Tier API).<br>
+Map data source: Public ACLED ArcGIS layer.
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+show_map = st.sidebar.checkbox(
+    "Show interactive map",
+    value=(st.session_state.get("page") != "index"),
+    help="Turn the map section on/off.",
+)
+
+override_map_dates = st.sidebar.checkbox(
+    "Override map date range",
+    value=False,
+    help="If off, the map automatically uses the latest month available.",
+)
+
+st.sidebar.markdown("---")
+
 with st.sidebar.expander("Purpose"):
     st.markdown(
         """
@@ -668,126 +821,10 @@ with st.sidebar.expander("Limitations"):
 """
     )
 
-st.sidebar.markdown("---")
-
-st.sidebar.header("AEGIS Control Bar")
-
-VIDEO_PATH = Path("logo1.mp4")
-if VIDEO_PATH.exists():
-    video_bytes = open(VIDEO_PATH, "rb").read()
-    video_base64 = base64.b64encode(video_bytes).decode()
-    st.sidebar.markdown(
-        f"""
-        <video autoplay loop muted playsinline style="width:100%; border-radius:12px;">
-            <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
-        </video>
-        """,
-        unsafe_allow_html=True,
-    )
-
-# Load ACLED credentials silently from Streamlit secrets
-try:
-    acled_api_email = st.secrets["acled"]["email"]
-    acled_api_key   = st.secrets["acled"]["password"]
-    use_api = bool(acled_api_email and acled_api_key)
-except Exception:
-    acled_api_email = ""
-    acled_api_key   = ""
-    use_api = False
-
-_is_map_page = st.session_state.get("page") == "map"
-
-if not _is_map_page:
-    st.sidebar.header("Inputs")
-    country_name = st.sidebar.text_input(
-        "Country (exact match)",
-        "",
-        help="Must match the country name in ACLED exactly (e.g. 'Ukraine', 'Sudan', 'Myanmar').",
-    )
-    with st.sidebar.expander("Advanced Settings"):
-        escalation_threshold = st.slider(
-            "Escalation alert threshold (0–100)",
-            min_value=0,
-            max_value=100,
-            value=45,
-            step=1,
-            help="Recommended: 45 for major conflicts. Lower to 35–40 for smaller or less-covered conflicts.",
-        )
-        smooth_window = st.number_input(
-            "Smoothing window (months)",
-            min_value=1,
-            max_value=12,
-            value=3,
-            step=1,
-            help="Rolling average applied to reduce month-to-month noise.",
-        )
-        show_components = st.checkbox(
-            "Show component breakdown chart",
-            value=False,
-            help="Stacked bar chart showing each sub-index contribution.",
-        )
-        st.markdown("**Plot date range**")
-        st.caption("Data from Jan 2018 to Jan 2026.")
-        help="Data from Jan 2018 to Jan 2025."
-        plot_date_col1, plot_date_col2 = st.columns(2)
-        with plot_date_col1:
-            plot_start_date = st.date_input(
-                "From",
-                value=date(2018, 1, 1),
-                min_value=date(2018, 1, 1),
-                max_value=date.today(),
-                key="plot_start",
-            )
-        with plot_date_col2:
-            plot_end_date = st.date_input(
-                "To",
-                value=date.today(),
-                min_value=date(2018, 1, 1),
-                max_value=date.today(),
-                key="plot_end",
-            )
-    run_btn = st.sidebar.button("Generate plot")
-else:
-    country_name = ""
-    escalation_threshold = 45
-    smooth_window = 3
-    show_components = False
-    plot_start_date = date(2018, 1, 1)
-    plot_end_date = date.today()
-    run_btn = False
-
-st.sidebar.markdown("---")
-st.sidebar.markdown(
-    """
-<div style="opacity:0.6; font-size:13px;">
-Plot data source: ACLED (2018-2025 history via Researcher-Tier API).<br>
-Map data source: Public ACLED ArcGIS layer.
-</div>
-""",
-    unsafe_allow_html=True,
-)
-
-show_map = st.sidebar.checkbox(
-    "Show interactive map",
-    value=(st.session_state.get("page") != "index"),
-    help="Turn the map section on/off.",
-)
-
-override_map_dates = st.sidebar.checkbox(
-    "Override map date range",
-    value=False,
-    help="If off, the map automatically uses the latest month available.",
-)
-
-
 
 # ----------------------------
 # Live news feed
 # ----------------------------
-if st.button("← Back to AEGIS", key="back_btn_top"):
-    st.session_state["page"] = "landing"
-    st.rerun()
-
 with st.expander("Live conflict news", expanded=False):
     try:
         news_items = load_live_conflict_news(max_items=5)
@@ -827,23 +864,20 @@ with st.expander("Live conflict news", expanded=False):
 # ----------------------------
 # Main header
 # ----------------------------
+if st.button("← Back to AEGIS", key="back_btn"):
+    st.session_state["page"] = "landing"
+    st.rerun()
+
 col1, col2 = st.columns([1, 12])
 with col1:
     st.image("logo.png", width=2000)
 with col2:
     st.title("AEGIS — Escalation Detection Demo")
-if st.session_state.get("page") == "map":
-    st.caption(
-        "Explore the interactive global conflict map powered by the ACLED ArcGIS public layer. "
-        "Bubble color shows the dominant conflict category for each region. "
-        "Bubble size reflects the selected metric. Automatically updated weekly."
-    )
-else:
-    st.caption(
-        "Enter a country name and click Generate plot to see the ACLED-based Escalation Index. "
-        "The index combines five leading indicators — event frequency acceleration, explosions, "
-        "strategic developments, civil unrest, and civilian targeting — into a single 0–100 score."
-    )
+st.caption(
+    "Enter a country name and click Generate plot to see the ACLED-based Escalation Index. "
+    "The index combines five leading indicators — event frequency acceleration, explosions, "
+    "strategic developments, civil unrest, and civilian targeting — into a single 0–100 score."
+)
 
 # ── Ticker bar ───────────────────────────────────────────────────────────────
 _ticker_items = fetch_ticker_data()
