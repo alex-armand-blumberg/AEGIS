@@ -1922,6 +1922,120 @@ points.forEach(function(p){{
   dotBaseSizes.push(sz);
 }});
 
+
+// ── Geographic labels ──────────────────────────────────────────────
+function makeLabel(text, color, fontSize) {{
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 96;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 512, 96);
+  ctx.font = '600 ' + fontSize + 'px Inter,Arial,sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(0,0,0,1)';
+  ctx.shadowBlur = 12;
+  ctx.fillStyle = color;
+  ctx.fillText(text, 256, 48);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({{
+    map: new THREE.CanvasTexture(c),
+    transparent: true,
+    depthWrite: false,
+  }}));
+  sp.scale.set(0.38, 0.072, 1);
+  return sp;
+}}
+function addLabel(text, lat, lon, r, color, fontSize) {{
+  const sp = makeLabel(text, color, fontSize);
+  sp.position.copy(ll(lat, lon, r));
+  globe.add(sp);
+}}
+
+// [lat, lon, radius, color, fontSize]
+// Continents — large, warm gold, pulled back slightly
+const continents = [
+  ['AFRICA',         5,   22,  1.12, 'rgba(255,210,80,0.65)',  52],
+  ['EUROPE',        54,   15,  1.12, 'rgba(255,210,80,0.65)',  48],
+  ['ASIA',          47,   90,  1.12, 'rgba(255,210,80,0.65)',  52],
+  ['NORTH AMERICA', 50, -100,  1.12, 'rgba(255,210,80,0.65)',  46],
+  ['SOUTH AMERICA',-15,  -58,  1.12, 'rgba(255,210,80,0.65)',  46],
+  ['OCEANIA',      -25,  140,  1.12, 'rgba(255,210,80,0.65)',  42],
+  ['ANTARCTICA',   -82,    0,  1.12, 'rgba(255,210,80,0.60)',  40],
+];
+continents.forEach(l => addLabel(l[0],l[1],l[2],l[3],l[4],l[5]));
+
+// Countries — white, slightly closer
+const countries = [
+  ['RUSSIA',          61,  100, 1.09, 'rgba(255,255,255,0.80)', 40],
+  ['CANADA',          60,  -96, 1.09, 'rgba(255,255,255,0.80)', 40],
+  ['UNITED STATES',   38,  -97, 1.09, 'rgba(255,255,255,0.80)', 40],
+  ['BRAZIL',          -9,  -53, 1.09, 'rgba(255,255,255,0.80)', 40],
+  ['AUSTRALIA',      -24,  134, 1.09, 'rgba(255,255,255,0.80)', 38],
+  ['CHINA',           35,  103, 1.09, 'rgba(255,255,255,0.80)', 38],
+  ['INDIA',           22,   80, 1.09, 'rgba(255,255,255,0.78)', 36],
+  ['ALGERIA',         28,    2, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['MEXICO',          24, -102, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['KAZAKHSTAN',      49,   68, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['SUDAN',           16,   30, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['UKRAINE',         49,   31, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['NIGERIA',          9,    8, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['ETHIOPIA',         9,   40, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['MYANMAR',         20,   96, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['AFGHANISTAN',     33,   66, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['MALI',            18,   -2, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['SYRIA',           35,   38, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['YEMEN',           15,   48, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['IRAQ',            33,   44, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['IRAN',            32,   54, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['SOMALIA',          6,   46, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['D.R. CONGO',      -4,   24, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['COLOMBIA',         4,  -74, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['ARGENTINA',      -35,  -65, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['SOUTH AFRICA',   -29,   25, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['EGYPT',           27,   30, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['TURKEY',          39,   35, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['PAKISTAN',        30,   70, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['INDONESIA',       -5,  118, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['SAUDI ARABIA',    24,   45, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['LIBYA',           26,   17, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['MOZAMBIQUE',     -17,   35, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['MYANMAR',         20,   96, 1.08, 'rgba(255,255,255,0.70)', 30],
+  ['CHAD',            15,   18, 1.08, 'rgba(255,255,255,0.70)', 28],
+  ['NIGER',           17,    8, 1.08, 'rgba(255,255,255,0.70)', 28],
+  ['BURKINA FASO',    12,   -2, 1.08, 'rgba(255,255,255,0.70)', 28],
+  ['CAMEROON',         6,   12, 1.08, 'rgba(255,255,255,0.70)', 28],
+  ['KENYA',           -1,   38, 1.08, 'rgba(255,255,255,0.70)', 28],
+  ['TANZANIA',        -6,   35, 1.08, 'rgba(255,255,255,0.70)', 28],
+  ['VENEZUELA',        7,  -66, 1.08, 'rgba(255,255,255,0.70)', 28],
+  ['PERU',           -10,  -76, 1.08, 'rgba(255,255,255,0.70)', 28],
+  ['FRANCE',          47,    2, 1.08, 'rgba(255,255,255,0.70)', 28],
+  ['GERMANY',         51,   10, 1.08, 'rgba(255,255,255,0.70)', 28],
+  ['POLAND',          52,   20, 1.08, 'rgba(255,255,255,0.70)', 28],
+  ['JAPAN',           36,  138, 1.08, 'rgba(255,255,255,0.70)', 28],
+  ['SOUTH KOREA',     36,  128, 1.08, 'rgba(255,255,255,0.70)', 28],
+  ['ISRAEL',          31,   35, 1.08, 'rgba(255,255,255,0.70)', 26],
+  ['LEBANON',         34,   36, 1.08, 'rgba(255,255,255,0.70)', 26],
+  ['GAZA',            31,   34, 1.08, 'rgba(255,255,255,0.70)', 24],
+];
+countries.forEach(l => addLabel(l[0],l[1],l[2],l[3],l[4],l[5]));
+
+// Oceans & seas — light blue, outer radius
+const waters = [
+  ['PACIFIC OCEAN',    5, -155, 1.12, 'rgba(120,185,255,0.50)', 46],
+  ['ATLANTIC OCEAN',  10,  -30, 1.12, 'rgba(120,185,255,0.50)', 44],
+  ['INDIAN OCEAN',   -22,   80, 1.12, 'rgba(120,185,255,0.50)', 44],
+  ['ARCTIC OCEAN',    87,    0, 1.12, 'rgba(120,185,255,0.45)', 36],
+  ['SOUTHERN OCEAN', -62,    0, 1.12, 'rgba(120,185,255,0.45)', 36],
+  ['MEDITERRANEAN',   36,   18, 1.08, 'rgba(120,185,255,0.45)', 26],
+  ['RED SEA',         20,   38, 1.08, 'rgba(120,185,255,0.45)', 24],
+  ['PERSIAN GULF',    26,   52, 1.08, 'rgba(120,185,255,0.45)', 22],
+  ['CARIBBEAN SEA',   16,  -75, 1.08, 'rgba(120,185,255,0.45)', 26],
+  ['BLACK SEA',       43,   34, 1.08, 'rgba(120,185,255,0.45)', 24],
+  ['CASPIAN SEA',     42,   51, 1.08, 'rgba(120,185,255,0.45)', 24],
+  ['SOUTH CHINA SEA', 12,  114, 1.08, 'rgba(120,185,255,0.45)', 26],
+  ['GULF OF GUINEA',   2,    3, 1.08, 'rgba(120,185,255,0.45)', 26],
+];
+waters.forEach(l => addLabel(l[0],l[1],l[2],l[3],l[4],l[5]));
+
 // Orient globe toward conflict hotspot
 const id = ll({cam_lat}, {cam_lon}, 1);
 globe.rotation.y = -Math.atan2(id.x, id.z);
