@@ -52,7 +52,12 @@ if st.session_state["page"] == "landing":
             height: 100vh !important;
             max-height: 100vh !important;
         }
-        [data-testid="stButton"] { display: none !important; }
+        [data-testid="stButton"] {
+            position: fixed !important;
+            top: -9999px !important;
+            left: -9999px !important;
+            opacity: 0 !important;
+        }
         </style>""",
         unsafe_allow_html=True,
     )
