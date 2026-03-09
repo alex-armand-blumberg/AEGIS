@@ -1713,285 +1713,91 @@ if show_map and st.session_state.get("page") != "index":
 
                             map_h = 760 if focused else 790
 
-                            threejs_html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<style>
-  html,body{{margin:0;padding:0;background:#000;overflow:hidden;width:100%;height:{map_h}px;}}
-  canvas{{display:block;}}
-  #tooltip{{position:absolute;pointer-events:none;background:rgba(10,15,30,0.96);color:#fff;
-    padding:10px 14px;border-radius:8px;font-family:Arial,sans-serif;font-size:13px;
-    border:1px solid rgba(255,255,255,0.15);max-width:240px;display:none;z-index:999;
-    line-height:1.6;box-shadow:0 4px 20px rgba(0,0,0,0.6);}}
-  #legend{{position:absolute;bottom:14px;left:14px;background:rgba(2,6,23,0.85);color:#fff;
-    padding:10px 14px;border-radius:8px;font-family:Arial,sans-serif;font-size:12px;
-    border:1px solid rgba(255,255,255,0.1);z-index:10;}}
-  #legend div{{display:flex;align-items:center;gap:8px;margin:3px 0;}}
-  #legend span{{width:11px;height:11px;border-radius:50%;display:inline-block;flex-shrink:0;}}
-  #title{{position:absolute;top:12px;left:50%;transform:translateX(-50%);color:white;
-    font-family:Arial,sans-serif;font-size:17px;font-weight:700;
-    text-shadow:0 2px 8px rgba(0,0,0,0.9);z-index:10;white-space:nowrap;
-    background:rgba(2,6,23,0.55);padding:5px 16px;border-radius:6px;}}
-  #hint{{position:absolute;bottom:14px;right:14px;color:rgba(255,255,255,0.35);
-    font-family:Arial,sans-serif;font-size:11px;z-index:10;}}
-</style>
-</head><body>
-<div id="tooltip"></div>
-<div id="title">&#127758; Current Conflict-Related Hotspots</div>
-<div id="legend">
-  <div style="font-weight:700;margin-bottom:5px;">Categories</div>
-  <div><span style="background:#ef4444"></span>Battles</div>
-  <div><span style="background:#f59e0b"></span>Explosions / Remote Violence</div>
-  <div><span style="background:#fde047"></span>Violence Against Civilians</div>
-  <div><span style="background:#60a5fa"></span>Strategic Developments</div>
-  <div><span style="background:#a78bfa"></span>Protests</div>
-  <div><span style="background:#f472b6"></span>Riots</div>
-</div>
-<div id="hint">Drag to rotate &nbsp;·&nbsp; Scroll to zoom</div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script>
-const W = window.innerWidth, H = {map_h};
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, W/H, 0.1, 1000);
-camera.position.z = 2.8;
+                            import plotly.graph_objects as go
+                            fig3d = go.Figure()
 
-const renderer = new THREE.WebGLRenderer({{antialias:true, alpha:true}});
-renderer.setSize(W, H);
-renderer.setPixelRatio(window.devicePixelRatio);
-document.body.appendChild(renderer.domElement);
+                            color_map_plot = {
+                                "Battles":                       "#ef4444",
+                                "Explosions / remote violence":  "#f59e0b",
+                                "Violence against civilians":    "#fde047",
+                                "Strategic developments":        "#60a5fa",
+                                "Protests":                      "#a78bfa",
+                                "Riots":                         "#f472b6",
+                            }
 
-// Stars
-const starVerts=[];
-for(let i=0;i<14000;i++){{
-  const r=400,t=2*Math.PI*Math.random(),p=Math.acos(2*Math.random()-1);
-  starVerts.push(r*Math.sin(p)*Math.cos(t),r*Math.sin(p)*Math.sin(t),r*Math.cos(p));
-}}
-const sg=new THREE.BufferGeometry();
-sg.setAttribute('position',new THREE.Float32BufferAttribute(starVerts,3));
-scene.add(new THREE.Points(sg,new THREE.PointsMaterial({{color:0xffffff,size:0.6}})));
+                            for cat, color in color_map_plot.items():
+                                df_cat = grouped[grouped["dominant_category"] == cat]
+                                if df_cat.empty:
+                                    continue
+                                fig3d.add_trace(go.Scattergeo(
+                                    lat=df_cat["centroid_latitude"],
+                                    lon=df_cat["centroid_longitude"],
+                                    mode="markers",
+                                    name=cat,
+                                    marker=dict(
+                                        size=df_cat["bubble_size"].clip(lower=df_cat["bubble_size"].max()*0.02),
+                                        sizemode="area",
+                                        sizeref=2.0 * grouped["bubble_size"].max() / (size_max**2),
+                                        color=color,
+                                        opacity=0.88,
+                                        line=dict(width=0),
+                                    ),
+                                    text=df_cat["hover_location"],
+                                    customdata=df_cat[["metric_value","fatalities"]].values,
+                                    hovertemplate=(
+                                        "<b>%{text}</b><br>"
+                                        + f"{metric_labels[selected_metric]}: %{{customdata[0]:,.0f}}<br>"
+                                        + "Fatalities: %{customdata[1]:,.0f}"
+                                        + "<extra></extra>"
+                                    ),
+                                ))
 
-const globe = new THREE.Group();
-scene.add(globe);
+                            fig3d.update_layout(
+                                paper_bgcolor="#020617",
+                                font=dict(color="white"),
+                                height=map_h,
+                                margin=dict(l=0, r=0, t=40, b=0),
+                                title=dict(
+                                    text="Current Conflict-Related Hotspots",
+                                    x=0.5, xanchor="center",
+                                    font=dict(color="white", size=18),
+                                ),
+                                legend=dict(
+                                    orientation="h",
+                                    yanchor="bottom", y=-0.08,
+                                    xanchor="left", x=0,
+                                    bgcolor="rgba(2,6,23,0)",
+                                    font=dict(color="white", size=12),
+                                    title=dict(text="<b>Categories:</b>", font=dict(color="white", size=12)),
+                                ),
+                                geo=dict(
+                                    projection_type="orthographic",
+                                    showland=True,
+                                    landcolor="#1a2c1a",
+                                    showocean=True,
+                                    oceancolor="#0a1628",
+                                    showlakes=True,
+                                    lakecolor="#0d1f3c",
+                                    showcountries=True,
+                                    countrycolor="rgba(255,255,255,0.25)",
+                                    countrywidth=0.5,
+                                    showcoastlines=True,
+                                    coastlinecolor="rgba(255,255,255,0.35)",
+                                    coastlinewidth=0.7,
+                                    showframe=False,
+                                    bgcolor="#020617",
+                                    lataxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.06)"),
+                                    lonaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.06)"),
+                                    projection_rotation=dict(
+                                        lon=float(map_center["lon"]),
+                                        lat=float(map_center["lat"]),
+                                        roll=0,
+                                    ),
+                                ),
+                                hoverlabel=dict(bgcolor="rgba(20,20,20,0.95)", font_size=13),
+                            )
 
-const loader = new THREE.TextureLoader();
-
-// Earth base
-const earthMat = new THREE.MeshPhongMaterial({{color:0x2266aa,specular:0x112244,shininess:20}});
-const earth = new THREE.Mesh(new THREE.SphereGeometry(1,64,64), earthMat);
-globe.add(earth);
-
-// Load earth texture
-const texSources = [
-  "https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg",
-  "https://raw.githubusercontent.com/turban/webgl-earth/master/images/2_no_clouds_4k.jpg"
-];
-function tryTex(srcs, i) {{
-  if(i>=srcs.length) return;
-  loader.load(srcs[i], function(t) {{
-    earthMat.map=t; earthMat.color=new THREE.Color(0xffffff); earthMat.needsUpdate=true;
-  }}, undefined, function() {{ tryTex(srcs,i+1); }});
-}}
-tryTex(texSources,0);
-
-// Country borders overlay
-const borderMat = new THREE.MeshPhongMaterial({{transparent:true,opacity:0.55,depthWrite:false}});
-const borderMesh = new THREE.Mesh(new THREE.SphereGeometry(1.001,64,64), borderMat);
-globe.add(borderMesh);
-loader.load(
-  "https://unpkg.com/three-globe/example/img/earth-topology.png",
-  function(t) {{
-    // topology isn't borders — skip if wrong texture loads
-  }},undefined,function(){{}}
-);
-loader.load(
-  "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_atmos_2048.jpg",
-  function(t) {{ /* skip */ }},undefined,function(){{}}
-);
-// Actually load country outlines texture
-loader.load(
-  "https://unpkg.com/three-globe/example/img/earth-dark.jpg",
-  function(t){{/* skip */}},undefined,function(){{}}
-);
-// Use the real border texture
-loader.load(
-  "https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-blue-marble.jpg",
-  function(t) {{
-    earthMat.map = t; earthMat.color = new THREE.Color(0xffffff); earthMat.needsUpdate = true;
-  }}, undefined, function(){{}}
-);
-
-// Atmosphere
-globe.add(new THREE.Mesh(
-  new THREE.SphereGeometry(1.05,64,64),
-  new THREE.MeshPhongMaterial({{color:0x4488ff,transparent:true,opacity:0.06,side:THREE.BackSide}})
-));
-
-// Lighting — toned down
-scene.add(new THREE.AmbientLight(0xffffff, 0.95));
-const sun = new THREE.DirectionalLight(0xffffff,0.55);
-sun.position.set(5,3,5);
-scene.add(sun);
-
-// lat/lon → 3D
-function ll3d(lat,lon,r){{
-  const phi=(90-lat)*Math.PI/180, theta=(lon+180)*Math.PI/180;
-  return new THREE.Vector3(
-    -r*Math.sin(phi)*Math.cos(theta),
-     r*Math.cos(phi),
-     r*Math.sin(phi)*Math.sin(theta)
-  );
-}}
-
-// ── Text label sprite ──────────────────────────────────────────────
-function makeLabel(text, color, fontSize, bold) {{
-  const canvas = document.createElement('canvas');
-  canvas.width = 512; canvas.height = 128;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0,0,512,128);
-  const weight = bold ? '700' : '500';
-  ctx.font = weight+' '+fontSize+'px Arial';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  // subtle shadow for readability
-  ctx.shadowColor = 'rgba(0,0,0,0.9)';
-  ctx.shadowBlur = 8;
-  ctx.fillStyle = color;
-  ctx.fillText(text, 256, 64);
-  const tex = new THREE.CanvasTexture(canvas);
-  const mat = new THREE.SpriteMaterial({{map:tex, transparent:true, depthWrite:false}});
-  const sprite = new THREE.Sprite(mat);
-  const scale = bold ? 0.28 : 0.22;
-  sprite.scale.set(scale, scale*0.25, 1);
-  return sprite;
-}}
-
-function addLabel(text, lat, lon, r, color, fontSize, bold) {{
-  const s = makeLabel(text, color, fontSize, bold);
-  s.position.copy(ll3d(lat,lon,r));
-  globe.add(s);
-}}
-
-// ── Country labels ─────────────────────────────────────────────────
-const countryLabels = [
-  // Countries
-  ["RUSSIA",        61,  100,  1.08, "rgba(255,255,255,0.80)", 38, true],
-  ["CANADA",        60,  -96,  1.08, "rgba(255,255,255,0.80)", 38, true],
-  ["UNITED STATES", 39,  -98,  1.08, "rgba(255,255,255,0.80)", 38, true],
-  ["BRAZIL",        -9,  -53,  1.08, "rgba(255,255,255,0.80)", 38, true],
-  ["AUSTRALIA",    -25,  134,  1.08, "rgba(255,255,255,0.80)", 38, true],
-  ["CHINA",         35,  103,  1.08, "rgba(255,255,255,0.80)", 38, true],
-  ["INDIA",         22,   80,  1.08, "rgba(255,255,255,0.80)", 38, true],
-  ["KAZAKHSTAN",    48,   68,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["ALGERIA",       28,    3,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["MEXICO",        24,  -102, 1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["SUDAN",         16,   30,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["UKRAINE",       49,   31,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["NIGERIA",        9,    8,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["ETHIOPIA",       9,   40,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["MYANMAR",       20,   96,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["AFGHANISTAN",   33,   66,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["MALI",          18,   -2,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["SYRIA",         35,   38,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["YEMEN",         15,   48,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["IRAQ",          33,   44,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["IRAN",          32,   54,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["SOMALIA",        6,   46,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["D.R. CONGO",    -4,   24,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["COLOMBIA",       4,  -74,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["ARGENTINA",    -35,  -65,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["S. AFRICA",    -29,   25,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["EGYPT",         27,   30,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["TURKEY",        39,   35,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["PAKISTAN",      30,   70,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  ["INDONESIA",     -5,  118,  1.08, "rgba(255,255,255,0.75)", 32, false],
-  // Continents
-  ["AFRICA",         5,   22,  1.10, "rgba(255,230,150,0.60)", 44, true],
-  ["EUROPE",        54,   15,  1.10, "rgba(255,230,150,0.60)", 40, true],
-  ["ASIA",          45,   90,  1.10, "rgba(255,230,150,0.60)", 44, true],
-  ["N. AMERICA",    48,  -100, 1.10, "rgba(255,230,150,0.60)", 40, true],
-  ["S. AMERICA",   -15,  -58,  1.10, "rgba(255,230,150,0.60)", 40, true],
-  ["OCEANIA",      -25,  140,  1.10, "rgba(255,230,150,0.60)", 36, true],
-  ["ANTARCTICA",   -80,    0,  1.10, "rgba(255,230,150,0.55)", 36, true],
-  // Oceans
-  ["PACIFIC OCEAN",   0, -160, 1.10, "rgba(150,200,255,0.50)", 40, true],
-  ["ATLANTIC OCEAN",  0,  -30, 1.10, "rgba(150,200,255,0.50)", 40, true],
-  ["INDIAN OCEAN",  -20,   80, 1.10, "rgba(150,200,255,0.50)", 40, true],
-  ["ARCTIC OCEAN",   85,    0, 1.10, "rgba(150,200,255,0.50)", 36, true],
-  ["SOUTHERN OCEAN",-60,    0, 1.10, "rgba(150,200,255,0.50)", 36, true],
-  ["MEDITERRANEAN",  35,   18, 1.08, "rgba(150,200,255,0.50)", 28, false],
-  ["CARIBBEAN SEA",  16,  -75, 1.08, "rgba(150,200,255,0.50)", 28, false],
-];
-
-countryLabels.forEach(function(l) {{
-  addLabel(l[0],l[1],l[2],l[3],l[4],l[5],l[6]);
-}});
-
-// ACLED dots
-const points = {points_json};
-const dotMeshes=[], dotData=[];
-points.forEach(function(p){{
-  const size=0.004+0.018*(p.size/28);
-  const mesh=new THREE.Mesh(
-    new THREE.SphereGeometry(size,7,7),
-    new THREE.MeshBasicMaterial({{color:new THREE.Color(p.color)}})
-  );
-  mesh.position.copy(ll3d(p.lat,p.lon,1.015));
-  globe.add(mesh);
-  dotMeshes.push(mesh); dotData.push(p);
-}});
-
-// Orient to conflict zones
-const initDir=ll3d({cam_lat},{cam_lon},1);
-globe.rotation.y=-Math.atan2(initDir.x,initDir.z);
-globe.rotation.x=-Math.asin(initDir.y/initDir.length())*0.5;
-
-// Drag controls
-let isDragging=false,prevX=0,prevY=0,velX=0,velY=0,targetZ=2.8;
-const cvs=renderer.domElement;
-cvs.addEventListener('mousedown',e=>{{isDragging=true;prevX=e.clientX;prevY=e.clientY;velX=0;velY=0;}});
-window.addEventListener('mouseup',()=>isDragging=false);
-cvs.addEventListener('mousemove',e=>{{
-  if(!isDragging)return;
-  velY=(e.clientX-prevX)*0.005; velX=(e.clientY-prevY)*0.005;
-  globe.rotation.y+=velY; globe.rotation.x+=velX;
-  globe.rotation.x=Math.max(-1.4,Math.min(1.4,globe.rotation.x));
-  prevX=e.clientX; prevY=e.clientY;
-}});
-cvs.addEventListener('wheel',e=>{{
-  targetZ=Math.max(1.3,Math.min(5.0,targetZ+e.deltaY*0.003));
-  e.preventDefault();
-}},{{passive:false}});
-
-// Tooltip
-const raycaster=new THREE.Raycaster();
-const mouse=new THREE.Vector2();
-const tooltip=document.getElementById('tooltip');
-cvs.addEventListener('mousemove',e=>{{
-  const rect=cvs.getBoundingClientRect();
-  mouse.x=((e.clientX-rect.left)/rect.width)*2-1;
-  mouse.y=-((e.clientY-rect.top)/rect.height)*2+1;
-  raycaster.setFromCamera(mouse,camera);
-  const hits=raycaster.intersectObjects(dotMeshes);
-  if(hits.length>0){{
-    const p=dotData[dotMeshes.indexOf(hits[0].object)];
-    tooltip.style.display='block';
-    tooltip.style.left=(e.clientX+14)+'px';
-    tooltip.style.top=(e.clientY-10)+'px';
-    tooltip.innerHTML='<b style="font-size:14px">'+p.label+'</b><br>'
-      +'<span style="color:rgba(255,255,255,0.5);font-size:11px">'+p.category+'</span><br><br>'
-      +p.metric_name+': <b>'+p.metric.toLocaleString()+'</b><br>'
-      +'Fatalities: <b>'+p.fatalities.toLocaleString()+'</b>';
-  }} else {{ tooltip.style.display='none'; }}
-}});
-
-function animate(){{
-  requestAnimationFrame(animate);
-  if(!isDragging){{globe.rotation.y+=velY*0.92;velY*=0.92;}}
-  camera.position.z+=(targetZ-camera.position.z)*0.08;
-  renderer.render(scene,camera);
-}}
-animate();
-</script></body></html>"""
-                            st.components.v1.html(threejs_html, height=map_h, scrolling=False)
+                            st.plotly_chart(fig3d, use_container_width=True, config={"scrollZoom": True})
 
                         # ── Country info panel ────────────────────────────
                         if focused and panel_col is not None:
