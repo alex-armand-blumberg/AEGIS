@@ -1664,79 +1664,222 @@ if show_map and st.session_state.get("page") != "index":
                             panel_col = None
 
                         with map_col:
-                            fig = px.scatter_mapbox(
-                                grouped,
-                                lat="centroid_latitude",
-                                lon="centroid_longitude",
-                                color="dominant_category",
-                                size="bubble_size",
-                                size_max=size_max,
-                                hover_name="hover_location",
-                                hover_data={
-                                    "metric_value": ":,",
-                                    "fatalities": ":,",
-                                    "battles": ":,",
-                                    "explosions_remote_violence": ":,",
-                                    "violence_against_civilians": ":,",
-                                    "strategic_developments": ":,",
-                                    "protests": ":,",
-                                    "riots": ":,",
-                                    "violent_actors": ":,",
-                                    "centroid_latitude": False,
-                                    "centroid_longitude": False,
-                                    "admin1": False,
-                                    "country": False,
-                                    "bubble_size": False,
-                                    "dominant_category": False,
-                                },
-                                mapbox_style="carto-darkmatter",
-                                center=map_center,
-                                zoom=map_zoom,
-                                title="Current Conflict-Related Hotspots",
-                                color_discrete_map={
-                                    "Battles": "#ef4444",
-                                    "Explosions / remote violence": "#f59e0b",
-                                    "Violence against civilians": "#fde047",
-                                    "Strategic developments": "#60a5fa",
-                                    "Protests": "#a78bfa",
-                                    "Riots": "#f472b6",
-                                },
-                            )
-                            fig.update_traces(
-                                marker=dict(opacity=0.85),
-                                hovertemplate=(
-                                    "<b style='font-size:15px'>%{hovertext}</b><br>"
-                                    + "<span style='color:rgba(255,255,255,0.55);font-size:12px;'>"
-                                    + "Dominant category: %{customdata[14]}</span><br><br>"
-                                    + f"{metric_labels[selected_metric]}: %{{customdata[0]:,}}<br>"
-                                    + "Fatalities: %{customdata[1]:,}"
-                                    + "<extra></extra>"
-                                ),
-                            )
+                            # ── CesiumJS 3D Globe ─────────────────────────
+                            try:
+                                cesium_token = st.secrets["cesium"]["token"]
+                            except Exception:
+                                cesium_token = ""
+
+                            # Build point data for Cesium
+                            color_map = {
+                                "Battles":                        "#ef4444",
+                                "Explosions / remote violence":   "#f59e0b",
+                                "Violence against civilians":     "#fde047",
+                                "Strategic developments":         "#60a5fa",
+                                "Protests":                       "#a78bfa",
+                                "Riots":                          "#f472b6",
+                            }
+                            max_val = float(grouped["metric_value"].max()) or 1.0
+                            cesium_points = []
+                            for _, row in grouped.iterrows():
+                                cesium_points.append({
+                                    "lat":      float(row["centroid_latitude"]),
+                                    "lon":      float(row["centroid_longitude"]),
+                                    "color":    color_map.get(row["dominant_category"], "#ffffff"),
+                                    "size":     6 + 22 * float(row["metric_value"]) / max_val,
+                                    "label":    f"{row['admin1']}, {row['country']}",
+                                    "category": row["dominant_category"],
+                                    "metric":   int(row["metric_value"]),
+                                    "fatalities": int(row.get("fatalities", 0)),
+                                    "metric_name": metric_labels[selected_metric],
+                                })
+
+                            # Camera position: if focused, fly to country
+                            if focused and not grouped[grouped["country"] == focused].empty:
+                                cr = grouped[grouped["country"] == focused]
+                                cam_lat = float((cr["centroid_latitude"].min() + cr["centroid_latitude"].max()) / 2)
+                                cam_lon = float((cr["centroid_longitude"].min() + cr["centroid_longitude"].max()) / 2)
+                                span = max(
+                                    float(cr["centroid_latitude"].max() - cr["centroid_latitude"].min()),
+                                    float(cr["centroid_longitude"].max() - cr["centroid_longitude"].min()),
+                                    1.0,
+                                )
+                                cam_alt = int(min(12_000_000, max(600_000, span * 120_000)))
+                            else:
+                                cam_lat, cam_lon, cam_alt = 20, 10, 18_000_000
+
+                            import json as _json
+                            points_json = _json.dumps(cesium_points)
+
                             map_h = 760 if focused else 790
-                            fig.update_layout(
-                                paper_bgcolor="#020617",
-                                plot_bgcolor="#020617",
-                                font=dict(color="white"),
-                                title=dict(
-                                    text="Current Conflict-Related Hotspots",
-                                    x=0.5, xanchor="center",
-                                    y=0.98, yanchor="top",
-                                    font=dict(color="white", size=20),
-                                ),
-                                legend=dict(
-                                    title=dict(text="<b>Categories:</b>", side="top", font=dict(color="white", size=12)),
-                                    orientation="h",
-                                    yanchor="bottom", y=-0.10,
-                                    xanchor="left", x=0,
-                                    bgcolor="rgba(2,6,23,0)",
-                                    font=dict(color="white", size=12),
-                                ),
-                                margin=dict(l=0, r=0, t=55, b=75),
-                                height=map_h,
-                                hoverlabel=dict(bgcolor="rgba(20,20,20,0.95)", font_size=13, font_family="Arial"),
-                            )
-                            st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": True})
+
+                            cesium_html = f"""
+<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+<style>
+  html,body,#cesiumContainer{{width:100%;height:{map_h}px;margin:0;padding:0;overflow:hidden;background:#000;}}
+  #tooltip{{
+    position:absolute;pointer-events:none;background:rgba(10,15,30,0.96);
+    color:#fff;padding:10px 14px;border-radius:8px;font-family:Arial,sans-serif;
+    font-size:13px;border:1px solid rgba(255,255,255,0.15);max-width:240px;
+    display:none;z-index:999;line-height:1.6;
+    box-shadow:0 4px 20px rgba(0,0,0,0.6);
+  }}
+  #legend{{
+    position:absolute;bottom:28px;left:14px;background:rgba(2,6,23,0.85);
+    color:#fff;padding:10px 14px;border-radius:8px;font-family:Arial,sans-serif;
+    font-size:12px;border:1px solid rgba(255,255,255,0.1);z-index:10;
+  }}
+  #legend div{{display:flex;align-items:center;gap:8px;margin:3px 0;}}
+  #legend span{{width:12px;height:12px;border-radius:50%;display:inline-block;flex-shrink:0;}}
+  #title{{
+    position:absolute;top:14px;left:50%;transform:translateX(-50%);
+    color:white;font-family:Arial,sans-serif;font-size:18px;font-weight:700;
+    text-shadow:0 2px 8px rgba(0,0,0,0.9);z-index:10;white-space:nowrap;
+    background:rgba(2,6,23,0.5);padding:6px 18px;border-radius:6px;
+  }}
+</style>
+<script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
+<link href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+</head><body>
+<div id="cesiumContainer"></div>
+<div id="tooltip"></div>
+<div id="title">&#127758; Current Conflict-Related Hotspots</div>
+<div id="legend">
+  <div style="font-weight:700;margin-bottom:6px;font-size:13px;">Categories</div>
+  <div><span style="background:#ef4444"></span>Battles</div>
+  <div><span style="background:#f59e0b"></span>Explosions / Remote Violence</div>
+  <div><span style="background:#fde047"></span>Violence Against Civilians</div>
+  <div><span style="background:#60a5fa"></span>Strategic Developments</div>
+  <div><span style="background:#a78bfa"></span>Protests</div>
+  <div><span style="background:#f472b6"></span>Riots</div>
+</div>
+<script>
+const CESIUM_TOKEN = "{cesium_token}";
+if (CESIUM_TOKEN) {{
+  Cesium.Ion.defaultAccessToken = CESIUM_TOKEN;
+}}
+
+if (CESIUM_TOKEN) {{
+  Cesium.Ion.defaultAccessToken = CESIUM_TOKEN;
+}}
+
+async function initViewer() {{
+  let terrainProvider;
+  let imageryProvider;
+
+  if (CESIUM_TOKEN) {{
+    try {{
+      terrainProvider = await Cesium.CesiumTerrainProvider.fromIonAssetId(1);
+    }} catch(e) {{
+      terrainProvider = new Cesium.EllipsoidTerrainProvider();
+    }}
+    try {{
+      imageryProvider = await Cesium.IonImageryProvider.fromAssetId(2);
+    }} catch(e) {{
+      imageryProvider = new Cesium.ArcGisMapServerImageryProvider({{
+        url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"
+      }});
+    }}
+  }} else {{
+    terrainProvider = new Cesium.EllipsoidTerrainProvider();
+    imageryProvider = new Cesium.ArcGisMapServerImageryProvider({{
+      url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"
+    }});
+  }}
+
+const viewer = new Cesium.Viewer("cesiumContainer", {{
+  imageryProvider: imageryProvider,
+  baseLayerPicker: false,
+  geocoder: false,
+  homeButton: false,
+  sceneModePicker: false,
+  navigationHelpButton: false,
+  animation: false,
+  timeline: false,
+  fullscreenButton: false,
+  terrainProvider: terrainProvider,
+  skyBox: new Cesium.SkyBox({{
+    sources: {{
+      positiveX: "https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Assets/Textures/SkyBox/tycho2t3_80_px.jpg",
+      negativeX: "https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Assets/Textures/SkyBox/tycho2t3_80_mx.jpg",
+      positiveY: "https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Assets/Textures/SkyBox/tycho2t3_80_py.jpg",
+      negativeY: "https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Assets/Textures/SkyBox/tycho2t3_80_my.jpg",
+      positiveZ: "https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Assets/Textures/SkyBox/tycho2t3_80_pz.jpg",
+      negativeZ: "https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Assets/Textures/SkyBox/tycho2t3_80_mz.jpg"
+    }}
+  }}),
+  contextOptions: {{ webgl: {{ preserveDrawingBuffer: true }} }}
+}});
+
+viewer.scene.globe.enableLighting = true;
+viewer.scene.fog.enabled = true;
+viewer.scene.fog.density = 0.00012;
+viewer.scene.globe.atmosphereLightIntensity = 20.0;
+viewer.scene.skyAtmosphere.show = true;
+viewer.scene.globe.showGroundAtmosphere = true;
+
+// Fly to initial camera position
+viewer.camera.flyTo({{
+  destination: Cesium.Cartesian3.fromDegrees({cam_lon}, {cam_lat}, {cam_alt}),
+  duration: 2.0,
+  orientation: {{ heading: 0, pitch: Cesium.Math.toRadians(-45), roll: 0 }}
+}});
+
+// Plot ACLED points
+const points = {points_json};
+const entities = [];
+
+points.forEach(function(p) {{
+  const hex = p.color.replace("#","");
+  const r = parseInt(hex.substring(0,2),16)/255;
+  const g = parseInt(hex.substring(2,4),16)/255;
+  const b = parseInt(hex.substring(4,6),16)/255;
+
+  const entity = viewer.entities.add({{
+    position: Cesium.Cartesian3.fromDegrees(p.lon, p.lat, 5000),
+    point: {{
+      pixelSize: p.size,
+      color: new Cesium.Color(r, g, b, 0.88),
+      outlineColor: new Cesium.Color(r*1.2, g*1.2, b*1.2, 0.5),
+      outlineWidth: 1.5,
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      scaleByDistance: new Cesium.NearFarScalar(1.5e5, 1.8, 8.0e6, 0.4),
+      translucencyByDistance: new Cesium.NearFarScalar(1.5e5, 1.0, 8.0e6, 0.85),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    }},
+    properties: p,
+  }});
+  entities.push(entity);
+}});
+
+// Tooltip on hover
+const tooltip = document.getElementById("tooltip");
+const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+handler.setInputAction(function(movement) {{
+  const picked = viewer.scene.pick(movement.endPosition);
+  if (Cesium.defined(picked) && picked.id && picked.id.properties) {{
+    const p = picked.id.properties;
+    tooltip.style.display = "block";
+    tooltip.style.left = (movement.endPosition.x + 16) + "px";
+    tooltip.style.top  = (movement.endPosition.y - 10) + "px";
+    tooltip.innerHTML = "<b style='font-size:14px'>" + p.label.getValue() + "</b><br>"
+      + "<span style='color:rgba(255,255,255,0.5);font-size:11px'>" + p.category.getValue() + "</span><br><br>"
+      + p.metric_name.getValue() + ": <b>" + p.metric.getValue().toLocaleString() + "</b><br>"
+      + "Fatalities: <b>" + p.fatalities.getValue().toLocaleString() + "</b>";
+  }} else {{
+    tooltip.style.display = "none";
+  }}
+}}, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+// Remove default Cesium credits
+viewer._cesiumWidget._creditContainer.style.display = "none";
+
+}} // end initViewer
+initViewer();
+</script>
+</body></html>"""
+                            st.components.v1.html(cesium_html, height=map_h, scrolling=False)
 
                         # ── Country info panel ────────────────────────────
                         if focused and panel_col is not None:
