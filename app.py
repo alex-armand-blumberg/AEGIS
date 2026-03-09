@@ -930,7 +930,7 @@ if "aegis_plot" in st.session_state:
             f"Battles: <b>{int(row.get('battles',0)):,}</b><br>"
             f"Explosions: <b>{int(row.get('explosions_remote_violence',0)):,}</b><br>"
             f"Strategic devs: <b>{int(row.get('strategic_developments',0)):,}</b><br>"
-            f"✊ Protests: <b>{int(row.get('protests',0)):,}</b><br>"
+            f"Protests: <b>{int(row.get('protests',0)):,}</b><br>"
             f"🔥 Riots: <b>{int(row.get('riots',0)):,}</b><br>"
             f"👥 Civ. violence: <b>{int(row.get('violence_against_civilians',0)):,}</b><br>"
             f"<br>💀 Fatalities: <b>{int(row.get('fatalities',0)):,}</b>"
