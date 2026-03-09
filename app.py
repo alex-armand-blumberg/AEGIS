@@ -1760,15 +1760,13 @@ if (CESIUM_TOKEN) {{ Cesium.Ion.defaultAccessToken = CESIUM_TOKEN; }}
 
 async function initViewer() {{
 
-// OpenStreetMap — synchronous, no auth, always works
-const osmProvider = new Cesium.OpenStreetMapImageryProvider({{
-  url: "https://tile.openstreetmap.org/",
-  maximumLevel: 18,
-  credit: "OpenStreetMap contributors"
-}});
+// OpenStreetMap — fromUrl is the non-deprecated async constructor in 1.114
+const osmProvider = await Cesium.OpenStreetMapImageryProvider.fromUrl(
+  "https://tile.openstreetmap.org/"
+);
 
 const viewer = new Cesium.Viewer("cesiumContainer", {{
-  imageryProvider: osmProvider,
+  baseLayer: new Cesium.ImageryLayer(osmProvider),
   terrainProvider: new Cesium.EllipsoidTerrainProvider(),
   baseLayerPicker: false,
   geocoder: false,
