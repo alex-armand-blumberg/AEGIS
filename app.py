@@ -574,9 +574,9 @@ with st.sidebar.expander("Advanced Settings"):
         "Escalation alert threshold (0–100)",
         min_value=0,
         max_value=100,
-        value=50,
+        value=45,
         step=1,
-        help="Recommended: 50 for major conflicts. Lower to 35–40 for smaller or less-covered conflicts.",
+        help="Recommended: 45 for major conflicts. Lower to 35–40 for smaller or less-covered conflicts.",
     )
     smooth_window = st.number_input(
         "Smoothing window (months)",
