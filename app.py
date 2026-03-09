@@ -664,6 +664,8 @@ Map data source: Public ACLED ArcGIS layer.
     unsafe_allow_html=True,
 )
 
+st.sidebar.markdown("---")
+
 show_map = st.sidebar.checkbox(
     "Show interactive map",
     value=True,
