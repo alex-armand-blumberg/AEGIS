@@ -1760,9 +1760,9 @@ if (CESIUM_TOKEN) {{ Cesium.Ion.defaultAccessToken = CESIUM_TOKEN; }}
 
 async function initViewer() {{
 
-// Create viewer with no imagery — add layers manually below
+// Create viewer — baseLayer:false disables default imagery (Cesium 1.104+)
 const viewer = new Cesium.Viewer("cesiumContainer", {{
-  imageryProvider: false,
+  baseLayer: false,
   baseLayerPicker: false,
   geocoder: false,
   homeButton: false,
@@ -1784,22 +1784,24 @@ const viewer = new Cesium.Viewer("cesiumContainer", {{
   contextOptions: {{ webgl: {{ preserveDrawingBuffer: true }} }}
 }});
 
-// Add terrain
+// Add terrain (Cesium World Terrain via ion asset 1)
 try {{
-  viewer.terrainProvider = await Cesium.CesiumTerrainProvider.fromIonAssetId(1);
+  viewer.scene.setTerrain(new Cesium.Terrain(Cesium.CesiumTerrainProvider.fromIonAssetId(1)));
 }} catch(e) {{
-  viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+  console.warn("Terrain load failed:", e);
 }}
 
-// Add imagery layer
-viewer.imageryLayers.removeAll();
+// Add imagery (Cesium World Imagery via ion asset 2, fallback to free ArcGIS)
 try {{
-  const ionLayer = await Cesium.IonImageryProvider.fromAssetId(2);
-  viewer.imageryLayers.addImageryProvider(ionLayer);
+  const ionProvider = await Cesium.IonImageryProvider.fromAssetId(2);
+  viewer.imageryLayers.addImageryProvider(ionProvider);
 }} catch(e) {{
-  viewer.imageryLayers.addImageryProvider(new Cesium.ArcGisMapServerImageryProvider({{
-    url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"
-  }}));
+  console.warn("Ion imagery failed, using ArcGIS fallback:", e);
+  viewer.imageryLayers.addImageryProvider(
+    new Cesium.ArcGisMapServerImageryProvider({{
+      url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"
+    }})
+  );
 }}
 
 viewer.scene.globe.enableLighting = true;
