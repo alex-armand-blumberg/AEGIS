@@ -1760,9 +1760,20 @@ if (CESIUM_TOKEN) {{ Cesium.Ion.defaultAccessToken = CESIUM_TOKEN; }}
 
 async function initViewer() {{
 
-// Create viewer — baseLayer:false disables default imagery (Cesium 1.104+)
+// Build imagery provider before creating viewer
+let baseLayer;
+try {{
+  const ionProvider = await Cesium.IonImageryProvider.fromAssetId(2);
+  baseLayer = new Cesium.ImageryLayer(ionProvider);
+}} catch(e) {{
+  const arcgis = new Cesium.ArcGisMapServerImageryProvider({{
+    url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"
+  }});
+  baseLayer = new Cesium.ImageryLayer(arcgis);
+}}
+
 const viewer = new Cesium.Viewer("cesiumContainer", {{
-  baseLayer: false,
+  baseLayer: baseLayer,
   baseLayerPicker: false,
   geocoder: false,
   homeButton: false,
@@ -1771,38 +1782,15 @@ const viewer = new Cesium.Viewer("cesiumContainer", {{
   animation: false,
   timeline: false,
   fullscreenButton: false,
-  skyBox: new Cesium.SkyBox({{
-    sources: {{
-      positiveX: "https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Assets/Textures/SkyBox/tycho2t3_80_px.jpg",
-      negativeX: "https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Assets/Textures/SkyBox/tycho2t3_80_mx.jpg",
-      positiveY: "https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Assets/Textures/SkyBox/tycho2t3_80_py.jpg",
-      negativeY: "https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Assets/Textures/SkyBox/tycho2t3_80_my.jpg",
-      positiveZ: "https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Assets/Textures/SkyBox/tycho2t3_80_pz.jpg",
-      negativeZ: "https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Assets/Textures/SkyBox/tycho2t3_80_mz.jpg"
-    }}
-  }}),
   contextOptions: {{ webgl: {{ preserveDrawingBuffer: true }} }}
 }});
 
-// Add terrain (Cesium World Terrain via ion asset 1)
+// Terrain
 try {{
-  viewer.scene.setTerrain(new Cesium.Terrain(Cesium.CesiumTerrainProvider.fromIonAssetId(1)));
-}} catch(e) {{
-  console.warn("Terrain load failed:", e);
-}}
-
-// Add imagery (Cesium World Imagery via ion asset 2, fallback to free ArcGIS)
-try {{
-  const ionProvider = await Cesium.IonImageryProvider.fromAssetId(2);
-  viewer.imageryLayers.addImageryProvider(ionProvider);
-}} catch(e) {{
-  console.warn("Ion imagery failed, using ArcGIS fallback:", e);
-  viewer.imageryLayers.addImageryProvider(
-    new Cesium.ArcGisMapServerImageryProvider({{
-      url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"
-    }})
+  viewer.scene.setTerrain(
+    new Cesium.Terrain(Cesium.CesiumTerrainProvider.fromIonAssetId(1))
   );
-}}
+}} catch(e) {{ console.warn("Terrain failed", e); }}
 
 viewer.scene.globe.enableLighting = true;
 viewer.scene.fog.enabled = true;
@@ -1811,11 +1799,14 @@ viewer.scene.globe.atmosphereLightIntensity = 20.0;
 viewer.scene.skyAtmosphere.show = true;
 viewer.scene.globe.showGroundAtmosphere = true;
 
-// Fly to initial camera position
-viewer.camera.flyTo({{
+// Set camera looking down at Earth
+viewer.camera.setView({{
   destination: Cesium.Cartesian3.fromDegrees({cam_lon}, {cam_lat}, {cam_alt}),
-  duration: 2.0,
-  orientation: {{ heading: 0, pitch: Cesium.Math.toRadians(-45), roll: 0 }}
+  orientation: {{
+    heading: Cesium.Math.toRadians(0),
+    pitch: Cesium.Math.toRadians(-90),
+    roll: 0.0
+  }}
 }});
 
 // Plot ACLED points
