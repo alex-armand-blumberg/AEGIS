@@ -1712,245 +1712,235 @@ if show_map and st.session_state.get("page") != "index":
                             points_json = _json.dumps(cesium_points)
                             map_h = 760 if focused else 790
 
-                            threejs_html = f"""<!DOCTYPE html>
+                            globe_html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <style>
-  html,body{{margin:0;padding:0;background:#020617;overflow:hidden;width:100%;height:{map_h}px;}}
+  *{{margin:0;padding:0;box-sizing:border-box;}}
+  html,body{{width:100%;height:{map_h}px;background:#020617;overflow:hidden;font-family:'Inter',Arial,sans-serif;}}
   canvas{{display:block;}}
-  #tooltip{{position:absolute;pointer-events:none;background:rgba(10,15,30,0.97);color:#fff;
-    padding:10px 14px;border-radius:8px;font-family:Arial,sans-serif;font-size:13px;
-    border:1px solid rgba(255,255,255,0.15);max-width:260px;display:none;z-index:999;
-    line-height:1.7;box-shadow:0 4px 24px rgba(0,0,0,0.7);}}
-  #legend{{position:absolute;bottom:14px;left:14px;background:rgba(2,6,23,0.88);color:#fff;
-    padding:11px 15px;border-radius:9px;font-family:Arial,sans-serif;font-size:12px;
-    border:1px solid rgba(255,255,255,0.1);z-index:10;}}
-  #legend .row{{display:flex;align-items:center;gap:8px;margin:3px 0;}}
-  #legend .dot{{width:11px;height:11px;border-radius:50%;flex-shrink:0;}}
-  #title{{position:absolute;top:12px;left:50%;transform:translateX(-50%);color:white;
-    font-family:Arial,sans-serif;font-size:17px;font-weight:700;letter-spacing:.03em;
-    text-shadow:0 2px 8px rgba(0,0,0,0.9);z-index:10;white-space:nowrap;
-    background:rgba(2,6,23,0.55);padding:5px 18px;border-radius:6px;}}
-  #hint{{position:absolute;bottom:14px;right:14px;color:rgba(255,255,255,0.3);
-    font-family:Arial,sans-serif;font-size:11px;z-index:10;}}
+  #tooltip{{
+    position:absolute;pointer-events:none;
+    background:rgba(2,8,20,0.97);color:#e2e8f0;
+    padding:12px 16px;border-radius:8px;font-size:13px;
+    border:1px solid rgba(96,165,250,0.3);max-width:260px;display:none;
+    line-height:1.8;box-shadow:0 0 24px rgba(96,165,250,0.15);z-index:99;
+  }}
+  #tooltip b{{color:#fff;font-size:14px;}}
+  #tooltip .cat{{color:rgba(255,255,255,0.45);font-size:11px;letter-spacing:.05em;}}
+  #legend{{
+    position:absolute;bottom:16px;left:16px;
+    background:rgba(2,8,20,0.88);color:#e2e8f0;
+    padding:12px 16px;border-radius:8px;font-size:12px;
+    border:1px solid rgba(96,165,250,0.2);
+    box-shadow:0 0 20px rgba(0,0,0,0.5);
+  }}
+  #legend .title{{font-weight:700;font-size:13px;margin-bottom:8px;color:#fff;letter-spacing:.06em;}}
+  #legend .row{{display:flex;align-items:center;gap:9px;margin:4px 0;}}
+  #legend .dot{{width:10px;height:10px;border-radius:50%;flex-shrink:0;box-shadow:0 0 6px var(--c);}}
+  #title{{
+    position:absolute;top:14px;left:50%;transform:translateX(-50%);
+    color:#e2e8f0;font-size:16px;font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;z-index:10;white-space:nowrap;
+    text-shadow:0 0 20px rgba(96,165,250,0.6);
+  }}
+  #hint{{position:absolute;bottom:16px;right:16px;color:rgba(255,255,255,0.25);font-size:11px;letter-spacing:.04em;}}
 </style>
 </head><body>
+<div id="title">&#9632;&nbsp; Current Conflict Hotspots</div>
 <div id="tooltip"></div>
-<div id="title">&#127758; Current Conflict-Related Hotspots</div>
 <div id="legend">
-  <div style="font-weight:700;margin-bottom:6px;font-size:13px;">Categories</div>
-  <div class="row"><div class="dot" style="background:#ef4444"></div>Battles</div>
-  <div class="row"><div class="dot" style="background:#f59e0b"></div>Explosions / Remote Violence</div>
-  <div class="row"><div class="dot" style="background:#fde047"></div>Violence Against Civilians</div>
-  <div class="row"><div class="dot" style="background:#60a5fa"></div>Strategic Developments</div>
-  <div class="row"><div class="dot" style="background:#a78bfa"></div>Protests</div>
-  <div class="row"><div class="dot" style="background:#f472b6"></div>Riots</div>
+  <div class="title">CATEGORIES</div>
+  <div class="row"><div class="dot" style="background:#ef4444;--c:#ef4444"></div>Battles</div>
+  <div class="row"><div class="dot" style="background:#f59e0b;--c:#f59e0b"></div>Explosions / Remote Violence</div>
+  <div class="row"><div class="dot" style="background:#fde047;--c:#fde047"></div>Violence Against Civilians</div>
+  <div class="row"><div class="dot" style="background:#60a5fa;--c:#60a5fa"></div>Strategic Developments</div>
+  <div class="row"><div class="dot" style="background:#a78bfa;--c:#a78bfa"></div>Protests</div>
+  <div class="row"><div class="dot" style="background:#f472b6;--c:#f472b6"></div>Riots</div>
 </div>
-<div id="hint">Drag to rotate &nbsp;·&nbsp; Scroll to zoom</div>
+<div id="hint">DRAG TO ROTATE &nbsp;·&nbsp; SCROLL TO ZOOM</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
 <script>
-const W=window.innerWidth, H={map_h};
-const renderer=new THREE.WebGLRenderer({{antialias:true}});
-renderer.setSize(W,H); renderer.setPixelRatio(window.devicePixelRatio);
+const W = window.innerWidth, H = {map_h};
+const renderer = new THREE.WebGLRenderer({{antialias:true, alpha:false}});
+renderer.setSize(W, H);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setClearColor(0x020617);
 document.body.appendChild(renderer.domElement);
 
-const scene=new THREE.Scene();
-const camera=new THREE.PerspectiveCamera(45,W/H,0.1,1000);
-camera.position.z=2.5;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(42, W/H, 0.1, 1000);
+camera.position.z = 2.6;
 
 // Stars
-const sv=[];
-for(let i=0;i<14000;i++){{
-  const r=400,t=2*Math.PI*Math.random(),p=Math.acos(2*Math.random()-1);
-  sv.push(r*Math.sin(p)*Math.cos(t),r*Math.sin(p)*Math.sin(t),r*Math.cos(p));
+const sv = [];
+for(let i=0;i<16000;i++){{
+  const r=400, t=2*Math.PI*Math.random(), p=Math.acos(2*Math.random()-1);
+  sv.push(r*Math.sin(p)*Math.cos(t), r*Math.sin(p)*Math.sin(t), r*Math.cos(p));
 }}
-const sg=new THREE.BufferGeometry();
-sg.setAttribute('position',new THREE.Float32BufferAttribute(sv,3));
-scene.add(new THREE.Points(sg,new THREE.PointsMaterial({{color:0xffffff,size:0.55}})));
+const sg = new THREE.BufferGeometry();
+sg.setAttribute('position', new THREE.Float32BufferAttribute(sv, 3));
+scene.add(new THREE.Points(sg, new THREE.PointsMaterial({{color:0xffffff, size:0.5}})));
 
-// ── Single group so everything rotates together ──────────────
-const globe=new THREE.Group();
+// Globe group — everything rotates together
+const globe = new THREE.Group();
 scene.add(globe);
 
-// Earth sphere
-const earthMat=new THREE.MeshPhongMaterial({{color:0x1a4a8a,specular:0x112244,shininess:18}});
-const earth=new THREE.Mesh(new THREE.SphereGeometry(1,64,64),earthMat);
-globe.add(earth);
+// Earth sphere — dark glossy material
+const earthMat = new THREE.MeshPhongMaterial({{
+  color: 0x0a1628,
+  specular: 0x1a3a6a,
+  shininess: 40,
+  transparent: false,
+}});
+globe.add(new THREE.Mesh(new THREE.SphereGeometry(1, 64, 64), earthMat));
 
-// Load texture — cdnjs-hosted copy of blue marble
-const loader=new THREE.TextureLoader();
-loader.crossOrigin='anonymous';
-loader.load(
-  'https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg',
-  function(t){{earthMat.map=t;earthMat.color=new THREE.Color(0xffffff);earthMat.needsUpdate=true;}},
-  undefined,
-  function(){{
-    loader.load(
-      'https://raw.githubusercontent.com/turban/webgl-earth/master/images/2_no_clouds_4k.jpg',
-      function(t){{earthMat.map=t;earthMat.color=new THREE.Color(0xffffff);earthMat.needsUpdate=true;}}
-    );
-  }}
-);
-
-// Atmosphere glow
-globe.add(new THREE.Mesh(
-  new THREE.SphereGeometry(1.04,64,64),
-  new THREE.MeshPhongMaterial({{color:0x3366cc,transparent:true,opacity:0.07,side:THREE.BackSide}})
-));
+// Outer glow ring
+const glowMat = new THREE.MeshPhongMaterial({{
+  color: 0x1a4aaa,
+  transparent: true,
+  opacity: 0.08,
+  side: THREE.BackSide,
+}});
+globe.add(new THREE.Mesh(new THREE.SphereGeometry(1.06, 64, 64), glowMat));
 
 // Lighting
-scene.add(new THREE.AmbientLight(0xffffff,1.0));
-const sun=new THREE.DirectionalLight(0xffffff,0.5);
-sun.position.set(5,3,5); scene.add(sun);
+scene.add(new THREE.AmbientLight(0x334466, 1.5));
+const rim = new THREE.DirectionalLight(0x4488ff, 0.4);
+rim.position.set(-3, 2, -3);
+scene.add(rim);
+const key = new THREE.DirectionalLight(0x8abaff, 0.25);
+key.position.set(4, 2, 4);
+scene.add(key);
 
-// lat/lon → 3D
-function ll(lat,lon,r){{
-  const phi=(90-lat)*Math.PI/180, th=(lon+180)*Math.PI/180;
-  return new THREE.Vector3(-r*Math.sin(phi)*Math.cos(th), r*Math.cos(phi), r*Math.sin(phi)*Math.sin(th));
-}}
-
-// Label sprites
-function makeLabel(text,color,fs,bold){{
-  const c=document.createElement('canvas'); c.width=512; c.height=128;
-  const x=c.getContext('2d');
-  x.clearRect(0,0,512,128);
-  x.font=(bold?'700 ':'500 ')+fs+'px Arial';
-  x.textAlign='center'; x.textBaseline='middle';
-  x.shadowColor='rgba(0,0,0,1)'; x.shadowBlur=10;
-  x.fillStyle=color; x.fillText(text,256,64);
-  const sp=new THREE.Sprite(new THREE.SpriteMaterial({{
-    map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false
-  }}));
-  sp.scale.set(bold?0.30:0.22, bold?0.075:0.055, 1);
-  return sp;
-}}
-function addLabel(text,lat,lon,r,color,fs,bold){{
-  const sp=makeLabel(text,color,fs,bold);
-  sp.position.copy(ll(lat,lon,r));
-  globe.add(sp);
-}}
-
-// Country + continent + ocean labels
-const labels=[
-  // Large countries
-  ['RUSSIA',61,100,1.09,'rgba(255,255,255,0.82)',40,true],
-  ['CANADA',60,-96,1.09,'rgba(255,255,255,0.82)',40,true],
-  ['UNITED STATES',38,-97,1.09,'rgba(255,255,255,0.82)',40,true],
-  ['BRAZIL',-9,-52,1.09,'rgba(255,255,255,0.82)',40,true],
-  ['AUSTRALIA',-24,134,1.09,'rgba(255,255,255,0.82)',40,true],
-  ['CHINA',35,103,1.09,'rgba(255,255,255,0.82)',40,true],
-  ['INDIA',22,80,1.09,'rgba(255,255,255,0.82)',38,true],
-  // Medium countries
-  ['ALGERIA',28,2,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['MEXICO',24,-102,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['KAZAKHSTAN',49,68,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['SUDAN',16,30,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['UKRAINE',49,31,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['NIGERIA',9,8,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['ETHIOPIA',9,40,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['MYANMAR',20,96,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['AFGHANISTAN',33,66,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['MALI',18,-2,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['SYRIA',35,38,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['YEMEN',15,48,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['IRAQ',33,44,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['IRAN',32,54,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['SOMALIA',6,46,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['D.R. CONGO',-4,24,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['COLOMBIA',4,-74,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['ARGENTINA',-35,-65,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['S. AFRICA',-29,25,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['EGYPT',27,30,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['TURKEY',39,35,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['PAKISTAN',30,70,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['INDONESIA',-5,118,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['SAUDI ARABIA',24,45,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['LIBYA',26,17,1.08,'rgba(255,255,255,0.72)',30,false],
-  ['MOZAMBIQUE',-17,35,1.08,'rgba(255,255,255,0.72)',30,false],
-  // Continents
-  ['AFRICA',5,22,1.11,'rgba(255,220,120,0.55)',46,true],
-  ['EUROPE',54,15,1.11,'rgba(255,220,120,0.55)',42,true],
-  ['ASIA',45,90,1.11,'rgba(255,220,120,0.55)',46,true],
-  ['NORTH AMERICA',50,-100,1.11,'rgba(255,220,120,0.55)',42,true],
-  ['SOUTH AMERICA',-15,-58,1.11,'rgba(255,220,120,0.55)',42,true],
-  ['OCEANIA',-25,140,1.11,'rgba(255,220,120,0.55)',38,true],
-  // Oceans
-  ['PACIFIC OCEAN',0,-155,1.11,'rgba(130,190,255,0.45)',42,true],
-  ['ATLANTIC OCEAN',10,-30,1.11,'rgba(130,190,255,0.45)',42,true],
-  ['INDIAN OCEAN',-20,80,1.11,'rgba(130,190,255,0.45)',42,true],
-  ['ARCTIC OCEAN',85,0,1.11,'rgba(130,190,255,0.45)',34,true],
-  ['SOUTHERN OCEAN',-62,0,1.11,'rgba(130,190,255,0.45)',34,true],
-  ['MEDITERRANEAN SEA',35,18,1.08,'rgba(130,190,255,0.40)',26,false],
-  ['RED SEA',20,38,1.08,'rgba(130,190,255,0.40)',24,false],
-  ['PERSIAN GULF',26,52,1.08,'rgba(130,190,255,0.40)',22,false],
-  ['CARIBBEAN SEA',16,-75,1.08,'rgba(130,190,255,0.40)',26,false],
-  ['BLACK SEA',43,34,1.08,'rgba(130,190,255,0.40)',24,false],
-];
-labels.forEach(function(l){{ addLabel(l[0],l[1],l[2],l[3],l[4],l[5],l[6]); }});
-
-// ACLED dots
-const points={points_json};
-const dotMeshes=[],dotData=[];
-points.forEach(function(p){{
-  const sz=0.004+0.018*(p.size/28);
-  const mesh=new THREE.Mesh(
-    new THREE.SphereGeometry(sz,8,8),
-    new THREE.MeshBasicMaterial({{color:new THREE.Color(p.color)}})
+// lat/lon → 3D point on unit sphere
+function ll(lat, lon, r){{
+  const phi = (90 - lat) * Math.PI / 180;
+  const th  = (lon + 180) * Math.PI / 180;
+  return new THREE.Vector3(
+    -r * Math.sin(phi) * Math.cos(th),
+     r * Math.cos(phi),
+     r * Math.sin(phi) * Math.sin(th)
   );
-  mesh.position.copy(ll(p.lat,p.lon,1.013));
-  globe.add(mesh); dotMeshes.push(mesh); dotData.push(p);
+}}
+
+// Draw lat/lon grid lines
+function addGrid(){{
+  const mat = new THREE.LineBasicMaterial({{color:0x1a3060, transparent:true, opacity:0.5}});
+  for(let lat=-80;lat<=80;lat+=20){{
+    const pts=[];
+    for(let lon=-180;lon<=180;lon+=2) pts.push(ll(lat,lon,1.001));
+    const g=new THREE.BufferGeometry().setFromPoints(pts);
+    globe.add(new THREE.Line(g,mat));
+  }}
+  for(let lon=-180;lon<180;lon+=20){{
+    const pts=[];
+    for(let lat=-90;lat<=90;lat+=2) pts.push(ll(lat,lon,1.001));
+    const g=new THREE.BufferGeometry().setFromPoints(pts);
+    globe.add(new THREE.Line(g,mat));
+  }}
+}}
+addGrid();
+
+// Country borders from TopoJSON
+const borderMat = new THREE.LineBasicMaterial({{color:0x2a5a9a, transparent:true, opacity:0.85}});
+
+fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
+  .then(r => r.json())
+  .then(world => {{
+    const countries = topojson.feature(world, world.objects.countries);
+    const mesh = topojson.mesh(world, world.objects.countries, (a,b) => a !== b);
+
+    function addGeoLine(coords){{
+      if(coords.length < 2) return;
+      const pts = coords.map(c => ll(c[1], c[0], 1.002));
+      const g = new THREE.BufferGeometry().setFromPoints(pts);
+      globe.add(new THREE.Line(g, borderMat));
+    }}
+
+    function processGeom(geom){{
+      if(!geom) return;
+      if(geom.type === 'LineString') addGeoLine(geom.coordinates);
+      else if(geom.type === 'MultiLineString') geom.coordinates.forEach(addGeoLine);
+      else if(geom.type === 'Polygon') geom.coordinates.forEach(addGeoLine);
+      else if(geom.type === 'MultiPolygon') geom.coordinates.forEach(r => r.forEach(addGeoLine));
+    }}
+    processGeom(mesh);
+  }})
+  .catch(() => {{
+    // fallback: draw continent outlines manually skipped — grid is enough
+  }});
+
+// ACLED conflict dots
+const points = {points_json};
+const dotMeshes = [], dotData = [];
+points.forEach(function(p){{
+  const sz = 0.005 + 0.022 * (p.size / 28);
+  const col = new THREE.Color(p.color);
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(sz, 8, 8),
+    new THREE.MeshBasicMaterial({{color: col}})
+  );
+  mesh.position.copy(ll(p.lat, p.lon, 1.014));
+  globe.add(mesh);
+  dotMeshes.push(mesh);
+  dotData.push(p);
 }});
 
-// Orient toward conflict hotspot
-const id=ll({cam_lat},{cam_lon},1);
-globe.rotation.y=-Math.atan2(id.x,id.z);
+// Orient globe toward conflict hotspot
+const id = ll({cam_lat}, {cam_lon}, 1);
+globe.rotation.y = -Math.atan2(id.x, id.z);
 
-// Drag + inertia
-let drag=false,px=0,py=0,vx=0,vy=0,tz=2.5;
-const cvs=renderer.domElement;
-cvs.addEventListener('mousedown',e=>{{drag=true;px=e.clientX;py=e.clientY;vx=0;vy=0;}});
-window.addEventListener('mouseup',()=>drag=false);
-cvs.addEventListener('mousemove',e=>{{
-  if(!drag)return;
-  vy=(e.clientX-px)*0.005; vx=(e.clientY-py)*0.005;
-  globe.rotation.y+=vy; globe.rotation.x+=vx;
-  globe.rotation.x=Math.max(-1.4,Math.min(1.4,globe.rotation.x));
+// Drag + scroll + inertia
+let drag=false, px=0, py=0, vx=0, vy=0, tz=2.6;
+const cvs = renderer.domElement;
+cvs.addEventListener('mousedown', e=>{{ drag=true; px=e.clientX; py=e.clientY; vx=0; vy=0; }});
+window.addEventListener('mouseup', ()=>drag=false);
+cvs.addEventListener('mousemove', e=>{{
+  if(!drag) return;
+  vy = (e.clientX-px)*0.004; vx = (e.clientY-py)*0.004;
+  globe.rotation.y += vy; globe.rotation.x += vx;
+  globe.rotation.x = Math.max(-1.4, Math.min(1.4, globe.rotation.x));
   px=e.clientX; py=e.clientY;
 }});
-cvs.addEventListener('wheel',e=>{{
-  tz=Math.max(1.3,Math.min(5.0,tz+e.deltaY*0.003));
+cvs.addEventListener('wheel', e=>{{
+  tz = Math.max(1.3, Math.min(5.0, tz + e.deltaY*0.003));
   e.preventDefault();
-}},{{passive:false}});
+}}, {{passive:false}});
 
-// Tooltip
+// Hover tooltip
 const ray=new THREE.Raycaster(), mouse=new THREE.Vector2();
 const tip=document.getElementById('tooltip');
-cvs.addEventListener('mousemove',e=>{{
+cvs.addEventListener('mousemove', e=>{{
   const r=cvs.getBoundingClientRect();
-  mouse.x=((e.clientX-r.left)/r.width)*2-1;
-  mouse.y=-((e.clientY-r.top)/r.height)*2+1;
-  ray.setFromCamera(mouse,camera);
-  const hits=ray.intersectObjects(dotMeshes);
+  mouse.x = ((e.clientX-r.left)/r.width)*2-1;
+  mouse.y = -((e.clientY-r.top)/r.height)*2+1;
+  ray.setFromCamera(mouse, camera);
+  const hits = ray.intersectObjects(dotMeshes);
   if(hits.length){{
-    const p=dotData[dotMeshes.indexOf(hits[0].object)];
+    const p = dotData[dotMeshes.indexOf(hits[0].object)];
     tip.style.display='block';
-    tip.style.left=(e.clientX+14)+'px';
+    tip.style.left=(e.clientX+16)+'px';
     tip.style.top=(e.clientY-10)+'px';
-    tip.innerHTML='<b style="font-size:14px">'+p.label+'</b><br>'
-      +'<span style="color:rgba(255,255,255,0.5);font-size:11px">'+p.category+'</span><br><br>'
+    tip.innerHTML=
+      '<b>'+p.label+'</b><br>'
+      +'<span class="cat">'+p.category.toUpperCase()+'</span><br><br>'
       +p.metric_name+': <b>'+p.metric.toLocaleString()+'</b><br>'
       +'Fatalities: <b>'+p.fatalities.toLocaleString()+'</b>';
   }} else {{ tip.style.display='none'; }}
 }});
 
+// Animate
 function animate(){{
   requestAnimationFrame(animate);
-  if(!drag){{ globe.rotation.y+=vy*0.92; vy*=0.92; }}
-  camera.position.z+=(tz-camera.position.z)*0.08;
-  renderer.render(scene,camera);
+  if(!drag){{ globe.rotation.y += vy*0.90; vy*=0.90; }}
+  camera.position.z += (tz - camera.position.z)*0.08;
+  renderer.render(scene, camera);
 }}
 animate();
 </script></body></html>"""
-                            st.components.v1.html(threejs_html, height=map_h, scrolling=False)
+                            st.components.v1.html(globe_html, height=map_h, scrolling=False)
 
                         # ── Country info panel ────────────────────────────
                         if focused and panel_col is not None:
