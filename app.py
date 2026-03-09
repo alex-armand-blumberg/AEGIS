@@ -1909,7 +1909,7 @@ const points = {points_json};
 const dotMeshes = [], dotData = [], dotBaseSizes = [];
 const BASE_CAM_Z = 2.6;
 points.forEach(function(p){{
-  const sz = 0.003 + 0.009 * (p.size / 28);
+  const sz = 0.005 + 0.022 * (p.size / 28);
   const col = new THREE.Color(p.color);
   const mesh = new THREE.Mesh(
     new THREE.SphereGeometry(sz, 8, 8),
@@ -1985,8 +1985,12 @@ animate();
                             else:
                                 # ── 2D Flat Map ───────────────────────────────
                                 import plotly.express as _px
+                                _grouped2d = grouped[
+                                    ~((grouped["centroid_latitude"].abs() < 0.5) &
+                                      (grouped["centroid_longitude"].abs() < 0.5))
+                                ]
                                 fig2d = _px.scatter_mapbox(
-                                    grouped,
+                                    _grouped2d,
                                     lat="centroid_latitude",
                                     lon="centroid_longitude",
                                     color="dominant_category",
