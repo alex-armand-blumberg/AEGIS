@@ -32,94 +32,147 @@ if "page" not in st.session_state:
 
 # ── Landing page ──────────────────────────────────────────────────────────────
 if st.session_state["page"] == "landing":
-    # Hide sidebar entirely on landing page
+    # Kill every pixel of Streamlit chrome and overflow
     st.markdown(
         """<style>
-        [data-testid="stSidebar"] { display: none; }
-        [data-testid="stSidebarCollapsedControl"] { display: none; }
-        .block-container { padding-top: 0 !important; padding-bottom: 0 !important; max-width: 100% !important; }
-        header { display: none; }
+        [data-testid="stSidebar"],
+        [data-testid="stSidebarCollapsedControl"],
+        header, footer, .stDeployButton { display: none !important; }
+        html, body,
+        [data-testid="stApp"],
+        [data-testid="stAppViewContainer"],
+        [data-testid="stMain"],
+        .main, section.main,
+        .block-container {
+            overflow: hidden !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            max-width: 100vw !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            max-height: 100vh !important;
+        }
+        [data-testid="stButton"] { display: none !important; }
         </style>""",
         unsafe_allow_html=True,
     )
 
+    # Hidden Streamlit buttons — JS clicks them from inside the iframe
+    if st.button("__index__", key="btn_index"):
+        st.session_state["page"] = "index"
+        st.rerun()
+    if st.button("__map__", key="btn_map"):
+        st.session_state["page"] = "map"
+        st.rerun()
+
     LANDING_VIDEO = Path("landing.mp4")
     if LANDING_VIDEO.exists():
         v64 = base64.b64encode(open(LANDING_VIDEO, "rb").read()).decode()
-        video_tag = f'<source src="data:video/mp4;base64,{v64}" type="video/mp4">'
+        video_html = f"<video id='bg' autoplay loop muted playsinline><source src='data:video/mp4;base64,{v64}' type='video/mp4'></video>"
     else:
-        video_tag = ""
+        video_html = "<div id='bg' style='position:fixed;inset:0;background:radial-gradient(ellipse at 50% 35%,#0f1e3a 0%,#020617 70%)'></div>"
 
     st.components.v1.html(
-        f"""
-        <style>
-          * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-          body {{ background: #000; overflow: hidden; }}
-          .wrap {{
-            position: relative; width: 100vw; height: 100vh;
-            display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-            font-family: 'Inter', sans-serif;
+        f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8">
+<style>
+  *, *::before, *::after {{ margin:0; padding:0; box-sizing:border-box; }}
+  html, body {{
+    width:100%; height:100%;
+    overflow:hidden; background:#000;
+    font-family:-apple-system,'Inter','Helvetica Neue',sans-serif;
+  }}
+  #bg {{
+    position:fixed; inset:0; width:100%; height:100%;
+    object-fit:cover; opacity:0.42;
+    filter:grayscale(55%) contrast(1.1); z-index:0;
+  }}
+  #overlay {{
+    position:fixed; inset:0; z-index:1;
+    background:linear-gradient(180deg,
+      rgba(2,6,23,0.38) 0%,rgba(2,6,23,0.55) 50%,rgba(2,6,23,0.80) 100%);
+  }}
+  #content {{
+    position:relative; z-index:2; width:100%; height:100vh;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    text-align:center; padding:0 24px;
+  }}
+  .tag {{
+    font-size:10.5px; letter-spacing:0.22em; color:#ef4444;
+    font-weight:700; text-transform:uppercase; margin-bottom:18px;
+  }}
+  .title {{
+    font-size:clamp(56px,10vw,118px); font-weight:900; color:#fff;
+    letter-spacing:-0.02em; line-height:1; margin-bottom:14px;
+    text-shadow:0 0 80px rgba(0,0,0,0.9),0 2px 6px rgba(0,0,0,0.8);
+  }}
+  .sub {{
+    font-size:clamp(11px,1.4vw,15px); color:#e2e8f0;
+    letter-spacing:0.18em; text-transform:uppercase;
+    text-shadow:0 1px 10px rgba(0,0,0,0.9); margin-bottom:42px;
+  }}
+  .sub .dim {{ color:#64748b; margin:0 10px; }}
+  .btns {{ display:flex; gap:14px; margin-bottom:24px; }}
+  .btn {{
+    padding:13px 34px; font-size:15px; font-weight:600;
+    letter-spacing:0.03em; border-radius:7px; border:none;
+    cursor:pointer; transition:transform .15s,opacity .15s;
+  }}
+  .btn:hover {{ transform:translateY(-2px); opacity:0.90; }}
+  .btn-p {{ background:#ef4444; color:#fff; }}
+  .btn-s {{
+    background:rgba(255,255,255,0.18); color:#f1f5f9;
+    border:1px solid rgba(255,255,255,0.30) !important;
+    backdrop-filter:blur(6px);
+  }}
+  .copy {{ font-size:11px; color:#94a3b8; letter-spacing:0.04em; }}
+</style>
+</head>
+<body>
+  {video_html}
+  <div id="overlay"></div>
+  <div id="content">
+    <div class="tag">&#9632;&nbsp; Palantir Valley Forge Grant Demo</div>
+    <div class="title">AEGIS</div>
+    <div class="sub">
+      Advanced Early-Warning <span class="dim">&amp;</span> Geostrategic Intelligence System
+    </div>
+    <div class="btns">
+      <button class="btn btn-p" onclick="nav('index')">&#128202;&nbsp; Escalation Index</button>
+      <button class="btn btn-s" onclick="nav('map')">&#128506;&nbsp; Interactive Map</button>
+    </div>
+    <div class="copy">&copy; 2026 Alexander Armand-Blumberg &middot; AEGIS</div>
+  </div>
+  <script>
+    (function() {{
+      function fill() {{
+        var p = window.parent;
+        var ph = p.innerHeight;
+        p.document.querySelectorAll('iframe').forEach(function(f) {{
+          if (f.contentWindow === window) {{
+            f.style.cssText = 'height:'+ph+'px !important;width:100vw !important;display:block !important;border:none !important;position:fixed !important;top:0 !important;left:0 !important;z-index:9999 !important;';
           }}
-          video {{
-            position: absolute; inset: 0; width: 100%; height: 100%;
-            object-fit: cover; opacity: 0.35; filter: grayscale(60%);
-          }}
-          .overlay {{
-            position: absolute; inset: 0;
-            background: linear-gradient(180deg, rgba(2,6,23,0.5) 0%, rgba(2,6,23,0.7) 100%);
-          }}
-          .content {{
-            position: relative; z-index: 10; text-align: center; padding: 0 24px;
-          }}
-          .tag {{
-            font-size: 11px; letter-spacing: 0.2em; color: #ef4444;
-            font-weight: 700; text-transform: uppercase; margin-bottom: 18px;
-          }}
-          h1 {{
-            font-size: clamp(28px, 5vw, 64px); font-weight: 800;
-            color: #f8fafc; letter-spacing: -0.02em; margin-bottom: 10px;
-            text-shadow: 0 2px 40px rgba(0,0,0,0.8);
-          }}
-          .sub {{
-            font-size: clamp(11px, 1.5vw, 15px); color: #94a3b8;
-            letter-spacing: 0.12em; text-transform: uppercase;
-            margin-bottom: 48px;
-          }}
-          .nodash {{ color: #475569; margin: 0 8px; }}
-        </style>
-        <div class="wrap">
-          {"<video autoplay loop muted playsinline>" + video_tag + "</video>" if video_tag else "<div style='position:absolute;inset:0;background:radial-gradient(ellipse at 50% 40%,#0f1e3a 0%,#020617 70%)'></div>"}
-          <div class="overlay"></div>
-          <div class="content">
-            <div class="tag">&#9632; Palantir Valley Forge Grant Demo</div>
-            <h1>AEGIS</h1>
-            <div class="sub">Advanced Early-warning
-              <span class="nodash">&amp;</span>
-              Geostrategic Intelligence System</div>
-          </div>
-        </div>
-        """,
-        height=520,
+        }});
+        p.document.documentElement.style.cssText += ';overflow:hidden !important;height:100vh !important;';
+        p.document.body.style.cssText += ';overflow:hidden !important;height:100vh !important;';
+      }}
+      fill();
+      window.addEventListener('resize', fill);
+      setTimeout(fill, 100);
+    }})();
+
+    function nav(dest) {{
+      var label = dest === 'index' ? '__index__' : '__map__';
+      window.parent.document.querySelectorAll('[data-testid="stButton"] button')
+        .forEach(function(b) {{ if (b.innerText.trim() === label) b.click(); }});
+    }}
+  </script>
+</body>
+</html>""",
+        height=10,
         scrolling=False,
-    )
-
-    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
-
-    _, c1, c2, _ = st.columns([2, 1, 1, 2])
-    with c1:
-        if st.button("📊  Escalation Index", use_container_width=True, type="primary"):
-            st.session_state["page"] = "index"
-            st.rerun()
-    with c2:
-        if st.button("🗺️  Interactive Map", use_container_width=True):
-            st.session_state["page"] = "map"
-            st.rerun()
-
-    st.markdown(
-        "<div style='text-align:center;color:#334155;font-size:11px;margin-top:12px;'>"
-        "© 2026 Alexander Armand-Blumberg · AEGIS</div>",
-        unsafe_allow_html=True,
     )
     st.stop()
 
