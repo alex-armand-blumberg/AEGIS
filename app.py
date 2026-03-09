@@ -793,7 +793,7 @@ else:
     plot_end_date = date.today()
     run_btn = False
 
-st.sidebar.markdown("---")
+
 st.sidebar.markdown(
     """
 <div style="opacity:0.6; font-size:13px;">
