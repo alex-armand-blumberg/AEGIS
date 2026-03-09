@@ -1756,40 +1756,13 @@ if show_map and st.session_state.get("page") != "index":
 </div>
 <script>
 const CESIUM_TOKEN = "{cesium_token}";
-if (CESIUM_TOKEN) {{
-  Cesium.Ion.defaultAccessToken = CESIUM_TOKEN;
-}}
-
-if (CESIUM_TOKEN) {{
-  Cesium.Ion.defaultAccessToken = CESIUM_TOKEN;
-}}
+if (CESIUM_TOKEN) {{ Cesium.Ion.defaultAccessToken = CESIUM_TOKEN; }}
 
 async function initViewer() {{
-  let terrainProvider;
-  let imageryProvider;
 
-  if (CESIUM_TOKEN) {{
-    try {{
-      terrainProvider = await Cesium.CesiumTerrainProvider.fromIonAssetId(1);
-    }} catch(e) {{
-      terrainProvider = new Cesium.EllipsoidTerrainProvider();
-    }}
-    try {{
-      imageryProvider = await Cesium.IonImageryProvider.fromAssetId(2);
-    }} catch(e) {{
-      imageryProvider = new Cesium.ArcGisMapServerImageryProvider({{
-        url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"
-      }});
-    }}
-  }} else {{
-    terrainProvider = new Cesium.EllipsoidTerrainProvider();
-    imageryProvider = new Cesium.ArcGisMapServerImageryProvider({{
-      url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"
-    }});
-  }}
-
+// Create viewer with no imagery — add layers manually below
 const viewer = new Cesium.Viewer("cesiumContainer", {{
-  imageryProvider: imageryProvider,
+  imageryProvider: false,
   baseLayerPicker: false,
   geocoder: false,
   homeButton: false,
@@ -1798,7 +1771,6 @@ const viewer = new Cesium.Viewer("cesiumContainer", {{
   animation: false,
   timeline: false,
   fullscreenButton: false,
-  terrainProvider: terrainProvider,
   skyBox: new Cesium.SkyBox({{
     sources: {{
       positiveX: "https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Assets/Textures/SkyBox/tycho2t3_80_px.jpg",
@@ -1811,6 +1783,24 @@ const viewer = new Cesium.Viewer("cesiumContainer", {{
   }}),
   contextOptions: {{ webgl: {{ preserveDrawingBuffer: true }} }}
 }});
+
+// Add terrain
+try {{
+  viewer.terrainProvider = await Cesium.CesiumTerrainProvider.fromIonAssetId(1);
+}} catch(e) {{
+  viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+}}
+
+// Add imagery layer
+viewer.imageryLayers.removeAll();
+try {{
+  const ionLayer = await Cesium.IonImageryProvider.fromAssetId(2);
+  viewer.imageryLayers.addImageryProvider(ionLayer);
+}} catch(e) {{
+  viewer.imageryLayers.addImageryProvider(new Cesium.ArcGisMapServerImageryProvider({{
+    url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"
+  }}));
+}}
 
 viewer.scene.globe.enableLighting = true;
 viewer.scene.fog.enabled = true;
