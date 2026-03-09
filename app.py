@@ -1713,95 +1713,89 @@ if show_map and st.session_state.get("page") != "index":
 
                             map_h = 760 if focused else 790
 
-                            import plotly.graph_objects as go
-                            fig3d = go.Figure()
+                            import json as _json
+                            points_json = _json.dumps(cesium_points)
 
-                            color_map_plot = {
-                                "Battles":                       "#ef4444",
-                                "Explosions / remote violence":  "#f59e0b",
-                                "Violence against civilians":    "#fde047",
-                                "Strategic developments":        "#60a5fa",
-                                "Protests":                      "#a78bfa",
-                                "Riots":                         "#f472b6",
-                            }
+                            globegl_html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  *{{margin:0;padding:0;box-sizing:border-box;}}
+  html,body{{width:100%;height:{map_h}px;background:#020617;overflow:hidden;}}
+  #globeViz{{width:100%;height:{map_h}px;}}
+  #tooltip{{position:fixed;pointer-events:none;background:rgba(10,15,30,0.97);color:#fff;
+    padding:10px 14px;border-radius:8px;font-family:Arial,sans-serif;font-size:13px;
+    border:1px solid rgba(255,255,255,0.15);max-width:260px;display:none;z-index:999;
+    line-height:1.7;box-shadow:0 4px 24px rgba(0,0,0,0.7);}}
+  #legend{{position:fixed;bottom:18px;left:18px;background:rgba(2,6,23,0.88);color:#fff;
+    padding:11px 15px;border-radius:9px;font-family:Arial,sans-serif;font-size:12px;
+    border:1px solid rgba(255,255,255,0.1);z-index:10;}}
+  #legend .row{{display:flex;align-items:center;gap:8px;margin:3px 0;}}
+  #legend .dot{{width:11px;height:11px;border-radius:50%;flex-shrink:0;}}
+  #hint{{position:fixed;bottom:18px;right:18px;color:rgba(255,255,255,0.3);
+    font-family:Arial,sans-serif;font-size:11px;z-index:10;}}
+</style>
+</head><body>
+<div id="globeViz"></div>
+<div id="tooltip"></div>
+<div id="legend">
+  <div style="font-weight:700;margin-bottom:6px;font-size:13px;">Categories</div>
+  <div class="row"><div class="dot" style="background:#ef4444"></div>Battles</div>
+  <div class="row"><div class="dot" style="background:#f59e0b"></div>Explosions / Remote Violence</div>
+  <div class="row"><div class="dot" style="background:#fde047"></div>Violence Against Civilians</div>
+  <div class="row"><div class="dot" style="background:#60a5fa"></div>Strategic Developments</div>
+  <div class="row"><div class="dot" style="background:#a78bfa"></div>Protests</div>
+  <div class="row"><div class="dot" style="background:#f472b6"></div>Riots</div>
+</div>
+<div id="hint">Drag to rotate &nbsp;·&nbsp; Scroll to zoom</div>
+<script src="https://unpkg.com/globe.gl@2.31.1/dist/globe.gl.min.js"></script>
+<script>
+const points = {points_json};
+const tooltip = document.getElementById('tooltip');
 
-                            for cat, color in color_map_plot.items():
-                                df_cat = grouped[grouped["dominant_category"] == cat]
-                                if df_cat.empty:
-                                    continue
-                                fig3d.add_trace(go.Scattergeo(
-                                    lat=df_cat["centroid_latitude"],
-                                    lon=df_cat["centroid_longitude"],
-                                    mode="markers",
-                                    name=cat,
-                                    marker=dict(
-                                        size=df_cat["bubble_size"].clip(lower=df_cat["bubble_size"].max()*0.02),
-                                        sizemode="area",
-                                        sizeref=2.0 * grouped["bubble_size"].max() / (size_max**2),
-                                        color=color,
-                                        opacity=0.88,
-                                        line=dict(width=0),
-                                    ),
-                                    text=df_cat["hover_location"],
-                                    customdata=df_cat[["metric_value","fatalities"]].values,
-                                    hovertemplate=(
-                                        "<b>%{text}</b><br>"
-                                        + f"{metric_labels[selected_metric]}: %{{customdata[0]:,.0f}}<br>"
-                                        + "Fatalities: %{customdata[1]:,.0f}"
-                                        + "<extra></extra>"
-                                    ),
-                                ))
+const world = Globe({{
+  rendererConfig: {{ antialias: true, alpha: false }}
+}})
+  .width(window.innerWidth)
+  .height({map_h})
+  .backgroundColor('#020617')
+  .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-night.jpg')
+  .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
+  .showAtmosphere(true)
+  .atmosphereColor('#1a4a8a')
+  .atmosphereAltitude(0.18)
+  // Country polygons
+  .polygonsData([])
+  // Points
+  .pointsData(points)
+  .pointLat('lat')
+  .pointLng('lon')
+  .pointColor('color')
+  .pointRadius(p => 0.12 + 0.55 * (p.size / 28))
+  .pointAltitude(0.002)
+  .pointResolution(8)
+  .pointLabel(p =>
+    `<div style="background:rgba(10,15,30,0.97);color:#fff;padding:10px 14px;
+      border-radius:8px;font-family:Arial;font-size:13px;border:1px solid rgba(255,255,255,0.15);
+      max-width:260px;line-height:1.7;box-shadow:0 4px 24px rgba(0,0,0,0.7);">
+      <b style="font-size:14px">${{p.label}}</b><br>
+      <span style="color:rgba(255,255,255,0.5);font-size:11px">${{p.category}}</span><br><br>
+      ${{p.metric_name}}: <b>${{p.metric.toLocaleString()}}</b><br>
+      Fatalities: <b>${{p.fatalities.toLocaleString()}}</b>
+    </div>`
+  )
+  (document.getElementById('globeViz'));
 
-                            fig3d.update_layout(
-                                paper_bgcolor="#020617",
-                                font=dict(color="white"),
-                                height=map_h,
-                                margin=dict(l=0, r=0, t=40, b=0),
-                                title=dict(
-                                    text="Current Conflict-Related Hotspots",
-                                    x=0.5, xanchor="center",
-                                    font=dict(color="white", size=18),
-                                ),
-                                legend=dict(
-                                    orientation="h",
-                                    yanchor="bottom", y=-0.08,
-                                    xanchor="left", x=0,
-                                    bgcolor="rgba(2,6,23,0)",
-                                    font=dict(color="white", size=12),
-                                    title=dict(text="<b>Categories:</b>", font=dict(color="white", size=12)),
-                                ),
-                                geo=dict(
-                                    projection_type="orthographic",
-                                    showland=True,
-                                    landcolor="#1a2c1a",
-                                    showocean=True,
-                                    oceancolor="#0a1628",
-                                    showlakes=True,
-                                    lakecolor="#0d1f3c",
-                                    showcountries=True,
-                                    countrycolor="rgba(255,255,255,0.25)",
-                                    countrywidth=0.5,
-                                    showcoastlines=True,
-                                    coastlinecolor="rgba(255,255,255,0.35)",
-                                    coastlinewidth=0.7,
-                                    showframe=False,
-                                    bgcolor="#020617",
-                                    lataxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.06)"),
-                                    lonaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.06)"),
-                                    projection_rotation=dict(
-                                        lon=float(map_center["lon"]),
-                                        lat=float(map_center["lat"]),
-                                        roll=0,
-                                    ),
-                                ),
-                                hoverlabel=dict(bgcolor="rgba(20,20,20,0.95)", font_size=13),
-                            )
+// Initial camera position
+world.pointOfView({{ lat: {cam_lat}, lng: {cam_lon}, altitude: 2.0 }}, 800);
 
-                            st.plotly_chart(fig3d, use_container_width=True, config={
-                                "scrollZoom": False,
-                                "displayModeBar": True,
-                                "modeBarButtonsToRemove": ["select2d", "lasso2d"],
-                            })
+// Auto-rotate slowly
+world.controls().autoRotate = false;
+world.controls().enableDamping = true;
+world.controls().dampingFactor = 0.12;
+world.controls().rotateSpeed = 0.7;
+</script>
+</body></html>"""
+                            st.components.v1.html(globegl_html, height=map_h, scrolling=False)
 
                         # ── Country info panel ────────────────────────────
                         if focused and panel_col is not None:
