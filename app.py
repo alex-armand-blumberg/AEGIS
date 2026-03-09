@@ -1905,7 +1905,7 @@ const points = {points_json};
 const dotMeshes = [], dotData = [], dotBaseSizes = [];
 const BASE_CAM_Z = 2.6;
 points.forEach(function(p){{
-  const sz = 0.004 + 0.014 * (p.size / 28);
+  const sz = 0.003 + 0.009 * (p.size / 28);
   const col = new THREE.Color(p.color);
   const mesh = new THREE.Mesh(
     new THREE.SphereGeometry(sz, 8, 8),
