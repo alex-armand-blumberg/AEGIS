@@ -129,7 +129,7 @@ if st.session_state["page"] == "landing":
     # Landing page content using real Streamlit widgets
     st.markdown(
         """
-        <div style="text-align:center; padding: 0 24px 8px;">
+        <div style="text-align:center; padding: 28vh 24px 8px;">
           <div class="landing-tag">&#9632;&nbsp; Palantir Valley Forge Grant Demo</div>
           <div class="landing-title">AEGIS</div>
           <div class="landing-sub" style="margin-top:12px;">
@@ -665,8 +665,110 @@ def compute_escalation_index(df: pd.DataFrame, country: str) -> pd.DataFrame:
 # ----------------------------
 # Sidebar: branding + inputs
 # ----------------------------
+st.sidebar.header("AEGIS Control Bar")
 
-# Purpose & Limitations at the very top
+VIDEO_PATH = Path("logo1.mp4")
+if VIDEO_PATH.exists():
+    video_bytes = open(VIDEO_PATH, "rb").read()
+    video_base64 = base64.b64encode(video_bytes).decode()
+    st.sidebar.markdown(
+        f"""
+        <video autoplay loop muted playsinline style="width:100%; border-radius:12px;">
+            <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
+        </video>
+        """,
+        unsafe_allow_html=True,
+    )
+
+st.sidebar.markdown("---")
+st.sidebar.header("Inputs")
+
+country_name = st.sidebar.text_input(
+    "Country (exact match)",
+    "",
+    help="Must match the country name in ACLED exactly (e.g. 'Ukraine', 'Sudan', 'Myanmar').",
+)
+
+# Load ACLED credentials silently from Streamlit secrets
+try:
+    acled_api_email = st.secrets["acled"]["email"]
+    acled_api_key   = st.secrets["acled"]["password"]
+    use_api = bool(acled_api_email and acled_api_key)
+except Exception:
+    acled_api_email = ""
+    acled_api_key   = ""
+    use_api = False
+
+with st.sidebar.expander("Advanced Settings"):
+    escalation_threshold = st.slider(
+        "Escalation alert threshold (0–100)",
+        min_value=0,
+        max_value=100,
+        value=45,
+        step=1,
+        help="Recommended: 45 for major conflicts. Lower to 35–40 for smaller or less-covered conflicts.",
+    )
+    smooth_window = st.number_input(
+        "Smoothing window (months)",
+        min_value=1,
+        max_value=12,
+        value=3,
+        step=1,
+        help="Rolling average applied to reduce month-to-month noise.",
+    )
+    show_components = st.checkbox(
+        "Show component breakdown chart",
+        value=False,
+        help="Stacked bar chart showing each sub-index contribution.",
+    )
+    st.markdown("**Plot date range**")
+    st.caption("Data from Jan 2018 to Jan 2026.")
+    help="Data from Jan 2018 to Jan 2025."
+    plot_date_col1, plot_date_col2 = st.columns(2)
+    with plot_date_col1:
+        plot_start_date = st.date_input(
+            "From",
+            value=date(2018, 1, 1),
+            min_value=date(2018, 1, 1),
+            max_value=date.today(),
+            key="plot_start",
+        )
+    with plot_date_col2:
+        plot_end_date = st.date_input(
+            "To",
+            value=date.today(),
+            min_value=date(2018, 1, 1),
+            max_value=date.today(),
+            key="plot_end",
+        )
+
+run_btn = st.sidebar.button("Generate plot")
+
+st.sidebar.markdown("---")
+st.sidebar.markdown(
+    """
+<div style="opacity:0.6; font-size:13px;">
+Plot data source: ACLED (2018-2025 history via Researcher-Tier API).<br>
+Map data source: Public ACLED ArcGIS layer.
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+show_map = st.sidebar.checkbox(
+    "Show interactive map",
+    value=(st.session_state.get("page") != "index"),
+    help="Turn the map section on/off.",
+)
+
+override_map_dates = st.sidebar.checkbox(
+    "Override map date range",
+    value=False,
+    help="If off, the map automatically uses the latest month available.",
+)
+
+st.sidebar.markdown("---")
+
 with st.sidebar.expander("Purpose"):
     st.markdown(
         """
@@ -703,122 +805,6 @@ with st.sidebar.expander("Limitations"):
 - Subnational index breakdown
 """
     )
-
-st.sidebar.markdown("---")
-st.sidebar.header("AEGIS Control Bar")
-
-VIDEO_PATH = Path("logo1.mp4")
-if VIDEO_PATH.exists():
-    video_bytes = open(VIDEO_PATH, "rb").read()
-    video_base64 = base64.b64encode(video_bytes).decode()
-    st.sidebar.markdown(
-        f"""
-        <video autoplay loop muted playsinline style="width:100%; border-radius:12px;">
-            <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
-        </video>
-        """,
-        unsafe_allow_html=True,
-    )
-
-st.sidebar.markdown("---")
-
-# Load ACLED credentials silently from Streamlit secrets
-try:
-    acled_api_email = st.secrets["acled"]["email"]
-    acled_api_key   = st.secrets["acled"]["password"]
-    use_api = bool(acled_api_email and acled_api_key)
-except Exception:
-    acled_api_email = ""
-    acled_api_key   = ""
-    use_api = False
-
-_is_map_page = st.session_state.get("page") == "map"
-
-if not _is_map_page:
-    st.sidebar.header("Inputs")
-    country_name = st.sidebar.text_input(
-        "Country (exact match)",
-        "",
-        help="Must match the country name in ACLED exactly (e.g. 'Ukraine', 'Sudan', 'Myanmar').",
-    )
-    with st.sidebar.expander("Advanced Settings"):
-        escalation_threshold = st.slider(
-            "Escalation alert threshold (0–100)",
-            min_value=0,
-            max_value=100,
-            value=45,
-            step=1,
-            help="Recommended: 45 for major conflicts. Lower to 35–40 for smaller or less-covered conflicts.",
-        )
-        smooth_window = st.number_input(
-            "Smoothing window (months)",
-            min_value=1,
-            max_value=12,
-            value=3,
-            step=1,
-            help="Rolling average applied to reduce month-to-month noise.",
-        )
-        show_components = st.checkbox(
-            "Show component breakdown chart",
-            value=False,
-            help="Stacked bar chart showing each sub-index contribution.",
-        )
-        st.markdown("**Plot date range**")
-        st.caption("Data from Jan 2018 to Jan 2026.")
-        help="Data from Jan 2018 to Jan 2025."
-        plot_date_col1, plot_date_col2 = st.columns(2)
-        with plot_date_col1:
-            plot_start_date = st.date_input(
-                "From",
-                value=date(2018, 1, 1),
-                min_value=date(2018, 1, 1),
-                max_value=date.today(),
-                key="plot_start",
-            )
-        with plot_date_col2:
-            plot_end_date = st.date_input(
-                "To",
-                value=date.today(),
-                min_value=date(2018, 1, 1),
-                max_value=date.today(),
-                key="plot_end",
-            )
-    run_btn = st.sidebar.button("Generate plot")
-else:
-    country_name = ""
-    escalation_threshold = 45
-    smooth_window = 3
-    show_components = False
-    plot_start_date = date(2018, 1, 1)
-    plot_end_date = date.today()
-    run_btn = False
-
-
-st.sidebar.markdown(
-    """
-<div style="opacity:0.6; font-size:13px;">
-Plot data source: ACLED (2018-2025 history via Researcher-Tier API).<br>
-Map data source: Public ACLED ArcGIS layer.
-</div>
-""",
-    unsafe_allow_html=True,
-)
-
-if _is_map_page:
-    with st.sidebar.expander("Advanced Settings"):
-        show_map = st.checkbox(
-            "Show interactive map",
-            value=True,
-            help="Turn the map section on/off.",
-        )
-        override_map_dates = st.checkbox(
-            "Override map date range",
-            value=False,
-            help="If off, the map automatically uses the latest month available.",
-        )
-else:
-    show_map = False
-    override_map_dates = False
 
 
 # ----------------------------
