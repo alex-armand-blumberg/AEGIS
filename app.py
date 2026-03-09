@@ -878,7 +878,6 @@ if "aegis_plot" in st.session_state:
     import matplotlib.pyplot as plt
     import matplotlib.dates as mdates
 
-    st.caption(f"Data source: {_ps['data_label']} \u00b7 {_ps['n_rows']:,} country-month rows loaded ({_ps['date_min']} \u2013 {_ps['date_max']})")
 
     dates     = pd.to_datetime(idx_df["event_month"])
     esc_rows  = idx_df[idx_df["index_smoothed"] > escalation_threshold]
