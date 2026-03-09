@@ -1845,7 +1845,7 @@ function ll(lat, lon, r){{
 
 // Draw lat/lon grid lines
 function addGrid(){{
-  const mat = new THREE.LineBasicMaterial({{color:0x1a3060, transparent:true, opacity:0.5}});
+  const mat = new THREE.LineBasicMaterial({{color:0x1a3060, transparent:true, opacity:0.3}});
   for(let lat=-80;lat<=80;lat+=20){{
     const pts=[];
     for(let lon=-180;lon<=180;lon+=2) pts.push(ll(lat,lon,1.001));
@@ -1865,9 +1865,8 @@ addGrid();
 
 
 // Country border lines (faint)
-const countryMat = new THREE.LineBasicMaterial({{color:0x1e4a8a, transparent:true, opacity:0.7}});
-// Continent / land outline (bright)
-const landMat    = new THREE.LineBasicMaterial({{color:0x60a5fa, transparent:true, opacity:0.95}});
+const countryMat = new THREE.LineBasicMaterial({{color:0x3a6ab0, transparent:true, opacity:0.75}});
+const landMat    = countryMat;
 
 function addGeoLine(coords, mat, r){{
   if(!coords || coords.length < 2) return;
