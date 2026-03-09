@@ -535,8 +535,6 @@ def compute_escalation_index(df: pd.DataFrame, country: str) -> pd.DataFrame:
 # ----------------------------
 # Sidebar: branding + inputs
 # ----------------------------
-st.sidebar.header("AEGIS Control Bar")
-
 with st.sidebar.expander("Purpose"):
     st.markdown(
         """
@@ -575,6 +573,8 @@ with st.sidebar.expander("Limitations"):
     )
 
 st.sidebar.markdown("---")
+
+st.sidebar.header("AEGIS Control Bar")
 
 VIDEO_PATH = Path("logo1.mp4")
 if VIDEO_PATH.exists():
