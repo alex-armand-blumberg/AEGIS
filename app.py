@@ -1666,7 +1666,7 @@ if show_map and st.session_state.get("page") != "index":
                         with map_col:
                             map_mode = st.radio(
                                 "Map view",
-                                ["🗺️  2D Map", "🌐  3D Globe"],
+                                ["🗺️  2D Map (Reccomended)", "🌐  3D Globe"],
                                 horizontal=True,
                                 label_visibility="collapsed",
                                 key="map_mode_toggle",
