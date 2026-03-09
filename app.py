@@ -843,14 +843,15 @@ if _ticker_items:
 # ----------------------------
 # Escalation Index plot section
 # ----------------------------
-st.subheader("Escalation Index")
+if st.session_state.get("page") != "map":
+    st.subheader("Escalation Index")
 
-st.caption(
-    "Depending on the date range selected, index plotting time may range from a couple seconds to a couple minutes. "
-    "One page of events (5,000 events) takes ~4 seconds to load."
-)
+    st.caption(
+        "Depending on the date range selected, index plotting time may range from a couple seconds to a couple minutes. "
+        "One page of events (5,000 events) takes ~4 seconds to load."
+    )
 
-if run_btn:
+if st.session_state.get("page") != "map" and run_btn:
     selected_country = str(country_name).strip()
     if not selected_country:
         st.warning("Please enter a country name in the sidebar.")
@@ -965,7 +966,7 @@ if run_btn:
 # Escalation plot render — separate from compute so widget
 # interactions don't collapse the chart on rerun
 # ----------------------------
-if "aegis_plot" in st.session_state:
+if "aegis_plot" in st.session_state and st.session_state.get("page") != "map":
     _ps = st.session_state["aegis_plot"]
     idx_df               = _ps["idx_df"]
     selected_country     = _ps["selected_country"]
@@ -1404,10 +1405,10 @@ if "aegis_plot" in st.session_state:
         "All components normalised globally (0–1) across all ACLED countries and months. "
         "Source: ACLED via public ArcGIS layer (updated weekly)."
     )
-elif not run_btn:
+elif not run_btn and st.session_state.get("page") != "map":
     st.info(
         "Enter a country name in the sidebar (e.g. **Ukraine**, **Sudan**, **Myanmar**) "
-        "and click **Generate plot**. The interactive map appears below."
+        "and click **Generate plot**."
     )
 
 
@@ -1428,7 +1429,7 @@ def _build_dominant_category(row: pd.Series) -> str:
     return category_map[max(vals, key=vals.get)]
 
 
-if show_map:
+if show_map and st.session_state.get("page") != "index":
     st.markdown("## Interactive map")
 
     if not _HAS_PLOTLY:
