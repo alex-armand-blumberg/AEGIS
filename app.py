@@ -27,6 +27,12 @@ st.set_page_config(
 )
 
 # ── Page navigation state ─────────────────────────────────────────────────────
+# Check query params first (set by landing page iframe buttons)
+_qp = st.query_params.get("nav", "")
+if _qp in ("index", "map"):
+    st.session_state["page"] = _qp
+    st.query_params.clear()
+
 if "page" not in st.session_state:
     st.session_state["page"] = "landing"
 
@@ -52,23 +58,9 @@ if st.session_state["page"] == "landing":
             height: 100vh !important;
             max-height: 100vh !important;
         }
-        [data-testid="stButton"] {
-            position: fixed !important;
-            top: -9999px !important;
-            left: -9999px !important;
-            opacity: 0 !important;
-        }
         </style>""",
         unsafe_allow_html=True,
     )
-
-    # Hidden Streamlit buttons — JS clicks them from inside the iframe
-    if st.button("__index__", key="btn_index"):
-        st.session_state["page"] = "index"
-        st.rerun()
-    if st.button("__map__", key="btn_map"):
-        st.session_state["page"] = "map"
-        st.rerun()
 
     LANDING_VIDEO = Path("landing.mp4")
     if LANDING_VIDEO.exists():
@@ -169,9 +161,9 @@ if st.session_state["page"] == "landing":
     }})();
 
     function nav(dest) {{
-      var label = dest === 'index' ? '__index__' : '__map__';
-      window.parent.document.querySelectorAll('[data-testid="stButton"] button')
-        .forEach(function(b) {{ if (b.innerText.trim() === label) b.click(); }});
+      // Set a query param and reload — Streamlit picks it up on the next run
+      var url = window.parent.location.href.split('?')[0] + '?nav=' + dest;
+      window.parent.location.href = url;
     }}
   </script>
 </body>
