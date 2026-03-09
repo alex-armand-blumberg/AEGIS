@@ -737,7 +737,12 @@ except Exception:
     acled_api_key   = ""
     use_api = False
 
-with st.sidebar.expander("Advanced Settings"):
+if st.session_state.get("page") != "map":
+  _adv_exp = st.sidebar.expander("Advanced Settings")
+else:
+  _adv_exp = None
+if _adv_exp:
+  with _adv_exp:
     escalation_threshold = st.slider(
         "Escalation alert threshold (0–100)",
         min_value=0,
@@ -780,7 +785,10 @@ with st.sidebar.expander("Advanced Settings"):
             key="plot_end",
         )
 
-run_btn = st.sidebar.button("Generate plot")
+if st.session_state.get("page") != "map":
+    run_btn = st.sidebar.button("Generate plot")
+else:
+    run_btn = False
 
 st.sidebar.markdown("---")
 st.sidebar.markdown(
@@ -1666,7 +1674,7 @@ if show_map and st.session_state.get("page") != "index":
                         with map_col:
                             map_mode = st.radio(
                                 "Map view",
-                                ["🗺️  2D Map (Reccomended)", "🌐  3D Globe"],
+                                ["🗺️  2D Map", "🌐  3D Globe"],
                                 horizontal=True,
                                 label_visibility="collapsed",
                                 key="map_mode_toggle",
