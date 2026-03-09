@@ -1744,6 +1744,7 @@ if show_map and st.session_state.get("page") != "index":
 </head><body>
 <div id="cesiumContainer"></div>
 <div id="tooltip"></div>
+<div id="debug" style="position:absolute;top:50px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.85);color:#0f0;font-family:monospace;font-size:11px;padding:8px 12px;border-radius:6px;z-index:999;display:none;max-width:500px;text-align:left;"></div>
 <div id="title">&#127758; Current Conflict-Related Hotspots</div>
 <div id="legend">
   <div style="font-weight:700;margin-bottom:6px;font-size:13px;">Categories</div>
@@ -1760,28 +1761,38 @@ if (CESIUM_TOKEN) {{ Cesium.Ion.defaultAccessToken = CESIUM_TOKEN; }}
 
 async function initViewer() {{
 
-// Await ion imagery BEFORE creating viewer so it's ready as the base layer
+const dbg = document.getElementById("debug");
+function log(msg) {{ dbg.innerHTML += msg + "<br>"; dbg.style.display="block"; }}
+
+log("TOKEN: " + (CESIUM_TOKEN ? CESIUM_TOKEN.substring(0,12)+"..." : "MISSING"));
+
+// Try createWorldImageryAsync — simplest high-level Cesium 1.114 API
 let baseImageryProvider;
-if (CESIUM_TOKEN) {{
-  try {{
-    baseImageryProvider = await Cesium.IonImageryProvider.fromAssetId(2);
-    console.log("Ion satellite imagery loaded");
-  }} catch(e) {{
-    console.warn("Ion imagery failed:", e);
-    baseImageryProvider = null;
-  }}
+try {{
+  baseImageryProvider = await Cesium.createWorldImageryAsync({{
+    style: Cesium.IonWorldImageryStyle.AERIAL_WITH_LABELS
+  }});
+  log("✅ createWorldImageryAsync succeeded");
+}} catch(e) {{
+  log("❌ createWorldImageryAsync failed: " + e.message);
+  baseImageryProvider = null;
 }}
 
-// If ion failed or no token, use Bing Maps aerial (free tier, no key needed in Cesium)
 if (!baseImageryProvider) {{
+  // Last resort: use ArcGIS public tiles (no auth needed)
   try {{
-    baseImageryProvider = await Cesium.IonImageryProvider.fromAssetId(3);  // Bing aerial
-    console.log("Bing aerial loaded as fallback");
-  }} catch(e) {{
+    baseImageryProvider = await Cesium.ArcGisMapServerImageryProvider.fromUrl(
+      "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"
+    );
+    log("✅ ArcGIS fallback loaded");
+  }} catch(e2) {{
+    log("❌ ArcGIS failed: " + e2.message);
+    // Absolute last resort — plain color globe so at least it renders
     baseImageryProvider = new Cesium.SingleTileImageryProvider({{
-      url: "https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Assets/Textures/NaturalEarthII/2/0/0.jpg",
-      rectangle: Cesium.Rectangle.fromDegrees(-180, -90, 180, 90)
+      url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+      rectangle: Cesium.Rectangle.fromDegrees(-180,-90,180,90)
     }});
+    log("⚠️ Using solid color fallback");
   }}
 }}
 
@@ -1798,13 +1809,7 @@ const viewer = new Cesium.Viewer("cesiumContainer", {{
   fullscreenButton: false,
   contextOptions: {{ webgl: {{ preserveDrawingBuffer: true }} }}
 }});
-
-// Add terrain on top
-if (CESIUM_TOKEN) {{
-  try {{
-    viewer.scene.setTerrain(Cesium.Terrain.fromWorldTerrain());
-  }} catch(e) {{ console.warn("Terrain failed:", e); }}
-}}
+log("✅ Viewer created");
 
 viewer.scene.globe.enableLighting = true;
 viewer.scene.fog.enabled = true;
