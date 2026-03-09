@@ -1699,9 +1699,13 @@ if show_map and st.session_state.get("page") != "index":
                             max_val = float(grouped["metric_value"].max()) or 1.0
                             cesium_points = []
                             for _, row in grouped.iterrows():
+                                _lat = float(row["centroid_latitude"])
+                                _lon = float(row["centroid_longitude"])
+                                if abs(_lat) < 0.5 and abs(_lon) < 0.5:
+                                    continue
                                 cesium_points.append({
-                                    "lat":      float(row["centroid_latitude"]),
-                                    "lon":      float(row["centroid_longitude"]),
+                                    "lat":      _lat,
+                                    "lon":      _lon,
                                     "color":    color_map.get(row["dominant_category"], "#ffffff"),
                                     "size":     6 + 22 * float(row["metric_value"]) / max_val,
                                     "label":    f"{row['admin1']}, {row['country']}",
@@ -1905,7 +1909,7 @@ const points = {points_json};
 const dotMeshes = [], dotData = [], dotBaseSizes = [];
 const BASE_CAM_Z = 2.6;
 points.forEach(function(p){{
-  const sz = 0.003 + 0.009 * (p.size / 28);
+  const sz = 0.005 + 0.022 * (p.size / 28);
   const col = new THREE.Color(p.color);
   const mesh = new THREE.Mesh(
     new THREE.SphereGeometry(sz, 8, 8),
