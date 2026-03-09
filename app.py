@@ -32,143 +32,132 @@ if "page" not in st.session_state:
 
 # ── Landing page ──────────────────────────────────────────────────────────────
 if st.session_state["page"] == "landing":
-    # ── Strip ALL Streamlit chrome so video can go edge-to-edge ──────────────
-    LANDING_VIDEO = Path("landing.mp4")
-    if LANDING_VIDEO.exists():
-        v64  = base64.b64encode(open(LANDING_VIDEO, "rb").read()).decode()
-        vtag = f'<video autoplay loop muted playsinline id="aegis-bg"><source src="data:video/mp4;base64,{v64}" type="video/mp4"></video>'
-    else:
-        vtag = ""
-
+    # Strip all Streamlit chrome; hide the real buttons (clicked via JS postMessage)
     st.markdown(
-        f"""
-<style>
-  /* Hide all Streamlit chrome */
-  [data-testid="stSidebar"],
-  [data-testid="stSidebarCollapsedControl"],
-  header, footer {{ display: none !important; }}
-
-  /* Remove all page padding */
-  .main .block-container {{
-    padding: 0 !important; margin: 0 !important;
-    max-width: 100vw !important; width: 100vw !important;
-  }}
-  .main {{ padding: 0 !important; }}
-  html, body {{ background: #000 !important; margin: 0; padding: 0; overflow-x: hidden; }}
-
-  /* Fullscreen video background */
-  #aegis-bg {{
-    position: fixed;
-    top: 0; left: 0;
-    width: 100vw; height: 100vh;
-    object-fit: cover;
-    opacity: 0.38;
-    filter: grayscale(55%) contrast(1.1);
-    z-index: 0;
-    pointer-events: none;
-  }}
-
-  /* Dark gradient overlay */
-  #aegis-overlay {{
-    position: fixed;
-    top: 0; left: 0;
-    width: 100vw; height: 100vh;
-    background: linear-gradient(
-      180deg,
-      rgba(2,6,23,0.45) 0%,
-      rgba(2,6,23,0.60) 55%,
-      rgba(2,6,23,0.85) 100%
-    );
-    z-index: 1;
-    pointer-events: none;
-  }}
-
-  /* Landing content layer */
-  #aegis-content {{
-    position: relative;
-    z-index: 2;
-    min-height: 80vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 0 24px;
-    font-family: 'Inter', -apple-system, sans-serif;
-  }}
-  #aegis-tag {{
-    font-size: 11px;
-    letter-spacing: 0.22em;
-    color: #ef4444;
-    font-weight: 700;
-    text-transform: uppercase;
-    margin-bottom: 20px;
-  }}
-  #aegis-title {{
-    font-size: clamp(52px, 9vw, 110px);
-    font-weight: 900;
-    color: #ffffff;
-    letter-spacing: -0.02em;
-    line-height: 1;
-    margin-bottom: 16px;
-    text-shadow: 0 0 60px rgba(0,0,0,0.9), 0 2px 4px rgba(0,0,0,0.8);
-  }}
-  #aegis-sub {{
-    font-size: clamp(12px, 1.6vw, 16px);
-    color: #cbd5e1;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    font-weight: 400;
-    text-shadow: 0 1px 8px rgba(0,0,0,0.9);
-  }}
-  #aegis-sub .dim {{ color: #475569; margin: 0 10px; }}
-
-  /* Style the two Streamlit buttons on landing */
-  #aegis-buttons {{
-    position: relative;
-    z-index: 2;
-    margin-top: 8px;
-  }}
-  /* Override default Streamlit button look on landing page */
-  [data-testid="stButton"] button {{
-    font-size: 15px !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.04em !important;
-    height: 48px !important;
-    border-radius: 6px !important;
-  }}
-</style>
-
-{vtag}
-<div id="aegis-overlay"></div>
-<div id="aegis-content">
-  <div id="aegis-tag">&#9632;&nbsp; Palantir Valley Forge Grant Demo</div>
-  <div id="aegis-title">AEGIS</div>
-  <div id="aegis-sub">
-    Advanced Early-Warning
-    <span class="dim">&amp;</span>
-    Geostrategic Intelligence System
-  </div>
-</div>
-""",
+        """<style>
+        [data-testid="stSidebar"],
+        [data-testid="stSidebarCollapsedControl"],
+        header, footer { display: none !important; }
+        .main .block-container {
+            padding: 0 !important; margin: 0 !important;
+            max-width: 100vw !important; width: 100vw !important;
+        }
+        .main { padding: 0 !important; }
+        [data-testid="stButton"] { display: none !important; }
+        </style>""",
         unsafe_allow_html=True,
     )
 
-    # Buttons rendered as normal Streamlit widgets (z-index handled by CSS above)
-    _, c1, c2, _ = st.columns([2, 1, 1, 2])
-    with c1:
-        if st.button("📊  Escalation Index", use_container_width=True, type="primary", key="btn_index"):
-            st.session_state["page"] = "index"
-            st.rerun()
-    with c2:
-        if st.button("🗺️  Interactive Map", use_container_width=True, key="btn_map"):
-            st.session_state["page"] = "map"
-            st.rerun()
+    # Hidden Streamlit buttons — triggered by JS postMessage from the iframe
+    if st.button("__index__", key="btn_index"):
+        st.session_state["page"] = "index"
+        st.rerun()
+    if st.button("__map__", key="btn_map"):
+        st.session_state["page"] = "map"
+        st.rerun()
 
-    st.markdown(
-        "<div style='position:relative;z-index:2;text-align:center;color:#334155;"
-        "font-size:11px;margin-top:16px;'>© 2026 Alexander Armand-Blumberg · AEGIS</div>",
-        unsafe_allow_html=True,
+    LANDING_VIDEO = Path("landing.mp4")
+    if LANDING_VIDEO.exists():
+        v64  = base64.b64encode(open(LANDING_VIDEO, "rb").read()).decode()
+        video_html = f"<video id='bg' autoplay loop muted playsinline><source src='data:video/mp4;base64,{v64}' type='video/mp4'></video>"
+    else:
+        video_html = "<div id='bg' style='position:fixed;inset:0;background:radial-gradient(ellipse at 50% 35%,#0f1e3a 0%,#020617 70%)'></div>"
+
+    st.components.v1.html(
+        f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8">
+<style>
+  *, *::before, *::after {{ margin:0; padding:0; box-sizing:border-box; }}
+  html, body {{ width:100%; height:100%; overflow:hidden; background:#000;
+    font-family:-apple-system,'Inter','Helvetica Neue',sans-serif; }}
+
+  #bg {{
+    position:fixed; inset:0; width:100%; height:100%;
+    object-fit:cover; opacity:0.42;
+    filter:grayscale(55%) contrast(1.1); z-index:0;
+  }}
+  #overlay {{
+    position:fixed; inset:0; z-index:1;
+    background:linear-gradient(180deg,
+      rgba(2,6,23,0.38) 0%, rgba(2,6,23,0.55) 50%, rgba(2,6,23,0.80) 100%);
+  }}
+  #content {{
+    position:relative; z-index:2;
+    width:100%; height:100vh;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    text-align:center; padding:0 24px;
+  }}
+  .tag {{
+    font-size:10.5px; letter-spacing:0.22em; color:#ef4444;
+    font-weight:700; text-transform:uppercase; margin-bottom:18px;
+  }}
+  .title {{
+    font-size:clamp(56px,10vw,118px); font-weight:900; color:#fff;
+    letter-spacing:-0.02em; line-height:1; margin-bottom:14px;
+    text-shadow:0 0 80px rgba(0,0,0,0.9),0 2px 6px rgba(0,0,0,0.8);
+  }}
+  .sub {{
+    font-size:clamp(11px,1.4vw,15px); color:#e2e8f0;
+    letter-spacing:0.18em; text-transform:uppercase;
+    text-shadow:0 1px 10px rgba(0,0,0,0.9); margin-bottom:42px;
+  }}
+  .sub .dim {{ color:#64748b; margin:0 10px; }}
+  .btns {{ display:flex; gap:14px; margin-bottom:24px; }}
+  .btn {{
+    padding:13px 34px; font-size:15px; font-weight:600;
+    letter-spacing:0.03em; border-radius:7px; border:none;
+    cursor:pointer; transition:transform .15s, opacity .15s;
+  }}
+  .btn:hover {{ transform:translateY(-2px); opacity:0.90; }}
+  .btn-p {{ background:#ef4444; color:#fff; }}
+  .btn-s {{
+    background:rgba(255,255,255,0.18); color:#f1f5f9;
+    border:1px solid rgba(255,255,255,0.30) !important;
+    backdrop-filter:blur(6px);
+  }}
+  .copy {{ font-size:11px; color:#94a3b8; letter-spacing:0.04em; }}
+</style>
+</head>
+<body>
+  {video_html}
+  <div id="overlay"></div>
+  <div id="content">
+    <div class="tag">&#9632;&nbsp; Palantir Valley Forge Grant Demo</div>
+    <div class="title">AEGIS</div>
+    <div class="sub">
+      Advanced Early-Warning <span class="dim">&amp;</span> Geostrategic Intelligence System
+    </div>
+    <div class="btns">
+      <button class="btn btn-p" onclick="nav('index')">&#128202;&nbsp; Escalation Index</button>
+      <button class="btn btn-s" onclick="nav('map')">&#128506;&nbsp; Interactive Map</button>
+    </div>
+    <div class="copy">&copy; 2026 Alexander Armand-Blumberg &middot; AEGIS</div>
+  </div>
+  <script>
+    // Resize iframe to exactly fill the parent viewport — no scrolling needed
+    (function() {{
+      var ph = window.parent.innerHeight;
+      window.parent.document.querySelectorAll('iframe').forEach(function(f) {{
+        if (f.contentWindow === window) {{
+          f.style.height = ph + 'px';
+          f.style.display = 'block';
+        }}
+      }});
+    }})();
+
+    function nav(dest) {{
+      // Click the corresponding hidden Streamlit button in the parent
+      var label = dest === 'index' ? '__index__' : '__map__';
+      window.parent.document.querySelectorAll('[data-testid="stButton"] button')
+        .forEach(function(b) {{ if (b.innerText.trim() === label) b.click(); }});
+    }}
+  </script>
+</body>
+</html>""",
+        height=10,   # JS overrides this to 100vh immediately
+        scrolling=False,
     )
     st.stop()
 
