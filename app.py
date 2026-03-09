@@ -1844,33 +1844,44 @@ function addGrid(){{
 addGrid();
 
 // Country borders from TopoJSON
-const borderMat = new THREE.LineBasicMaterial({{color:0x2a5a9a, transparent:true, opacity:0.85}});
+
+
+// Country border lines (faint)
+const countryMat = new THREE.LineBasicMaterial({{color:0x1e4a8a, transparent:true, opacity:0.7}});
+// Continent / land outline (bright)
+const landMat    = new THREE.LineBasicMaterial({{color:0x60a5fa, transparent:true, opacity:0.95}});
+
+function addGeoLine(coords, mat, r){{
+  if(!coords || coords.length < 2) return;
+  const pts = coords.map(c => ll(c[1], c[0], r));
+  const g = new THREE.BufferGeometry().setFromPoints(pts);
+  globe.add(new THREE.Line(g, mat));
+}}
+
+function processGeom(geom, mat, r){{
+  if(!geom) return;
+  if(geom.type === 'LineString') addGeoLine(geom.coordinates, mat, r);
+  else if(geom.type === 'MultiLineString') geom.coordinates.forEach(c => addGeoLine(c, mat, r));
+  else if(geom.type === 'Polygon') geom.coordinates.forEach(c => addGeoLine(c, mat, r));
+  else if(geom.type === 'MultiPolygon') geom.coordinates.forEach(p => p.forEach(c => addGeoLine(c, mat, r)));
+}}
 
 fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
   .then(r => r.json())
   .then(world => {{
-    const countries = topojson.feature(world, world.objects.countries);
-    const mesh = topojson.mesh(world, world.objects.countries, (a,b) => a !== b);
+    // Country borders (interior lines only, faint)
+    const countryMesh = topojson.mesh(world, world.objects.countries, (a,b) => a !== b);
+    processGeom(countryMesh, countryMat, 1.002);
 
-    function addGeoLine(coords){{
-      if(coords.length < 2) return;
-      const pts = coords.map(c => ll(c[1], c[0], 1.002));
-      const g = new THREE.BufferGeometry().setFromPoints(pts);
-      globe.add(new THREE.Line(g, borderMat));
+    // Continent / land outlines (exterior coastlines, bright blue)
+    const land = topojson.feature(world, world.objects.land);
+    if(land.type === 'Feature') {{
+      processGeom(land.geometry, landMat, 1.003);
+    }} else if(land.type === 'FeatureCollection') {{
+      land.features.forEach(f => processGeom(f.geometry, landMat, 1.003));
     }}
-
-    function processGeom(geom){{
-      if(!geom) return;
-      if(geom.type === 'LineString') addGeoLine(geom.coordinates);
-      else if(geom.type === 'MultiLineString') geom.coordinates.forEach(addGeoLine);
-      else if(geom.type === 'Polygon') geom.coordinates.forEach(addGeoLine);
-      else if(geom.type === 'MultiPolygon') geom.coordinates.forEach(r => r.forEach(addGeoLine));
-    }}
-    processGeom(mesh);
   }})
-  .catch(() => {{
-    // fallback: draw continent outlines manually skipped — grid is enough
-  }});
+  .catch(() => {{}});
 
 // ACLED conflict dots
 const points = {points_json};
