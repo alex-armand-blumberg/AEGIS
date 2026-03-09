@@ -1760,9 +1760,9 @@ if show_map and st.session_state.get("page") != "index":
     border:1px solid rgba(96,165,250,0.2);
     box-shadow:0 0 20px rgba(0,0,0,0.5);
   }}
-  #legend .title{{font-weight:700;font-size:13px;margin-bottom:8px;color:#fff;letter-spacing:.06em;}}
+  #legend .ltitle{{font-weight:700;font-size:13px;margin-bottom:8px;color:#fff;letter-spacing:.06em;}}
   #legend .row{{display:flex;align-items:center;gap:9px;margin:4px 0;}}
-  #legend .dot{{width:10px;height:10px;border-radius:50%;flex-shrink:0;box-shadow:0 0 6px var(--c);}}
+  #legend .dot{{width:10px;height:10px;border-radius:50%;flex-shrink:0;}}
   #title{{
     position:absolute;top:14px;left:50%;transform:translateX(-50%);
     color:#e2e8f0;font-size:16px;font-weight:600;letter-spacing:.08em;
@@ -1770,18 +1770,36 @@ if show_map and st.session_state.get("page") != "index":
     text-shadow:0 0 20px rgba(96,165,250,0.6);
   }}
   #hint{{position:absolute;bottom:16px;right:16px;color:rgba(255,255,255,0.25);font-size:11px;letter-spacing:.04em;}}
+  #rotatebtn{{
+    position:absolute;top:14px;right:16px;z-index:20;
+    background:rgba(2,8,20,0.80);border:1px solid rgba(96,165,250,0.35);
+    color:#a0c4ff;font-size:12px;font-family:Inter,Arial,sans-serif;
+    letter-spacing:.06em;padding:6px 13px;border-radius:6px;cursor:pointer;
+    display:flex;align-items:center;gap:7px;user-select:none;
+    transition:border-color .2s,color .2s;
+  }}
+  #rotatebtn:hover{{border-color:rgba(96,165,250,0.7);color:#fff;}}
+  #rotatebtn .indicator{{
+    width:8px;height:8px;border-radius:50%;background:#60a5fa;
+    box-shadow:0 0 6px #60a5fa;transition:background .2s,box-shadow .2s;
+  }}
+  #rotatebtn.off .indicator{{background:#334;box-shadow:none;}}
+  #rotatebtn.off{{color:rgba(255,255,255,0.35);}}
 </style>
 </head><body>
 <div id="title">&#9632;&nbsp; Current Conflict Hotspots</div>
+<div id="rotatebtn" id="rotatebtn" onclick="toggleRotate()">
+  <div class="indicator"></div><span id="rotatelabel">AUTO-ROTATE ON</span>
+</div>
 <div id="tooltip"></div>
 <div id="legend">
-  <div class="title">CATEGORIES</div>
-  <div class="row"><div class="dot" style="background:#ef4444;--c:#ef4444"></div>Battles</div>
-  <div class="row"><div class="dot" style="background:#f59e0b;--c:#f59e0b"></div>Explosions / Remote Violence</div>
-  <div class="row"><div class="dot" style="background:#fde047;--c:#fde047"></div>Violence Against Civilians</div>
-  <div class="row"><div class="dot" style="background:#60a5fa;--c:#60a5fa"></div>Strategic Developments</div>
-  <div class="row"><div class="dot" style="background:#a78bfa;--c:#a78bfa"></div>Protests</div>
-  <div class="row"><div class="dot" style="background:#f472b6;--c:#f472b6"></div>Riots</div>
+  <div class="ltitle">CATEGORIES</div>
+  <div class="row"><div class="dot" style="background:#ef4444"></div>Battles</div>
+  <div class="row"><div class="dot" style="background:#f59e0b"></div>Explosions / Remote Violence</div>
+  <div class="row"><div class="dot" style="background:#fde047"></div>Violence Against Civilians</div>
+  <div class="row"><div class="dot" style="background:#60a5fa"></div>Strategic Developments</div>
+  <div class="row"><div class="dot" style="background:#a78bfa"></div>Protests</div>
+  <div class="row"><div class="dot" style="background:#f472b6"></div>Riots</div>
 </div>
 <div id="hint">DRAG TO ROTATE &nbsp;·&nbsp; SCROLL TO ZOOM</div>
 
@@ -1809,115 +1827,219 @@ const sg = new THREE.BufferGeometry();
 sg.setAttribute('position', new THREE.Float32BufferAttribute(sv, 3));
 scene.add(new THREE.Points(sg, new THREE.PointsMaterial({{color:0xffffff, size:0.5}})));
 
-// Globe group — everything rotates together
+// Globe group
 const globe = new THREE.Group();
 scene.add(globe);
 
-// Earth sphere — dark glossy material
+// Earth sphere
 const earthMat = new THREE.MeshPhongMaterial({{
-  color: 0x0a1628,
-  specular: 0x1a3a6a,
-  shininess: 40,
-  transparent: false,
+  color: 0x0a1628, specular: 0x1a3a6a, shininess: 40,
 }});
 globe.add(new THREE.Mesh(new THREE.SphereGeometry(1, 64, 64), earthMat));
 
-// Outer glow ring
-const glowMat = new THREE.MeshPhongMaterial({{
-  color: 0x1a4aaa,
-  transparent: true,
-  opacity: 0.08,
-  side: THREE.BackSide,
-}});
-globe.add(new THREE.Mesh(new THREE.SphereGeometry(1.06, 64, 64), glowMat));
+// Glow
+globe.add(new THREE.Mesh(
+  new THREE.SphereGeometry(1.06, 64, 64),
+  new THREE.MeshPhongMaterial({{color:0x1a4aaa, transparent:true, opacity:0.08, side:THREE.BackSide}})
+));
 
 // Lighting
 scene.add(new THREE.AmbientLight(0x334466, 1.5));
 const rim = new THREE.DirectionalLight(0x4488ff, 0.4);
-rim.position.set(-3, 2, -3);
-scene.add(rim);
+rim.position.set(-3, 2, -3); scene.add(rim);
 const key = new THREE.DirectionalLight(0x8abaff, 0.25);
-key.position.set(4, 2, 4);
-scene.add(key);
+key.position.set(4, 2, 4); scene.add(key);
 
-// lat/lon → 3D point on unit sphere
+// lat/lon → 3D
 function ll(lat, lon, r){{
-  const phi = (90 - lat) * Math.PI / 180;
-  const th  = (lon + 180) * Math.PI / 180;
+  const phi = (90-lat)*Math.PI/180, th = (lon+180)*Math.PI/180;
   return new THREE.Vector3(
-    -r * Math.sin(phi) * Math.cos(th),
-     r * Math.cos(phi),
-     r * Math.sin(phi) * Math.sin(th)
+    -r*Math.sin(phi)*Math.cos(th),
+     r*Math.cos(phi),
+     r*Math.sin(phi)*Math.sin(th)
   );
 }}
 
-// Draw lat/lon grid lines
-function addGrid(){{
+// Lat/lon grid
+(function(){{
   const mat = new THREE.LineBasicMaterial({{color:0x1a3060, transparent:true, opacity:0.3}});
   for(let lat=-80;lat<=80;lat+=20){{
     const pts=[];
     for(let lon=-180;lon<=180;lon+=2) pts.push(ll(lat,lon,1.001));
-    const g=new THREE.BufferGeometry().setFromPoints(pts);
-    globe.add(new THREE.Line(g,mat));
+    globe.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat));
   }}
   for(let lon=-180;lon<180;lon+=20){{
     const pts=[];
     for(let lat=-90;lat<=90;lat+=2) pts.push(ll(lat,lon,1.001));
-    const g=new THREE.BufferGeometry().setFromPoints(pts);
-    globe.add(new THREE.Line(g,mat));
+    globe.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat));
   }}
-}}
-addGrid();
+}})();
 
-// Country borders from TopoJSON
-
-
-// Country border lines (faint)
-const countryMat = new THREE.LineBasicMaterial({{color:0x3a6ab0, transparent:true, opacity:0.75}});
-const landMat    = countryMat;
-
-function addGeoLine(coords, mat, r){{
-  if(!coords || coords.length < 2) return;
-  const pts = coords.map(c => ll(c[1], c[0], r));
-  const g = new THREE.BufferGeometry().setFromPoints(pts);
-  globe.add(new THREE.Line(g, mat));
-}}
-
-function processGeom(geom, mat, r){{
-  if(!geom) return;
-  if(geom.type === 'LineString') addGeoLine(geom.coordinates, mat, r);
-  else if(geom.type === 'MultiLineString') geom.coordinates.forEach(c => addGeoLine(c, mat, r));
-  else if(geom.type === 'Polygon') geom.coordinates.forEach(c => addGeoLine(c, mat, r));
-  else if(geom.type === 'MultiPolygon') geom.coordinates.forEach(p => p.forEach(c => addGeoLine(c, mat, r)));
-}}
-
+// Country + land borders
+const borderMat = new THREE.LineBasicMaterial({{color:0x3a6ab0, transparent:true, opacity:0.75}});
 fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
-  .then(r => r.json())
-  .then(world => {{
-    // Country borders (interior lines only, faint)
-    const countryMesh = topojson.mesh(world, world.objects.countries, (a,b) => a !== b);
-    processGeom(countryMesh, countryMat, 1.002);
-
-    // Continent / land outlines (exterior coastlines, bright blue)
-    const land = topojson.feature(world, world.objects.land);
-    if(land.type === 'Feature') {{
-      processGeom(land.geometry, landMat, 1.003);
-    }} else if(land.type === 'FeatureCollection') {{
-      land.features.forEach(f => processGeom(f.geometry, landMat, 1.003));
+  .then(r=>r.json()).then(world=>{{
+    function addLine(coords, r){{
+      if(!coords||coords.length<2) return;
+      globe.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(coords.map(c=>ll(c[1],c[0],r))),
+        borderMat
+      ));
     }}
-  }})
-  .catch(() => {{}});
+    function procGeom(g, r){{
+      if(!g) return;
+      if(g.type==='LineString') addLine(g.coordinates,r);
+      else if(g.type==='MultiLineString') g.coordinates.forEach(c=>addLine(c,r));
+      else if(g.type==='Polygon') g.coordinates.forEach(c=>addLine(c,r));
+      else if(g.type==='MultiPolygon') g.coordinates.forEach(p=>p.forEach(c=>addLine(c,r)));
+    }}
+    procGeom(topojson.mesh(world, world.objects.countries, (a,b)=>a!==b), 1.002);
+    const land = topojson.feature(world, world.objects.land);
+    if(land.type==='Feature') procGeom(land.geometry,1.003);
+    else if(land.type==='FeatureCollection') land.features.forEach(f=>procGeom(f.geometry,1.003));
+  }}).catch(()=>{{}});
 
-// ACLED conflict dots
+// ── Geographic labels ─────────────────────────────────────────────
+// Uses PlaneGeometry oriented to face outward from globe center
+// so labels appear painted onto the surface
+function makeLabel(text, color, fontSize, canvasW){{
+  canvasW = canvasW || 512;
+  const canvasH = Math.round(canvasW * 0.25);
+  const c = document.createElement('canvas');
+  c.width = canvasW; c.height = canvasH;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,canvasW,canvasH);
+  ctx.font = '700 '+fontSize+'px Inter,Arial,sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // dark halo for readability
+  ctx.shadowColor = 'rgba(0,0,0,0.95)';
+  ctx.shadowBlur = 10;
+  ctx.strokeStyle = 'rgba(0,0,10,0.9)';
+  ctx.lineWidth = Math.max(3, fontSize*0.18);
+  ctx.lineJoin = 'round';
+  ctx.strokeText(text, canvasW/2, canvasH/2);
+  ctx.shadowBlur = 6;
+  ctx.fillStyle = color;
+  ctx.fillText(text, canvasW/2, canvasH/2);
+  return new THREE.CanvasTexture(c);
+}}
+
+function addLabel(text, lat, lon, worldWidth, color, fontSize){{
+  const tex = makeLabel(text, color, fontSize);
+  const mat = new THREE.MeshBasicMaterial({{
+    map: tex,
+    transparent: true,
+    depthWrite: false,
+    depthTest: false,
+    side: THREE.DoubleSide,
+  }});
+  const aspect = 0.25; // canvasH/canvasW
+  const geo = new THREE.PlaneGeometry(worldWidth, worldWidth * aspect);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.renderOrder = 999;
+
+  // Position on surface
+  const pos = ll(lat, lon, 1.001);
+  mesh.position.copy(pos);
+
+  // Orient: face outward (normal = radial direction)
+  mesh.lookAt(new THREE.Vector3(0,0,0));
+  mesh.rotateY(Math.PI); // flip so text faces outward
+
+  globe.add(mesh);
+}}
+
+// Continents — gold, wide
+const continents = [
+  ['AFRICA',         5,   22,  0.52, 'rgba(255,210,80,0.90)',  56],
+  ['EUROPE',        54,   15,  0.52, 'rgba(255,210,80,0.90)',  52],
+  ['ASIA',          47,   90,  0.52, 'rgba(255,210,80,0.90)',  56],
+  ['NORTH AMERICA', 50, -100,  0.58, 'rgba(255,210,80,0.90)',  52],
+  ['SOUTH AMERICA',-15,  -58,  0.52, 'rgba(255,210,80,0.90)',  52],
+  ['OCEANIA',      -25,  140,  0.45, 'rgba(255,210,80,0.90)',  46],
+  ['ANTARCTICA',   -82,    0,  0.45, 'rgba(255,210,80,0.80)',  44],
+];
+continents.forEach(l=>addLabel(l[0],l[1],l[2],l[3],l[4],l[5]));
+
+// Countries — white
+const countries = [
+  ['RUSSIA',         61,  100,  0.44, 'rgba(255,255,255,0.82)', 44],
+  ['CANADA',         60,  -96,  0.40, 'rgba(255,255,255,0.82)', 42],
+  ['UNITED STATES',  38,  -97,  0.48, 'rgba(255,255,255,0.82)', 44],
+  ['BRAZIL',         -9,  -53,  0.38, 'rgba(255,255,255,0.82)', 42],
+  ['AUSTRALIA',     -24,  134,  0.38, 'rgba(255,255,255,0.82)', 40],
+  ['CHINA',          35,  103,  0.36, 'rgba(255,255,255,0.82)', 40],
+  ['INDIA',          22,   80,  0.32, 'rgba(255,255,255,0.80)', 38],
+  ['ALGERIA',        28,    2,  0.28, 'rgba(255,255,255,0.72)', 32],
+  ['MEXICO',         24, -102,  0.26, 'rgba(255,255,255,0.72)', 32],
+  ['KAZAKHSTAN',     49,   68,  0.30, 'rgba(255,255,255,0.72)', 32],
+  ['SUDAN',          16,   30,  0.24, 'rgba(255,255,255,0.72)', 32],
+  ['UKRAINE',        49,   31,  0.26, 'rgba(255,255,255,0.72)', 32],
+  ['NIGERIA',         9,    8,  0.24, 'rgba(255,255,255,0.72)', 32],
+  ['ETHIOPIA',        9,   40,  0.26, 'rgba(255,255,255,0.72)', 32],
+  ['MYANMAR',        20,   96,  0.24, 'rgba(255,255,255,0.72)', 30],
+  ['AFGHANISTAN',    33,   66,  0.28, 'rgba(255,255,255,0.72)', 30],
+  ['MALI',           18,   -2,  0.22, 'rgba(255,255,255,0.72)', 30],
+  ['SYRIA',          35,   38,  0.20, 'rgba(255,255,255,0.72)', 30],
+  ['YEMEN',          15,   48,  0.20, 'rgba(255,255,255,0.72)', 30],
+  ['IRAQ',           33,   44,  0.20, 'rgba(255,255,255,0.72)', 30],
+  ['IRAN',           32,   54,  0.22, 'rgba(255,255,255,0.72)', 30],
+  ['SOMALIA',         6,   46,  0.22, 'rgba(255,255,255,0.72)', 30],
+  ['D.R. CONGO',     -4,   24,  0.26, 'rgba(255,255,255,0.72)', 30],
+  ['COLOMBIA',        4,  -74,  0.24, 'rgba(255,255,255,0.72)', 30],
+  ['ARGENTINA',     -35,  -65,  0.26, 'rgba(255,255,255,0.72)', 30],
+  ['SOUTH AFRICA',  -29,   25,  0.28, 'rgba(255,255,255,0.72)', 30],
+  ['EGYPT',          27,   30,  0.22, 'rgba(255,255,255,0.72)', 30],
+  ['TURKEY',         39,   35,  0.22, 'rgba(255,255,255,0.72)', 30],
+  ['PAKISTAN',       30,   70,  0.24, 'rgba(255,255,255,0.72)', 30],
+  ['INDONESIA',      -5,  118,  0.26, 'rgba(255,255,255,0.72)', 30],
+  ['SAUDI ARABIA',   24,   45,  0.28, 'rgba(255,255,255,0.72)', 30],
+  ['LIBYA',          26,   17,  0.20, 'rgba(255,255,255,0.72)', 30],
+  ['CHAD',           15,   18,  0.20, 'rgba(255,255,255,0.72)', 28],
+  ['NIGER',          17,    8,  0.20, 'rgba(255,255,255,0.72)', 28],
+  ['BURKINA FASO',   12,   -2,  0.26, 'rgba(255,255,255,0.72)', 26],
+  ['CAMEROON',        6,   12,  0.24, 'rgba(255,255,255,0.72)', 26],
+  ['KENYA',          -1,   38,  0.20, 'rgba(255,255,255,0.72)', 28],
+  ['TANZANIA',       -6,   35,  0.22, 'rgba(255,255,255,0.72)', 28],
+  ['MOZAMBIQUE',    -17,   35,  0.26, 'rgba(255,255,255,0.72)', 28],
+  ['ISRAEL',         31,   35,  0.16, 'rgba(255,255,255,0.72)', 26],
+  ['LEBANON',        34,   36,  0.16, 'rgba(255,255,255,0.72)', 24],
+  ['GAZA',           31,   34,  0.12, 'rgba(255,255,255,0.80)', 22],
+  ['JAPAN',          36,  138,  0.20, 'rgba(255,255,255,0.72)', 28],
+  ['SOUTH KOREA',    36,  128,  0.22, 'rgba(255,255,255,0.72)', 26],
+  ['FRANCE',         47,    2,  0.20, 'rgba(255,255,255,0.72)', 28],
+  ['GERMANY',        51,   10,  0.20, 'rgba(255,255,255,0.72)', 28],
+  ['POLAND',         52,   20,  0.20, 'rgba(255,255,255,0.72)', 26],
+];
+countries.forEach(l=>addLabel(l[0],l[1],l[2],l[3],l[4],l[5]));
+
+// Oceans — blue
+const waters = [
+  ['PACIFIC OCEAN',    5, -155, 0.55, 'rgba(120,185,255,0.65)', 50],
+  ['ATLANTIC OCEAN',  10,  -30, 0.50, 'rgba(120,185,255,0.65)', 48],
+  ['INDIAN OCEAN',   -22,   80, 0.48, 'rgba(120,185,255,0.65)', 46],
+  ['ARCTIC OCEAN',    87,    0, 0.40, 'rgba(120,185,255,0.60)', 38],
+  ['SOUTHERN OCEAN', -62,    0, 0.44, 'rgba(120,185,255,0.60)', 38],
+  ['MEDITERRANEAN',   36,   18, 0.28, 'rgba(120,185,255,0.60)', 28],
+  ['RED SEA',         20,   38, 0.20, 'rgba(120,185,255,0.60)', 26],
+  ['PERSIAN GULF',    26,   52, 0.20, 'rgba(120,185,255,0.60)', 24],
+  ['CARIBBEAN SEA',   16,  -75, 0.26, 'rgba(120,185,255,0.60)', 28],
+  ['BLACK SEA',       43,   34, 0.20, 'rgba(120,185,255,0.60)', 24],
+  ['CASPIAN SEA',     42,   51, 0.20, 'rgba(120,185,255,0.60)', 24],
+  ['SOUTH CHINA SEA', 12,  114, 0.28, 'rgba(120,185,255,0.60)', 28],
+];
+waters.forEach(l=>addLabel(l[0],l[1],l[2],l[3],l[4],l[5]));
+
+// ── ACLED conflict dots ───────────────────────────────────────────
 const points = {points_json};
 const dotMeshes = [], dotData = [], dotBaseSizes = [];
 const BASE_CAM_Z = 2.6;
 points.forEach(function(p){{
   const sz = 0.003 + 0.009 * (p.size / 28);
-  const col = new THREE.Color(p.color);
   const mesh = new THREE.Mesh(
     new THREE.SphereGeometry(sz, 8, 8),
-    new THREE.MeshBasicMaterial({{color: col}})
+    new THREE.MeshBasicMaterial({{color: new THREE.Color(p.color)}})
   );
   mesh.position.copy(ll(p.lat, p.lon, 1.014));
   globe.add(mesh);
@@ -1926,132 +2048,24 @@ points.forEach(function(p){{
   dotBaseSizes.push(sz);
 }});
 
-
-// ── Geographic labels ──────────────────────────────────────────────
-function makeLabel(text, color, fontSize) {{
-  const c = document.createElement('canvas');
-  c.width = 512; c.height = 128;
-  const ctx = c.getContext('2d');
-  ctx.clearRect(0, 0, 512, 128);
-  ctx.font = '700 ' + fontSize + 'px Inter,Arial,sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  // Strong dark halo so text reads against any land color
-  ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-  ctx.lineWidth = 6;
-  ctx.lineJoin = 'round';
-  ctx.strokeText(text, 256, 64);
-  ctx.fillStyle = color;
-  ctx.fillText(text, 256, 64);
-  const mat = new THREE.SpriteMaterial({{
-    map: new THREE.CanvasTexture(c),
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
-  }});
-  const sp = new THREE.Sprite(mat);
-  // scale: width proportional to text length, fixed height
-  const charW = fontSize * 0.55;
-  const w = Math.min(0.60, (text.length * charW) / 512 * 0.9);
-  sp.scale.set(w, w * (128/512), 1);
-  return sp;
-}}
-function addLabel(text, lat, lon, r, color, fontSize) {{
-  const sp = makeLabel(text, color, fontSize);
-  // Place directly on surface
-  sp.position.copy(ll(lat, lon, r));
-  globe.add(sp);
-}}
-
-// [lat, lon, radius, color, fontSize]
-// Continents — large, warm gold, pulled back slightly
-const continents = [
-  ['AFRICA',         5,   22,  1.001, 'rgba(255,210,80,0.65)',  52],
-  ['EUROPE',        54,   15,  1.001, 'rgba(255,210,80,0.65)',  48],
-  ['ASIA',          47,   90,  1.001, 'rgba(255,210,80,0.65)',  52],
-  ['NORTH AMERICA', 50, -100,  1.001, 'rgba(255,210,80,0.65)',  46],
-  ['SOUTH AMERICA',-15,  -58,  1.001, 'rgba(255,210,80,0.65)',  46],
-  ['OCEANIA',      -25,  140,  1.001, 'rgba(255,210,80,0.65)',  42],
-  ['ANTARCTICA',   -82,    0,  1.001, 'rgba(255,210,80,0.60)',  40],
-];
-continents.forEach(l => addLabel(l[0],l[1],l[2],l[3],l[4],l[5]));
-
-// Countries — white, slightly closer
-const countries = [
-  ['RUSSIA',          61,  100, 1.001, 'rgba(255,255,255,0.80)', 40],
-  ['CANADA',          60,  -96, 1.001, 'rgba(255,255,255,0.80)', 40],
-  ['UNITED STATES',   38,  -97, 1.001, 'rgba(255,255,255,0.80)', 40],
-  ['BRAZIL',          -9,  -53, 1.001, 'rgba(255,255,255,0.80)', 40],
-  ['AUSTRALIA',      -24,  134, 1.001, 'rgba(255,255,255,0.80)', 38],
-  ['CHINA',           35,  103, 1.001, 'rgba(255,255,255,0.80)', 38],
-  ['INDIA',           22,   80, 1.001, 'rgba(255,255,255,0.78)', 36],
-  ['ALGERIA',         28,    2, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['MEXICO',          24, -102, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['KAZAKHSTAN',      49,   68, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['SUDAN',           16,   30, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['UKRAINE',         49,   31, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['NIGERIA',          9,    8, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['ETHIOPIA',         9,   40, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['MYANMAR',         20,   96, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['AFGHANISTAN',     33,   66, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['MALI',            18,   -2, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['SYRIA',           35,   38, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['YEMEN',           15,   48, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['IRAQ',            33,   44, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['IRAN',            32,   54, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['SOMALIA',          6,   46, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['D.R. CONGO',      -4,   24, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['COLOMBIA',         4,  -74, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['ARGENTINA',      -35,  -65, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['SOUTH AFRICA',   -29,   25, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['EGYPT',           27,   30, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['TURKEY',          39,   35, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['PAKISTAN',        30,   70, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['INDONESIA',       -5,  118, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['SAUDI ARABIA',    24,   45, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['LIBYA',           26,   17, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['MOZAMBIQUE',     -17,   35, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['MYANMAR',         20,   96, 1.001, 'rgba(255,255,255,0.70)', 30],
-  ['CHAD',            15,   18, 1.001, 'rgba(255,255,255,0.70)', 28],
-  ['NIGER',           17,    8, 1.001, 'rgba(255,255,255,0.70)', 28],
-  ['BURKINA FASO',    12,   -2, 1.001, 'rgba(255,255,255,0.70)', 28],
-  ['CAMEROON',         6,   12, 1.001, 'rgba(255,255,255,0.70)', 28],
-  ['KENYA',           -1,   38, 1.001, 'rgba(255,255,255,0.70)', 28],
-  ['TANZANIA',        -6,   35, 1.001, 'rgba(255,255,255,0.70)', 28],
-  ['VENEZUELA',        7,  -66, 1.001, 'rgba(255,255,255,0.70)', 28],
-  ['PERU',           -10,  -76, 1.001, 'rgba(255,255,255,0.70)', 28],
-  ['FRANCE',          47,    2, 1.001, 'rgba(255,255,255,0.70)', 28],
-  ['GERMANY',         51,   10, 1.001, 'rgba(255,255,255,0.70)', 28],
-  ['POLAND',          52,   20, 1.001, 'rgba(255,255,255,0.70)', 28],
-  ['JAPAN',           36,  138, 1.001, 'rgba(255,255,255,0.70)', 28],
-  ['SOUTH KOREA',     36,  128, 1.001, 'rgba(255,255,255,0.70)', 28],
-  ['ISRAEL',          31,   35, 1.001, 'rgba(255,255,255,0.70)', 26],
-  ['LEBANON',         34,   36, 1.001, 'rgba(255,255,255,0.70)', 26],
-  ['GAZA',            31,   34, 1.001, 'rgba(255,255,255,0.70)', 24],
-];
-countries.forEach(l => addLabel(l[0],l[1],l[2],l[3],l[4],l[5]));
-
-// Oceans & seas — light blue, outer radius
-const waters = [
-  ['PACIFIC OCEAN',    5, -155, 1.001, 'rgba(120,185,255,0.50)', 46],
-  ['ATLANTIC OCEAN',  10,  -30, 1.001, 'rgba(120,185,255,0.50)', 44],
-  ['INDIAN OCEAN',   -22,   80, 1.001, 'rgba(120,185,255,0.50)', 44],
-  ['ARCTIC OCEAN',    87,    0, 1.001, 'rgba(120,185,255,0.45)', 36],
-  ['SOUTHERN OCEAN', -62,    0, 1.001, 'rgba(120,185,255,0.45)', 36],
-  ['MEDITERRANEAN',   36,   18, 1.001, 'rgba(120,185,255,0.45)', 26],
-  ['RED SEA',         20,   38, 1.001, 'rgba(120,185,255,0.45)', 24],
-  ['PERSIAN GULF',    26,   52, 1.001, 'rgba(120,185,255,0.45)', 22],
-  ['CARIBBEAN SEA',   16,  -75, 1.001, 'rgba(120,185,255,0.45)', 26],
-  ['BLACK SEA',       43,   34, 1.001, 'rgba(120,185,255,0.45)', 24],
-  ['CASPIAN SEA',     42,   51, 1.001, 'rgba(120,185,255,0.45)', 24],
-  ['SOUTH CHINA SEA', 12,  114, 1.001, 'rgba(120,185,255,0.45)', 26],
-  ['GULF OF GUINEA',   2,    3, 1.001, 'rgba(120,185,255,0.45)', 26],
-];
-waters.forEach(l => addLabel(l[0],l[1],l[2],l[3],l[4],l[5]));
-
-// Orient globe toward conflict hotspot
+// Orient globe
 const id = ll({cam_lat}, {cam_lon}, 1);
 globe.rotation.y = -Math.atan2(id.x, id.z);
+
+// Auto-rotate state
+let autoRotate = true;
+function toggleRotate(){{
+  autoRotate = !autoRotate;
+  const btn = document.getElementById('rotatebtn');
+  const lbl = document.getElementById('rotatelabel');
+  if(autoRotate){{
+    btn.classList.remove('off');
+    lbl.textContent = 'AUTO-ROTATE ON';
+  }} else {{
+    btn.classList.add('off');
+    lbl.textContent = 'AUTO-ROTATE OFF';
+  }}
+}}
 
 // Drag + scroll + inertia
 let drag=false, px=0, py=0, vx=0, vy=0, tz=2.6;
@@ -2060,53 +2074,46 @@ cvs.addEventListener('mousedown', e=>{{ drag=true; px=e.clientX; py=e.clientY; v
 window.addEventListener('mouseup', ()=>drag=false);
 cvs.addEventListener('mousemove', e=>{{
   if(!drag) return;
-  vy = (e.clientX-px)*0.004; vx = (e.clientY-py)*0.004;
-  globe.rotation.y += vy; globe.rotation.x += vx;
-  globe.rotation.x = Math.max(-1.4, Math.min(1.4, globe.rotation.x));
+  vy=(e.clientX-px)*0.004; vx=(e.clientY-py)*0.004;
+  globe.rotation.y+=vy; globe.rotation.x+=vx;
+  globe.rotation.x=Math.max(-1.4, Math.min(1.4, globe.rotation.x));
   px=e.clientX; py=e.clientY;
 }});
 cvs.addEventListener('wheel', e=>{{
-  tz = Math.max(1.3, Math.min(5.0, tz + e.deltaY*0.003));
+  tz=Math.max(1.3, Math.min(5.0, tz+e.deltaY*0.003));
   e.preventDefault();
 }}, {{passive:false}});
 
-// Hover tooltip
+// Tooltip
 const ray=new THREE.Raycaster(), mouse=new THREE.Vector2();
 const tip=document.getElementById('tooltip');
 cvs.addEventListener('mousemove', e=>{{
   const r=cvs.getBoundingClientRect();
-  mouse.x = ((e.clientX-r.left)/r.width)*2-1;
-  mouse.y = -((e.clientY-r.top)/r.height)*2+1;
+  mouse.x=((e.clientX-r.left)/r.width)*2-1;
+  mouse.y=-((e.clientY-r.top)/r.height)*2+1;
   ray.setFromCamera(mouse, camera);
-  const hits = ray.intersectObjects(dotMeshes);
+  const hits=ray.intersectObjects(dotMeshes);
   if(hits.length){{
-    const p = dotData[dotMeshes.indexOf(hits[0].object)];
+    const p=dotData[dotMeshes.indexOf(hits[0].object)];
     tip.style.display='block';
     tip.style.left=(e.clientX+16)+'px';
     tip.style.top=(e.clientY-10)+'px';
-    tip.innerHTML=
-      '<b>'+p.label+'</b><br>'
+    tip.innerHTML='<b>'+p.label+'</b><br>'
       +'<span class="cat">'+p.category.toUpperCase()+'</span><br><br>'
       +p.metric_name+': <b>'+p.metric.toLocaleString()+'</b><br>'
       +'Fatalities: <b>'+p.fatalities.toLocaleString()+'</b>';
   }} else {{ tip.style.display='none'; }}
 }});
 
-// Animate
-let autoRotate = {"true" if auto_rotate else "false"};
 function animate(){{
   requestAnimationFrame(animate);
   if(!drag){{
     globe.rotation.y += vy*0.90; vy*=0.90;
     if(autoRotate) globe.rotation.y += 0.0008;
   }}
-  camera.position.z += (tz - camera.position.z)*0.08;
-  // Keep dots same apparent size regardless of zoom
-  const zoomRatio = camera.position.z / BASE_CAM_Z;
-  for(let i=0;i<dotMeshes.length;i++){{
-    const s = zoomRatio;
-    dotMeshes[i].scale.set(s, s, s);
-  }}
+  camera.position.z += (tz-camera.position.z)*0.08;
+  const zr = camera.position.z / BASE_CAM_Z;
+  for(let i=0;i<dotMeshes.length;i++) dotMeshes[i].scale.set(zr,zr,zr);
   renderer.render(scene, camera);
 }}
 animate();
