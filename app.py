@@ -32,6 +32,7 @@ _qp = st.query_params.get("nav", "")
 if _qp in ("index", "map"):
     st.session_state["page"] = _qp
     st.query_params.clear()
+    st.rerun()
 
 if "page" not in st.session_state:
     st.session_state["page"] = "landing"
