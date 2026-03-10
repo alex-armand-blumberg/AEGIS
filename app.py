@@ -1928,14 +1928,12 @@ function addLabel(text, lat, lon, worldWidth, color, fontSize){{
     map: tex,
     transparent: true,
     depthWrite: false,
-    depthTest: false,
+    depthTest: true,
     side: THREE.DoubleSide,
   }});
   const aspect = 0.25; // canvasH/canvasW
   const geo = new THREE.PlaneGeometry(worldWidth, worldWidth * aspect);
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.renderOrder = 999;
-
   // Position on surface
   const pos = ll(lat, lon, 1.001);
   mesh.position.copy(pos);
