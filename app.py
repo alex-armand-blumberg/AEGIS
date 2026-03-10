@@ -155,6 +155,14 @@ if st.session_state["page"] == "landing":
         '<a href="https://www.linkedin.com/in/alexanderbab/" target="_blank" style="color:inherit;">Alexander Armand-Blumberg</a> &middot; AEGIS</div>',
         unsafe_allow_html=True,
     )
+
+    st.markdown(
+    '<div style="position:fixed;bottom:12px;left:16px;font-size:9px;color:rgba(255,255,255,0.25);'
+    'font-family:-apple-system,Inter,sans-serif;letter-spacing:0.05em;z-index:10;">'
+    'Background footage: Public Domain (CC0)</div>',
+    unsafe_allow_html=True,
+)
+    
     st.stop()
 
 # Public ArcGIS layer for ACLED monthly subnational indicators
