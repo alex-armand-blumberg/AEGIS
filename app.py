@@ -2419,7 +2419,7 @@ function selectCountry(name){{
   flyTarget = {{
     rotY: globe.rotation.y+dy,
     rotX: rotX,
-    z: Math.max(1.4, Math.min(2.4, 2.6-(c.zoom-1.0)*0.21)),
+    z: Math.max(1.1, Math.min(1.8, 2.6-(c.zoom-1.0)*0.38)),
   }};
   showInfoPanel(name);
   autoRotate=false;
