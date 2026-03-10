@@ -750,7 +750,7 @@ if _adv_exp:
         max_value=100,
         value=45,
         step=1,
-        help="Recommended: 45 for major conflicts. Lower to 35–40 for smaller or less-covered conflicts.",
+        help="Recommended: Leave at 45",
     )
     smooth_window = st.number_input(
         "Smoothing window (months)",
@@ -758,7 +758,7 @@ if _adv_exp:
         max_value=12,
         value=3,
         step=1,
-        help="Rolling average applied to reduce month-to-month noise.",
+        help="Rolling average applied to reduce month-to-month noise. Recommended not to change.",
     )
     show_components = st.checkbox(
         "Show component breakdown chart",
