@@ -727,10 +727,6 @@ country_name = st.sidebar.text_input(
     "",
     help="Must match the country name in ACLED exactly (e.g. 'Ukraine', 'Sudan', 'Myanmar').",
 )
-if st.session_state.get("page") == "map":
-    auto_rotate = st.sidebar.toggle("🔄 Auto-rotate globe", value=True, key="globe_rotate")
-else:
-    auto_rotate = True
 
 # Load ACLED credentials silently from Streamlit secrets
 try:
