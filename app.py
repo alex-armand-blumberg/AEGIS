@@ -1776,6 +1776,7 @@ if show_map and st.session_state.get("page") != "index":
   <div class="indicator"></div><span id="rotatelabel">AUTO-ROTATE ON</span>
 </div>
 <div id="recenterbtn" onclick="recenter()">&#8859;&nbsp; RECENTER</div>
+<div id="fullscreenbtn" onclick="toggleFullscreen()">&#x26F6;&nbsp; FULLSCREEN</div>
 <div id="tooltip"></div>
 <div id="legend">
   <div class="ltitle">CATEGORIES</div>
@@ -2217,6 +2218,20 @@ function closePanel(){{
   tz = 2.6;
   flyTarget = null;
 }}
+function toggleFullscreen(){{
+  const el = document.documentElement;
+  if(!document.fullscreenElement){{
+    el.requestFullscreen && el.requestFullscreen();
+    document.getElementById('fullscreenbtn').innerHTML='&#x26F6;&nbsp; EXIT FULL';
+  }} else {{
+    document.exitFullscreen && document.exitFullscreen();
+    document.getElementById('fullscreenbtn').innerHTML='&#x26F6;&nbsp; FULLSCREEN';
+  }}
+}}
+document.addEventListener('fullscreenchange',function(){{
+  if(!document.fullscreenElement)
+    document.getElementById('fullscreenbtn').innerHTML='&#x26F6;&nbsp; FULLSCREEN';
+}});
 function recenter(){{
   flyTarget = {{ rotY: initRotY, rotX: 0, z: 2.6 }};
   closePanel();
@@ -2402,6 +2417,15 @@ animate();
     transition:border-color .2s,color .2s;
   }}
   #recenterbtn2d:hover{{border-color:rgba(96,165,250,0.7);color:#fff;}}
+  #fullscreenbtn2d{{
+    position:absolute;bottom:90px;right:16px;z-index:1000;
+    background:rgba(2,8,20,0.85);border:1px solid rgba(96,165,250,0.35);
+    color:#a0c4ff;font-size:12px;font-family:Inter,Arial,sans-serif;
+    letter-spacing:.06em;padding:6px 13px;border-radius:6px;cursor:pointer;
+    display:flex;align-items:center;gap:7px;user-select:none;
+    transition:border-color .2s,color .2s;
+  }}
+  #fullscreenbtn2d:hover{{border-color:rgba(96,165,250,0.7);color:#fff;}}
   #infopanel2d{{
     position:absolute;top:56px;right:16px;width:220px;
     background:linear-gradient(160deg,rgba(2,8,25,0.97),rgba(8,18,45,0.97));
@@ -2444,6 +2468,7 @@ animate();
 </div>
 <div id="hint2d">CLICK FOR DETAILS &nbsp;·&nbsp; SCROLL TO ZOOM</div>
 <div id="recenterbtn2d" onclick="recenter2d()">&#8859;&nbsp; RECENTER</div>
+<div id="fullscreenbtn2d" onclick="toggleFullscreen2d()">&#x26F6;&nbsp; FULLSCREEN</div>
 <div id="infopanel2d">
   <div id="infopanel2d-close" onclick="closePanel2d()">&#10005;</div>
   <div id="infopanel2d-content"></div>
@@ -2528,6 +2553,20 @@ function selectCountry2d(name){{
   showInfoPanel2d(name);
 }}
 
+function toggleFullscreen2d(){{
+  const el = document.documentElement;
+  if(!document.fullscreenElement){{
+    el.requestFullscreen && el.requestFullscreen();
+    document.getElementById('fullscreenbtn2d').innerHTML='&#x26F6;&nbsp; EXIT FULL';
+  }} else {{
+    document.exitFullscreen && document.exitFullscreen();
+    document.getElementById('fullscreenbtn2d').innerHTML='&#x26F6;&nbsp; FULLSCREEN';
+  }}
+}}
+document.addEventListener('fullscreenchange',function(){{
+  if(!document.fullscreenElement)
+    document.getElementById('fullscreenbtn2d').innerHTML='&#x26F6;&nbsp; FULLSCREEN';
+}});
 function recenter2d(){{
   map2d.flyTo([20, 10], 2, {{duration:1.0, easeLinearity:0.3}});
   closePanel2d();
