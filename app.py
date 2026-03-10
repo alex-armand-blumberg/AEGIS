@@ -2843,7 +2843,7 @@ map2d.on('click', closePanel2d);
 st.markdown(
     """
 <div style="text-align:center; color:#e2e8f0; font-size:12px; padding: 8px 0 16px 0;">
-    © 2026 Alexander Armand-Blumberg · AEGIS
+    Alexander Armand-Blumberg · AEGIS
 </div>
 """,
     unsafe_allow_html=True,
