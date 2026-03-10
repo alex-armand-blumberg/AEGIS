@@ -152,7 +152,7 @@ if st.session_state["page"] == "landing":
 
     st.markdown(
         '<div style="text-align:center;" class="landing-copy">'
-        'Alexander Armand-Blumberg &middot; AEGIS</div>',
+        '<a href="https://www.linkedin.com/in/alexanderbab/" target="_blank" style="color:inherit;">Alexander Armand-Blumberg</a> &middot; AEGIS</div>',
         unsafe_allow_html=True,
     )
     st.stop()
