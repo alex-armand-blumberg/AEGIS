@@ -1675,14 +1675,21 @@ if show_map and st.session_state.get("page") != "index":
                             for _c, _cg in grouped.groupby("country"):
                                 _lats = _cg["centroid_latitude"]
                                 _lons = _cg["centroid_longitude"]
-                                _clat = float((_lats.min() + _lats.max()) / 2)
-                                _clon = float((_lons.min() + _lons.max()) / 2)
-                                _span = float(max(_lats.max()-_lats.min(), _lons.max()-_lons.min(), 0.5))
+                                # Use median for centroid — robust against outlier admin1 points
+                                _clat = float(_lats.median())
+                                _clon = float(_lons.median())
+                                # Strip admin1 centroids that are implausibly far from the median
+                                # before computing the bounding box (prevents bad ACLED coords
+                                # from zooming the map to the wrong continent)
+                                _ok = ((_lats - _clat).abs() <= 20) & ((_lons - _clon).abs() <= 30)
+                                _lats_c = _lats[_ok] if _ok.any() else _lats
+                                _lons_c = _lons[_ok] if _ok.any() else _lons
+                                _span = float(max(_lats_c.max()-_lats_c.min(), _lons_c.max()-_lons_c.min(), 0.5))
                                 _zoom = float(max(1.5, min(6.0, 5.8 - np.log2(_span + 1))))
                                 _country_data[_c] = {
                                     "lat": _clat, "lon": _clon, "zoom": _zoom,
-                                    "minlat": float(_lats.min()), "maxlat": float(_lats.max()),
-                                    "minlon": float(_lons.min()), "maxlon": float(_lons.max()),
+                                    "minlat": float(_lats_c.min()), "maxlat": float(_lats_c.max()),
+                                    "minlon": float(_lons_c.min()), "maxlon": float(_lons_c.max()),
                                     "fatalities":   int(_cg["fatalities"].sum()),
                                     "battles":      int(_cg["battles"].sum()),
                                     "explosions":   int(_cg["explosions_remote_violence"].sum()),
