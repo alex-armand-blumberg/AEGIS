@@ -1884,7 +1884,7 @@ if show_map and st.session_state.get("page") != "index":
   #fullscreenbtn:hover{{border-color:rgba(96,165,250,0.7);color:#fff;}}
 </style>
 </head><body>
-<div id="title">&#9632;&nbsp; {start_dt.strftime('%b %Y')} – {end_dt.strftime('%b %Y')} Conflict Hotspots</div>
+<div id="title">&#9632;&nbsp; {start_dt.strftime('%b %Y') if start_dt.strftime('%b %Y') == end_dt.strftime('%b %Y') else f"{start_dt.strftime('%b %Y')} – {end_dt.strftime('%b %Y')}"} Conflict Hotspots</div>
 <div id="rotatebtn" id="rotatebtn" onclick="toggleRotate()">
   <div class="indicator"></div><span id="rotatelabel">AUTO-ROTATE ON</span>
 </div>
@@ -2639,7 +2639,7 @@ animate();
   .leaflet-control-zoom a:hover{{background:rgba(10,20,50,0.95)!important;color:white!important;}}
 </style>
 </head><body>
-<div id="title2d">&#9632;&nbsp; {start_dt.strftime('%b %Y')} – {end_dt.strftime('%b %Y')} Conflict Hotspots</div>
+<div id="title2d">&#9632;&nbsp; {start_dt.strftime('%b %Y') if start_dt.strftime('%b %Y') == end_dt.strftime('%b %Y') else f"{start_dt.strftime('%b %Y')} – {end_dt.strftime('%b %Y')}"} Conflict Hotspots</div>
 <div id="mapid"></div>
 <div id="legend2d">
   <div class="ltitle">CATEGORIES</div>
