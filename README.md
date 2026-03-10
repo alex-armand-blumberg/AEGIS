@@ -33,7 +33,7 @@ Enter any country and AEGIS computes a composite escalation score (0–100) acro
 
 
 
-## Pre-Escalation Prediction flagged Russian Invasion of Ukraine Before The Attack.
+## Pre-Escalation Prediction flagged Russian Invasion of Ukraine Before The Attack:
 ![AEGIS Escalation Index Output](example2.png)
 
 
