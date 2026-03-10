@@ -2364,13 +2364,53 @@ function recenter(){{
   closePanel();
 }}
 
+// ── Hardcoded country centroids for fly-to (bypasses bad ACLED coords) ──────
+const GEO_CENTER = {{
+  "Afghanistan":[33.9,67.7],"Algeria":[28.0,2.6],"Angola":[-11.2,17.9],
+  "Armenia":[40.1,45.0],"Azerbaijan":[40.1,47.6],"Bangladesh":[23.7,90.4],
+  "Belarus":[53.7,28.0],"Benin":[9.3,2.3],"Bolivia":[-16.3,-63.6],
+  "Bosnia and Herzegovina":[44.2,17.7],"Burkina Faso":[12.4,-1.6],
+  "Burundi":[-3.4,29.9],"Cambodia":[12.6,104.9],"Cameroon":[5.7,12.4],
+  "Central African Republic":[6.6,20.9],"Chad":[15.5,18.7],
+  "Colombia":[4.1,-72.9],"Congo":[-0.7,15.2],"Democratic Republic of Congo":[-4.0,23.7],
+  "DR Congo":[-4.0,23.7],"DRC":[-4.0,23.7],"Ecuador":[-1.8,-78.2],
+  "Egypt":[26.8,30.8],"El Salvador":[13.8,-88.9],"Eritrea":[15.2,39.8],
+  "Ethiopia":[9.1,40.5],"Georgia":[42.3,43.4],"Guatemala":[15.8,-90.2],
+  "Guinea":[10.9,-11.4],"Guinea-Bissau":[11.9,-15.2],"Haiti":[18.9,-72.3],
+  "Honduras":[14.8,-86.2],"India":[22.5,80.0],"Indonesia":[-2.5,118.0],
+  "Iran":[32.4,53.7],"Iraq":[33.2,43.7],"Israel":[31.5,35.0],
+  "Jordan":[31.2,36.5],"Kazakhstan":[48.0,67.5],"Kenya":[0.2,37.9],
+  "Kosovo":[42.6,20.9],"Kyrgyzstan":[41.2,74.8],"Lebanon":[33.9,35.9],
+  "Liberia":[6.5,-9.4],"Libya":[26.3,17.2],"Madagascar":[-18.8,46.9],
+  "Malawi":[-13.3,34.3],"Mali":[17.6,-2.0],"Mauritania":[20.3,-10.9],
+  "Mexico":[23.6,-102.6],"Morocco":[31.8,-7.1],"Mozambique":[-18.7,35.5],
+  "Myanmar":[19.2,96.7],"Namibia":[-22.0,18.5],"Nicaragua":[12.9,-85.2],
+  "Niger":[17.6,8.1],"Nigeria":[9.1,8.7],"North Korea":[40.3,127.5],
+  "Pakistan":[30.4,69.3],"Palestine":[31.9,35.2],"Peru":[-9.2,-75.0],
+  "Philippines":[12.9,121.8],"Rwanda":[-2.0,29.9],"Senegal":[14.5,-14.5],
+  "Sierra Leone":[8.5,-11.8],"Somalia":[5.2,46.2],"South Sudan":[7.9,30.2],
+  "Sri Lanka":[7.9,80.8],"Sudan":[15.6,30.2],"Syria":[34.8,39.1],
+  "Tajikistan":[38.9,71.3],"Tanzania":[-6.4,34.9],"Togo":[8.6,0.8],
+  "Tunisia":[33.9,9.6],"Turkey":[39.0,35.4],"Turkmenistan":[39.0,59.6],
+  "Uganda":[1.4,32.3],"Ukraine":[48.4,31.2],"Uzbekistan":[41.4,63.9],
+  "Venezuela":[7.1,-66.6],"Vietnam":[16.0,107.8],"Yemen":[15.6,48.5],
+  "Zambia":[-13.1,27.8],"Zimbabwe":[-19.0,29.4],
+  "Russia":[61.0,100.0],"China":[35.0,103.0],"United States":[38.0,-97.0],
+  "Brazil":[-9.0,-53.0],"Australia":[-24.0,134.0],"Canada":[60.0,-96.0],
+  "Argentina":[-35.0,-65.0],"South Africa":[-29.0,25.0],
+}};
+
 // ── Fly-to ────────────────────────────────────────────────────
 let flyTarget = null;
 
 function selectCountry(name){{
   const c = countryData[name];
   if(!c){{ closePanel(); return; }}
-  const pos = ll(c.lat, c.lon, 1);
+  // Use hardcoded centroid if available — ACLED centroids can be corrupted
+  const geo = GEO_CENTER[name];
+  const flyLat = geo ? geo[0] : c.lat;
+  const flyLon = geo ? geo[1] : c.lon;
+  const pos = ll(flyLat, flyLon, 1);
   let rotY = -Math.atan2(pos.x, pos.z);
   const rotX = -Math.asin(Math.max(-0.99,Math.min(0.99,pos.y))) * 0.45;
   let dy = rotY - globe.rotation.y;
