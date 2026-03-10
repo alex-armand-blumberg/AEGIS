@@ -2227,35 +2227,33 @@ function closePanel(){{
   tz = 2.6;
   flyTarget = null;
 }}
-let isFs3d = false;
 function toggleFullscreen(){{
-  isFs3d = !isFs3d;
-  const cvs2 = renderer.domElement;
-  if(isFs3d){{
-    cvs2.style.position='fixed';cvs2.style.top='0';cvs2.style.left='0';
-    cvs2.style.width='100vw';cvs2.style.height='100vh';cvs2.style.zIndex='9998';
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    camera.aspect=window.innerWidth/window.innerHeight;
-    camera.updateProjectionMatrix();
-    // bring all overlays above the canvas
-    ['title','rotatebtn','recenterbtn','fullscreenbtn','legend','hint','tooltip','infopanel'].forEach(function(id){{
-      const el=document.getElementById(id);
-      if(el) el.style.zIndex='9999';
-    }});
-    document.getElementById('fullscreenbtn').innerHTML='&#x26F6;&nbsp; EXIT FULL';
-  }} else {{
-    cvs2.style.position='';cvs2.style.top='';cvs2.style.left='';
-    cvs2.style.width='';cvs2.style.height='';cvs2.style.zIndex='';
-    renderer.setSize(W, H);
-    camera.aspect=W/H;
-    camera.updateProjectionMatrix();
-    ['title','rotatebtn','recenterbtn','fullscreenbtn','legend','hint','tooltip','infopanel'].forEach(function(id){{
-      const el=document.getElementById(id);
-      if(el) el.style.zIndex='';
-    }});
-    document.getElementById('fullscreenbtn').innerHTML='&#x26F6;&nbsp; FULLSCREEN';
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+  const exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+  const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  if(!isFs && req) {{
+    req.call(el);
+  }} else if(isFs && exit) {{
+    exit.call(document);
   }}
 }}
+function _updateFsBtn3d(){{
+  const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  const btn = document.getElementById('fullscreenbtn');
+  if(btn) btn.innerHTML = isFs ? '&#x26F6;&nbsp; EXIT FULL' : '&#x26F6;&nbsp; FULLSCREEN';
+  if(isFs){{
+    renderer.setSize(window.screen.width, window.screen.height);
+    camera.aspect = window.screen.width/window.screen.height;
+    camera.updateProjectionMatrix();
+  }} else {{
+    renderer.setSize(W, H);
+    camera.aspect = W/H;
+    camera.updateProjectionMatrix();
+  }}
+}}
+document.addEventListener('fullscreenchange', _updateFsBtn3d);
+document.addEventListener('webkitfullscreenchange', _updateFsBtn3d);
 function recenter(){{
   flyTarget = {{ rotY: initRotY, rotX: 0, z: 2.6 }};
   closePanel();
@@ -2577,30 +2575,25 @@ function selectCountry2d(name){{
   showInfoPanel2d(name);
 }}
 
-let isFs2d = false;
 function toggleFullscreen2d(){{
-  isFs2d = !isFs2d;
-  const mapEl = document.getElementById('mapid');
-  if(isFs2d){{
-    mapEl.style.position='fixed';mapEl.style.top='0';mapEl.style.left='0';
-    mapEl.style.width='100vw';mapEl.style.height='100vh';mapEl.style.zIndex='9998';
-    ['title2d','legend2d','hint2d','recenterbtn2d','fullscreenbtn2d','infopanel2d'].forEach(function(id){{
-      const el=document.getElementById(id);
-      if(el) el.style.zIndex='9999';
-    }});
-    setTimeout(function(){{ map2d.invalidateSize(); }}, 50);
-    document.getElementById('fullscreenbtn2d').innerHTML='&#x26F6;&nbsp; EXIT FULL';
-  }} else {{
-    mapEl.style.position='';mapEl.style.top='';mapEl.style.left='';
-    mapEl.style.width='';mapEl.style.height='';mapEl.style.zIndex='';
-    ['title2d','legend2d','hint2d','recenterbtn2d','fullscreenbtn2d','infopanel2d'].forEach(function(id){{
-      const el=document.getElementById(id);
-      if(el) el.style.zIndex='';
-    }});
-    setTimeout(function(){{ map2d.invalidateSize(); }}, 50);
-    document.getElementById('fullscreenbtn2d').innerHTML='&#x26F6;&nbsp; FULLSCREEN';
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+  const exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+  const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  if(!isFs && req) {{
+    req.call(el);
+  }} else if(isFs && exit) {{
+    exit.call(document);
   }}
 }}
+function _updateFsBtn2d(){{
+  const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  const btn = document.getElementById('fullscreenbtn2d');
+  if(btn) btn.innerHTML = isFs ? '&#x26F6;&nbsp; EXIT FULL' : '&#x26F6;&nbsp; FULLSCREEN';
+  setTimeout(function(){{ map2d.invalidateSize(); }}, 100);
+}}
+document.addEventListener('fullscreenchange', _updateFsBtn2d);
+document.addEventListener('webkitfullscreenchange', _updateFsBtn2d);
 function recenter2d(){{
   map2d.flyTo([20, 10], 2, {{duration:1.0, easeLinearity:0.3}});
   closePanel2d();
