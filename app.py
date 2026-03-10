@@ -822,14 +822,14 @@ else:
 # ----------------------------
 # Main header
 # ----------------------------
-if st.button("← Back to AEGIS", key="back_btn"):
+if st.button("← Back to Home", key="back_btn"):
     st.session_state["page"] = "landing"
     st.rerun()
 
 # ----------------------------
 # Live news feed
 # ----------------------------
-with st.expander("Live conflict news", expanded=False):
+with st.expander("Recent conflict news", expanded=False):
     try:
         news_items = load_live_conflict_news(max_items=5)
         if not news_items:
