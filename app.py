@@ -1801,6 +1801,9 @@ if show_map and st.session_state.get("page") != "index":
                             points_json = _json.dumps(cesium_points)
                             country_data_json = _json.dumps(_country_data)
                             map_h = 790
+                            _s = start_dt.strftime('%b %Y')
+                            _e = end_dt.strftime('%b %Y')
+                            date_label = _s if _s == _e else f"{_s} \u2013 {_e}"
 
                             if use_3d:
                                 globe_html = f"""<!DOCTYPE html>
@@ -1884,7 +1887,7 @@ if show_map and st.session_state.get("page") != "index":
   #fullscreenbtn:hover{{border-color:rgba(96,165,250,0.7);color:#fff;}}
 </style>
 </head><body>
-<div id="title">&#9632;&nbsp; {start_dt.strftime('%b %Y') if start_dt.strftime('%b %Y') == end_dt.strftime('%b %Y') else f"{start_dt.strftime('%b %Y')} – {end_dt.strftime('%b %Y')}"} Conflict Hotspots</div>
+<div id="title">&#9632;&nbsp; {date_label} Conflict Hotspots</div>
 <div id="rotatebtn" id="rotatebtn" onclick="toggleRotate()">
   <div class="indicator"></div><span id="rotatelabel">AUTO-ROTATE ON</span>
 </div>
@@ -2639,7 +2642,7 @@ animate();
   .leaflet-control-zoom a:hover{{background:rgba(10,20,50,0.95)!important;color:white!important;}}
 </style>
 </head><body>
-<div id="title2d">&#9632;&nbsp; {start_dt.strftime('%b %Y') if start_dt.strftime('%b %Y') == end_dt.strftime('%b %Y') else f"{start_dt.strftime('%b %Y')} – {end_dt.strftime('%b %Y')}"} Conflict Hotspots</div>
+<div id="title2d">&#9632;&nbsp; {date_label} Conflict Hotspots</div>
 <div id="mapid"></div>
 <div id="legend2d">
   <div class="ltitle">CATEGORIES</div>
