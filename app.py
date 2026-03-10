@@ -1681,6 +1681,8 @@ if show_map and st.session_state.get("page") != "index":
                                 _zoom = float(max(1.5, min(6.0, 5.8 - np.log2(_span + 1))))
                                 _country_data[_c] = {
                                     "lat": _clat, "lon": _clon, "zoom": _zoom,
+                                    "minlat": float(_lats.min()), "maxlat": float(_lats.max()),
+                                    "minlon": float(_lons.min()), "maxlon": float(_lons.max()),
                                     "fatalities":   int(_cg["fatalities"].sum()),
                                     "battles":      int(_cg["battles"].sum()),
                                     "explosions":   int(_cg["explosions_remote_violence"].sum()),
@@ -2570,8 +2572,12 @@ function closePanel2d(){{
 function selectCountry2d(name){{
   const c = countryData2d[name];
   if(!c){{ closePanel2d(); return; }}
-  const zoom = Math.round(Math.max(3, Math.min(7, c.zoom+1)));
-  map2d.flyTo([c.lat, c.lon], zoom, {{duration:1.0, easeLinearity:0.3}});
+  const pad = Math.max(0.5, (c.maxlat-c.minlat)*0.15);
+  const padLon = Math.max(0.5, (c.maxlon-c.minlon)*0.15);
+  map2d.flyToBounds(
+    [[c.minlat-pad, c.minlon-padLon],[c.maxlat+pad, c.maxlon+padLon]],
+    {{duration:1.0, easeLinearity:0.3, maxZoom:9}}
+  );
   showInfoPanel2d(name);
 }}
 
