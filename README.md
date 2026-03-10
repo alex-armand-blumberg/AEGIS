@@ -1,5 +1,5 @@
 # AEGIS
-Advanced Early-warning &amp; Geostrategic Intelligence System: **https://aegis-intel.streamlit.app/**
+Advanced Early-Warning &amp; Geostrategic Intelligence System: **https://aegis-intel.streamlit.app/**
 
 # Overview
 AEGIS is a structured early-warning framework designed to identify measurable indicators that precede geopolitical escalation and instability.
