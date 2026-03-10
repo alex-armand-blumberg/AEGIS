@@ -1746,6 +1746,15 @@ if show_map and st.session_state.get("page") != "index":
   }}
   #rotatebtn.off .indicator{{background:#334;box-shadow:none;}}
   #rotatebtn.off{{color:rgba(255,255,255,0.35);}}
+  #recenterbtn{{
+    position:absolute;top:50px;right:16px;z-index:20;
+    background:rgba(2,8,20,0.80);border:1px solid rgba(96,165,250,0.35);
+    color:#a0c4ff;font-size:12px;font-family:Inter,Arial,sans-serif;
+    letter-spacing:.06em;padding:6px 13px;border-radius:6px;cursor:pointer;
+    display:flex;align-items:center;gap:7px;user-select:none;
+    transition:border-color .2s,color .2s;
+  }}
+  #recenterbtn:hover{{border-color:rgba(96,165,250,0.7);color:#fff;}}
   #infopanel{{
     position:absolute;top:56px;right:16px;width:220px;
     background:linear-gradient(160deg,rgba(2,8,25,0.97),rgba(8,18,45,0.97));
@@ -1766,6 +1775,7 @@ if show_map and st.session_state.get("page") != "index":
 <div id="rotatebtn" id="rotatebtn" onclick="toggleRotate()">
   <div class="indicator"></div><span id="rotatelabel">AUTO-ROTATE ON</span>
 </div>
+<div id="recenterbtn" onclick="recenter()">&#8859;&nbsp; RECENTER</div>
 <div id="tooltip"></div>
 <div id="legend">
   <div class="ltitle">CATEGORIES</div>
@@ -2168,6 +2178,7 @@ points.forEach(function(p){{
 // Orient globe
 const id = ll({cam_lat}, {cam_lon}, 1);
 globe.rotation.y = -Math.atan2(id.x, id.z);
+const initRotY = globe.rotation.y;
 
 // Country data for info panels
 const countryData = {country_data_json};
@@ -2205,6 +2216,10 @@ function closePanel(){{
   document.getElementById('infopanel').style.display='none';
   tz = 2.6;
   flyTarget = null;
+}}
+function recenter(){{
+  flyTarget = {{ rotY: initRotY, rotX: 0, z: 2.6 }};
+  closePanel();
 }}
 
 // ── Fly-to ────────────────────────────────────────────────────
@@ -2378,6 +2393,15 @@ animate();
   #legend2d .row{{display:flex;align-items:center;gap:9px;margin:4px 0;}}
   #legend2d .dot{{width:10px;height:10px;border-radius:50%;flex-shrink:0;}}
   #hint2d{{position:absolute;bottom:30px;right:16px;color:rgba(255,255,255,0.25);font-size:11px;letter-spacing:.04em;z-index:1000;}}
+  #recenterbtn2d{{
+    position:absolute;top:56px;left:16px;z-index:1000;
+    background:rgba(2,8,20,0.85);border:1px solid rgba(96,165,250,0.35);
+    color:#a0c4ff;font-size:12px;font-family:Inter,Arial,sans-serif;
+    letter-spacing:.06em;padding:6px 13px;border-radius:6px;cursor:pointer;
+    display:flex;align-items:center;gap:7px;user-select:none;
+    transition:border-color .2s,color .2s;
+  }}
+  #recenterbtn2d:hover{{border-color:rgba(96,165,250,0.7);color:#fff;}}
   #infopanel2d{{
     position:absolute;top:56px;right:16px;width:220px;
     background:linear-gradient(160deg,rgba(2,8,25,0.97),rgba(8,18,45,0.97));
@@ -2419,6 +2443,7 @@ animate();
   <div class="row"><div class="dot" style="background:#f472b6"></div>Riots</div>
 </div>
 <div id="hint2d">CLICK FOR DETAILS &nbsp;·&nbsp; SCROLL TO ZOOM</div>
+<div id="recenterbtn2d" onclick="recenter2d()">&#8859;&nbsp; RECENTER</div>
 <div id="infopanel2d">
   <div id="infopanel2d-close" onclick="closePanel2d()">&#10005;</div>
   <div id="infopanel2d-content"></div>
@@ -2503,6 +2528,10 @@ function selectCountry2d(name){{
   showInfoPanel2d(name);
 }}
 
+function recenter2d(){{
+  map2d.flyTo([20, 10], 2, {{duration:1.0, easeLinearity:0.3}});
+  closePanel2d();
+}}
 map2d.on('click', closePanel2d);
 </script></body></html>"""
                                 st.components.v1.html(leaflet_html, height=map_h, scrolling=False)
