@@ -2468,7 +2468,11 @@ window.addEventListener('mouseup', e=>{{
       // Click on globe surface → only match if inside a country's bounding box
       const earthHits=ray.intersectObject(earth);
       if(earthHits.length){{
-        const pt=earthHits[0].point.normalize();
+        const pt = earthHits[0].point.clone();
+        // Transform world-space hit point into globe's local space
+        // so lat/lon match actual geographic coordinates
+        globe.worldToLocal(pt);
+        pt.normalize();
         const lat=Math.asin(Math.max(-1,Math.min(1,pt.y)))*180/Math.PI;
         let lon=Math.atan2(pt.z,-pt.x)*180/Math.PI-180;
         if(lon < -180) lon += 360;
