@@ -1884,7 +1884,7 @@ if show_map and st.session_state.get("page") != "index":
   #fullscreenbtn:hover{{border-color:rgba(96,165,250,0.7);color:#fff;}}
 </style>
 </head><body>
-<div id="title">&#9632;&nbsp; {start_dt} – {end_dt} Conflict Hotspots</div>
+<div id="title">&#9632;&nbsp; {start_dt} –> {end_dt}  Conflict Hotspots</div>
 <div id="rotatebtn" id="rotatebtn" onclick="toggleRotate()">
   <div class="indicator"></div><span id="rotatelabel">AUTO-ROTATE ON</span>
 </div>
