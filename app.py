@@ -2323,18 +2323,29 @@ window.addEventListener('mouseup', e=>{{
     if(dotHits.length){{
       selectCountry(dotData[dotMeshes.indexOf(dotHits[0].object)].country);
     }} else {{
-      // Click on globe surface → nearest country centroid
+      // Click on globe surface → only match if inside a country's bounding box
       const earthHits=ray.intersectObject(earth);
       if(earthHits.length){{
         const pt=earthHits[0].point.normalize();
         const lat=Math.asin(Math.max(-1,Math.min(1,pt.y)))*180/Math.PI;
         const lon=Math.atan2(pt.z,-pt.x)*180/Math.PI-180;
-        let best=null, bestD=Infinity;
+        // First pass: find countries whose bounding box contains the click point
+        const candidates=[];
         for(const [cn,cd] of Object.entries(countryData)){{
-          const d=Math.sqrt(Math.pow(cd.lat-lat,2)+Math.pow(cd.lon-lon,2));
-          if(d<bestD){{bestD=d;best=cn;}}
+          const pad=1.5;
+          if(lat>=cd.minlat-pad && lat<=cd.maxlat+pad &&
+             lon>=cd.minlon-pad && lon<=cd.maxlon+pad){{
+            // distance to centroid within bbox match
+            const dlat=cd.lat-lat, dlon=(cd.lon-lon)*Math.cos(lat*Math.PI/180);
+            candidates.push({{name:cn, d:Math.sqrt(dlat*dlat+dlon*dlon)}});
+          }}
         }}
-        if(best&&bestD<28) selectCountry(best); else closePanel();
+        if(candidates.length>0){{
+          candidates.sort((a,b)=>a.d-b.d);
+          selectCountry(candidates[0].name);
+        }} else {{
+          closePanel();
+        }}
       }} else {{
         closePanel();
       }}
