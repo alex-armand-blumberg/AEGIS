@@ -2770,7 +2770,7 @@ map2d.on('click', closePanel2d);
                         with st.expander("📖  What do these categories mean?", expanded=False):
                             st.markdown("""
 **🔴 Battles** — Armed clashes between two or more organized groups, where both sides are actively fighting. This includes frontline combat, ambushes, and firefights.
-*Examples: a government army engaging rebel fighters in a town, two rival militias clashing over territory, a counter-insurgency offensive.*
+*Examples: a government army engaging rebel fighters in a town, two rival militias/gangs clashing over territory, a counter-insurgency offensive.*
 
 **🟠 Explosions / Remote Violence** — Attacks using weapons that can strike from a distance without direct armed confrontation. One side inflicts violence without the other being able to fight back directly.
 *Examples: airstrikes on a city district, artillery shelling of a village, a drone strike on a convoy, a roadside bomb (IED) detonating on a military patrol.*
