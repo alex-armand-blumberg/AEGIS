@@ -687,14 +687,15 @@ with st.sidebar.expander("Limitations"):
         """
 **Current limitations of AEGIS**
 
-- Only have access to data from Jan 2018 to exactly One Year Ago for Escalation Index, as I currently only have Researcher Tier ACLED access.
+- Only have access to data from Jan 2018 to exactly one year ago for the Escalation Index, as I currently only have Researcher Tier ACLED access.
+- Interactive map data has a 1-2 month lag due to my ACLED access tier.
 - ACLED public ArcGIS layer for the map is monthly aggregated at subnational level, not individual events.
 - Some countries may have sparse data in earlier months.
 - Public map data is monthly and subnational, not individual strike-level event data.
 
 **Planned improvements**
 
-- Get a higher ACLED Tier, giving me access to more data for Escalation Index.
+- Get a higher ACLED Tier, giving me access to more data for Escalation Index. The code works the same with more up-to-date data.
 - Direct ACLED API for weekly/event-level granularity
 - Actor-level escalation detection
 - ML-based index calibration against historical escalation outcomes
