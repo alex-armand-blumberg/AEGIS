@@ -2412,7 +2412,7 @@ function selectCountry(name){{
   const flyLon = geo ? geo[1] : c.lon;
   const pos = ll(flyLat, flyLon, 1);
   let rotY = -Math.atan2(pos.x, pos.z);
-  const rotX = -Math.asin(Math.max(-0.99,Math.min(0.99,pos.y))) * 0.45;
+  const rotX = -Math.asin(Math.max(-0.99,Math.min(0.99,pos.y)));
   let dy = rotY - globe.rotation.y;
   while(dy>Math.PI) dy-=2*Math.PI;
   while(dy<-Math.PI) dy+=2*Math.PI;
