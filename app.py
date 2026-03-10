@@ -2471,15 +2471,18 @@ window.addEventListener('mouseup', e=>{{
       if(earthHits.length){{
         const pt=earthHits[0].point.normalize();
         const lat=Math.asin(Math.max(-1,Math.min(1,pt.y)))*180/Math.PI;
-        const lon=Math.atan2(pt.z,-pt.x)*180/Math.PI-180;
-        // First pass: find countries whose bounding box contains the click point
+        let lon=Math.atan2(pt.z,-pt.x)*180/Math.PI-180;
+        if(lon < -180) lon += 360;
+        // Find countries whose bounding box contains the click point
         const candidates=[];
         for(const [cn,cd] of Object.entries(countryData)){{
-          const pad=1.5;
+          const pad=0.5;
           if(lat>=cd.minlat-pad && lat<=cd.maxlat+pad &&
              lon>=cd.minlon-pad && lon<=cd.maxlon+pad){{
-            // distance to centroid within bbox match
-            const dlat=cd.lat-lat, dlon=(cd.lon-lon)*Math.cos(lat*Math.PI/180);
+            // Use GEO_CENTER for reliable centroid distance
+            const geo=GEO_CENTER[cn];
+            const clat=geo?geo[0]:cd.lat, clon=geo?geo[1]:cd.lon;
+            const dlat=clat-lat, dlon=(clon-lon)*Math.cos(lat*Math.PI/180);
             candidates.push({{name:cn, d:Math.sqrt(dlat*dlat+dlon*dlon)}});
           }}
         }}
