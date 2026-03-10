@@ -2394,7 +2394,7 @@ animate();
   #legend2d .dot{{width:10px;height:10px;border-radius:50%;flex-shrink:0;}}
   #hint2d{{position:absolute;bottom:30px;right:16px;color:rgba(255,255,255,0.25);font-size:11px;letter-spacing:.04em;z-index:1000;}}
   #recenterbtn2d{{
-    position:absolute;bottom:110px;left:16px;z-index:1000;
+    position:absolute;bottom:55px;right:16px;z-index:1000;
     background:rgba(2,8,20,0.85);border:1px solid rgba(96,165,250,0.35);
     color:#a0c4ff;font-size:12px;font-family:Inter,Arial,sans-serif;
     letter-spacing:.06em;padding:6px 13px;border-radius:6px;cursor:pointer;
