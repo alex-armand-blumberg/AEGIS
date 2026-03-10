@@ -2466,7 +2466,7 @@ L.tileLayer('https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}
 // Plot markers
 points2d.forEach(function(p) {{
   if(Math.abs(p.lat)<0.5 && Math.abs(p.lon)<0.5) return;
-  const radius = 4 + 10*(p.size/28);
+  const radius = 2 + 10*(p.size/28);
   const circle = L.circleMarker([p.lat, p.lon], {{
     radius: radius,
     fillColor: p.color,
