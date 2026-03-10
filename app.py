@@ -152,7 +152,7 @@ if st.session_state["page"] == "landing":
 
     st.markdown(
         '<div style="text-align:center;" class="landing-copy">'
-        '&copy; 2026 Alexander Armand-Blumberg &middot; AEGIS</div>',
+        'Alexander Armand-Blumberg &middot; AEGIS</div>',
         unsafe_allow_html=True,
     )
     st.stop()
@@ -691,7 +691,7 @@ with st.sidebar.expander("Limitations"):
 - Interactive map data has a 1-2 month lag due to my ACLED access tier.
 - ACLED public ArcGIS layer for the map is monthly aggregated at subnational level, not individual events.
 - Some countries may have sparse data in earlier months.
-- Public map data is monthly and subnational, not individual strike-level event data.
+- Using Streamlit for Python, not an actual domain.
 
 **Planned improvements**
 
