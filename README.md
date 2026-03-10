@@ -26,6 +26,14 @@ Enter any country and AEGIS computes a composite escalation score (0–100) acro
 | Civil unrest | 10% |
 | Civilian targeting ratio | 5% |
 
+## Example Output
+
+![AEGIS Escalation Index Output](example.png)
+
+## Pre-Escalation Prediction flagged Russian Invasion of Ukraine Before The Attack.
+
+![AEGIS Escalation Index Output](example2.png)
+
 **Interactive Global Conflict Map**
 A live conflict map powered by the ACLED public ArcGIS layer, updated monthly. Available in two modes:
 
