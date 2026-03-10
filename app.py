@@ -1919,7 +1919,7 @@ document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(42, W/H, 0.1, 1000);
-camera.position.z = 2.6;
+camera.position.z = 3.2;
 
 // Stars
 const sv = [];
@@ -2329,7 +2329,7 @@ function showInfoPanel(name){{
 
 function closePanel(){{
   document.getElementById('infopanel').style.display='none';
-  tz = 2.6;
+  tz = 3.2;
   flyTarget = null;
 }}
 function toggleFullscreen(){{
@@ -2360,7 +2360,7 @@ function _updateFsBtn3d(){{
 document.addEventListener('fullscreenchange', _updateFsBtn3d);
 document.addEventListener('webkitfullscreenchange', _updateFsBtn3d);
 function recenter(){{
-  flyTarget = {{ rotY: initRotY, rotX: 0, z: 2.6 }};
+  flyTarget = {{ rotY: initRotY, rotX: 0, z: 3.2 }};
   closePanel();
 }}
 
@@ -2443,7 +2443,7 @@ function toggleRotate(){{
 }}
 
 // Drag + scroll + inertia + click detection
-let drag=false, px=0, py=0, vx=0, vy=0, tz=2.6;
+let drag=false, px=0, py=0, vx=0, vy=0, tz=3.2;
 let clickStartX=0, clickStartY=0;
 const cvs = renderer.domElement;
 const ray=new THREE.Raycaster(), mouse=new THREE.Vector2();
@@ -2766,6 +2766,27 @@ map2d.on('click', closePanel2d);
                                 st.components.v1.html(leaflet_html, height=map_h, scrolling=False)
 
                         # Country info panel now rendered in-map via JS
+
+                        with st.expander("📖  What do these categories mean?", expanded=False):
+                            st.markdown("""
+**🔴 Battles** — Armed clashes between two or more organized groups, where both sides are actively fighting. This includes frontline combat, ambushes, and firefights.
+*Examples: a government army engaging rebel fighters in a town, two rival militias clashing over territory, a counter-insurgency offensive.*
+
+**🟠 Explosions / Remote Violence** — Attacks using weapons that can strike from a distance without direct armed confrontation. One side inflicts violence without the other being able to fight back directly.
+*Examples: airstrikes on a city district, artillery shelling of a village, a drone strike on a convoy, a roadside bomb (IED) detonating on a military patrol.*
+
+**🟡 Violence Against Civilians** — Deliberate, targeted violence by an organized group directed at unarmed civilians. The victims are not combatants.
+*Examples: a militia executing villagers, armed groups abducting aid workers, sexual violence used as a weapon of war, a mob killing members of an ethnic minority.*
+
+**🔵 Strategic Developments** — Significant non-violent political or military actions that change the operational landscape. These events signal shifts in power or posture without direct fighting.
+*Examples: a rebel group seizing a government building peacefully, a ceasefire agreement being signed, armed forces withdrawing from a region, a faction announcing a merger or split.*
+
+**🟣 Protests** — Organized, primarily non-violent demonstrations by civilians expressing political or social grievances.
+*Examples: crowds marching against a government policy, a sit-in at a parliament building, a student demonstration demanding elections, a labor strike turning confrontational.*
+
+**🩷 Riots** — Violent, often spontaneous collective action by civilians — typically disorganized and not directed by a single command structure.
+*Examples: crowds attacking police after a disputed election, looting and arson following a fuel price hike, inter-communal street fighting between ethnic groups.*
+""")
 
                         summary_cols = [
                             "country", "admin1", "metric_value", "fatalities",
