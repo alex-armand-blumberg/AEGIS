@@ -1769,6 +1769,15 @@ if show_map and st.session_state.get("page") != "index":
     color:rgba(255,255,255,0.35);font-size:15px;line-height:1;transition:color .15s;
   }}
   #infopanel-close:hover{{color:white;}}
+  #fullscreenbtn{{
+    position:absolute;bottom:55px;right:16px;z-index:20;
+    background:rgba(2,8,20,0.80);border:1px solid rgba(96,165,250,0.35);
+    color:#a0c4ff;font-size:12px;font-family:Inter,Arial,sans-serif;
+    letter-spacing:.06em;padding:6px 13px;border-radius:6px;cursor:pointer;
+    display:flex;align-items:center;gap:7px;user-select:none;
+    transition:border-color .2s,color .2s;
+  }}
+  #fullscreenbtn:hover{{border-color:rgba(96,165,250,0.7);color:#fff;}}
 </style>
 </head><body>
 <div id="title">&#9632;&nbsp; Current Conflict Hotspots</div>
@@ -2223,21 +2232,27 @@ function toggleFullscreen(){{
   isFs3d = !isFs3d;
   const cvs2 = renderer.domElement;
   if(isFs3d){{
-    document.body.style.position='fixed';
-    document.body.style.top='0';document.body.style.left='0';
-    document.body.style.width='100vw';document.body.style.height='100vh';
-    document.body.style.zIndex='99999';document.body.style.background='#020617';
+    cvs2.style.position='fixed';cvs2.style.top='0';cvs2.style.left='0';
+    cvs2.style.width='100vw';cvs2.style.height='100vh';cvs2.style.zIndex='9998';
     renderer.setSize(window.innerWidth, window.innerHeight);
-    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.aspect=window.innerWidth/window.innerHeight;
     camera.updateProjectionMatrix();
+    // bring all overlays above the canvas
+    ['title','rotatebtn','recenterbtn','fullscreenbtn','legend','hint','tooltip','infopanel'].forEach(function(id){{
+      const el=document.getElementById(id);
+      if(el) el.style.zIndex='9999';
+    }});
     document.getElementById('fullscreenbtn').innerHTML='&#x26F6;&nbsp; EXIT FULL';
   }} else {{
-    document.body.style.position='';document.body.style.top='';
-    document.body.style.left='';document.body.style.width='';
-    document.body.style.height='';document.body.style.zIndex='';
+    cvs2.style.position='';cvs2.style.top='';cvs2.style.left='';
+    cvs2.style.width='';cvs2.style.height='';cvs2.style.zIndex='';
     renderer.setSize(W, H);
-    camera.aspect = W/H;
+    camera.aspect=W/H;
     camera.updateProjectionMatrix();
+    ['title','rotatebtn','recenterbtn','fullscreenbtn','legend','hint','tooltip','infopanel'].forEach(function(id){{
+      const el=document.getElementById(id);
+      if(el) el.style.zIndex='';
+    }});
     document.getElementById('fullscreenbtn').innerHTML='&#x26F6;&nbsp; FULLSCREEN';
   }}
 }}
@@ -2567,19 +2582,22 @@ function toggleFullscreen2d(){{
   isFs2d = !isFs2d;
   const mapEl = document.getElementById('mapid');
   if(isFs2d){{
-    document.body.style.position='fixed';
-    document.body.style.top='0';document.body.style.left='0';
-    document.body.style.width='100vw';document.body.style.height='100vh';
-    document.body.style.zIndex='99999';document.body.style.background='#020617';
-    mapEl.style.height='100vh';
-    map2d.invalidateSize();
+    mapEl.style.position='fixed';mapEl.style.top='0';mapEl.style.left='0';
+    mapEl.style.width='100vw';mapEl.style.height='100vh';mapEl.style.zIndex='9998';
+    ['title2d','legend2d','hint2d','recenterbtn2d','fullscreenbtn2d','infopanel2d'].forEach(function(id){{
+      const el=document.getElementById(id);
+      if(el) el.style.zIndex='9999';
+    }});
+    setTimeout(function(){{ map2d.invalidateSize(); }}, 50);
     document.getElementById('fullscreenbtn2d').innerHTML='&#x26F6;&nbsp; EXIT FULL';
   }} else {{
-    document.body.style.position='';document.body.style.top='';
-    document.body.style.left='';document.body.style.width='';
-    document.body.style.height='';document.body.style.zIndex='';
-    mapEl.style.height='';
-    map2d.invalidateSize();
+    mapEl.style.position='';mapEl.style.top='';mapEl.style.left='';
+    mapEl.style.width='';mapEl.style.height='';mapEl.style.zIndex='';
+    ['title2d','legend2d','hint2d','recenterbtn2d','fullscreenbtn2d','infopanel2d'].forEach(function(id){{
+      const el=document.getElementById(id);
+      if(el) el.style.zIndex='';
+    }});
+    setTimeout(function(){{ map2d.invalidateSize(); }}, 50);
     document.getElementById('fullscreenbtn2d').innerHTML='&#x26F6;&nbsp; FULLSCREEN';
   }}
 }}
