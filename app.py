@@ -1670,26 +1670,122 @@ if show_map and st.session_state.get("page") != "index":
 
                             cam_lat, cam_lon = 20, 10
 
+                            # Hardcoded country bounding boxes (lat_min, lat_max, lon_min, lon_max, center_lat, center_lon)
+                            # Used instead of computing from ACLED centroids, which can have bad coordinates.
+                            _COUNTRY_BBOX = {
+                                "Afghanistan": (29.4, 38.5, 60.5, 74.9, 33.9, 67.7),
+                                "Algeria": (18.9, 37.1, -8.7, 12.0, 28.0, 2.6),
+                                "Angola": (-18.0, -4.4, 11.7, 24.1, -11.2, 17.9),
+                                "Armenia": (38.8, 41.3, 43.4, 46.6, 40.1, 45.0),
+                                "Azerbaijan": (38.3, 41.9, 44.8, 50.4, 40.1, 47.6),
+                                "Bangladesh": (20.7, 26.6, 88.0, 92.7, 23.7, 90.4),
+                                "Belarus": (51.3, 56.2, 23.2, 32.8, 53.7, 28.0),
+                                "Benin": (6.2, 12.4, 0.8, 3.8, 9.3, 2.3),
+                                "Bolivia": (-22.9, -9.7, -69.6, -57.5, -16.3, -63.6),
+                                "Bosnia and Herzegovina": (42.6, 45.3, 15.7, 19.6, 44.2, 17.7),
+                                "Burkina Faso": (9.4, 15.1, -5.5, 2.4, 12.4, -1.6),
+                                "Burundi": (-4.5, -2.3, 29.0, 30.9, -3.4, 29.9),
+                                "Cambodia": (10.4, 14.7, 102.3, 107.6, 12.6, 104.9),
+                                "Cameroon": (1.7, 13.1, 8.4, 16.2, 5.7, 12.4),
+                                "Central African Republic": (2.2, 11.0, 14.4, 27.5, 6.6, 20.9),
+                                "Chad": (7.4, 23.5, 13.5, 24.0, 15.5, 18.7),
+                                "Colombia": (-4.2, 13.4, -79.0, -66.9, 4.1, -72.9),
+                                "Congo": (-5.0, 3.7, 11.2, 18.6, -0.7, 15.2),
+                                "Democratic Republic of Congo": (-13.5, 5.4, 12.2, 31.3, -4.0, 23.7),
+                                "DRC": (-13.5, 5.4, 12.2, 31.3, -4.0, 23.7),
+                                "DR Congo": (-13.5, 5.4, 12.2, 31.3, -4.0, 23.7),
+                                "Ecuador": (-5.0, 1.4, -80.9, -75.2, -1.8, -78.2),
+                                "Egypt": (22.0, 31.7, 24.7, 36.9, 26.8, 30.8),
+                                "El Salvador": (13.1, 14.5, -90.1, -87.7, 13.8, -88.9),
+                                "Eritrea": (12.4, 18.0, 36.4, 43.1, 15.2, 39.8),
+                                "Ethiopia": (3.4, 15.0, 33.0, 48.0, 9.1, 40.5),
+                                "Georgia": (41.1, 43.6, 40.0, 46.7, 42.3, 43.4),
+                                "Guatemala": (13.7, 17.8, -92.2, -88.2, 15.8, -90.2),
+                                "Guinea": (7.2, 12.7, -15.1, -7.6, 10.9, -11.4),
+                                "Guinea-Bissau": (11.0, 12.7, -16.7, -13.6, 11.9, -15.2),
+                                "Haiti": (18.0, 20.1, -74.5, -71.6, 18.9, -72.3),
+                                "Honduras": (13.0, 16.5, -89.4, -83.1, 14.8, -86.2),
+                                "India": (8.1, 35.5, 68.1, 97.4, 22.5, 80.0),
+                                "Indonesia": (-11.0, 5.9, 95.0, 141.0, -2.5, 118.0),
+                                "Iran": (25.1, 39.8, 44.0, 63.3, 32.4, 53.7),
+                                "Iraq": (29.1, 37.4, 38.8, 48.6, 33.2, 43.7),
+                                "Israel": (29.5, 33.3, 34.3, 35.9, 31.5, 35.0),
+                                "Jordan": (29.2, 33.4, 34.9, 39.3, 31.2, 36.5),
+                                "Kazakhstan": (40.6, 55.4, 50.3, 87.4, 48.0, 67.5),
+                                "Kenya": (-4.7, 5.0, 33.9, 41.9, 0.2, 37.9),
+                                "Kosovo": (41.9, 43.3, 20.0, 21.8, 42.6, 20.9),
+                                "Kyrgyzstan": (39.2, 43.2, 69.3, 80.3, 41.2, 74.8),
+                                "Lebanon": (33.1, 34.7, 35.1, 36.6, 33.9, 35.9),
+                                "Liberia": (4.4, 8.6, -11.5, -7.4, 6.5, -9.4),
+                                "Libya": (19.5, 33.2, 9.3, 25.2, 26.3, 17.2),
+                                "Madagascar": (-25.6, -12.0, 43.2, 50.5, -18.8, 46.9),
+                                "Malawi": (-17.1, -9.4, 32.7, 35.9, -13.3, 34.3),
+                                "Mali": (10.1, 25.0, -4.2, 4.2, 17.6, -2.0),
+                                "Mauritania": (14.7, 27.3, -17.1, -4.8, 20.3, -10.9),
+                                "Mexico": (14.5, 32.7, -117.1, -86.7, 23.6, -102.6),
+                                "Morocco": (27.7, 35.9, -13.2, -1.0, 31.8, -7.1),
+                                "Mozambique": (-26.9, -10.5, 30.2, 40.8, -18.7, 35.5),
+                                "Myanmar": (9.8, 28.5, 92.2, 101.2, 19.2, 96.7),
+                                "Namibia": (-29.0, -17.0, 11.7, 25.3, -22.0, 18.5),
+                                "Nicaragua": (10.7, 15.0, -87.7, -83.1, 12.9, -85.2),
+                                "Niger": (11.7, 23.5, 0.2, 15.9, 17.6, 8.1),
+                                "Nigeria": (4.3, 13.9, 2.7, 14.7, 9.1, 8.7),
+                                "North Korea": (37.7, 43.0, 124.2, 130.7, 40.3, 127.5),
+                                "Pakistan": (23.7, 37.1, 60.9, 77.8, 30.4, 69.3),
+                                "Palestine": (31.2, 33.3, 34.2, 35.6, 31.9, 35.2),
+                                "Peru": (-18.4, -0.0, -81.3, -68.7, -9.2, -75.0),
+                                "Philippines": (5.0, 20.6, 117.2, 126.5, 12.9, 121.8),
+                                "Rwanda": (-2.9, -1.1, 28.9, 30.9, -2.0, 29.9),
+                                "Senegal": (12.3, 16.7, -17.5, -11.4, 14.5, -14.5),
+                                "Sierra Leone": (6.9, 10.0, -13.3, -10.3, 8.5, -11.8),
+                                "Somalia": (-1.7, 11.9, 40.9, 51.4, 5.2, 46.2),
+                                "South Sudan": (3.5, 12.2, 24.1, 35.9, 7.9, 30.2),
+                                "Sri Lanka": (5.9, 9.8, 79.7, 81.9, 7.9, 80.8),
+                                "Sudan": (8.7, 22.2, 21.8, 38.6, 15.6, 30.2),
+                                "Syria": (32.3, 37.3, 35.7, 42.4, 34.8, 39.1),
+                                "Tajikistan": (36.7, 41.0, 67.4, 75.2, 38.9, 71.3),
+                                "Tanzania": (-11.7, -0.9, 29.3, 40.4, -6.4, 34.9),
+                                "Togo": (6.1, 11.1, -0.1, 1.8, 8.6, 0.8),
+                                "Tunisia": (30.2, 37.5, 7.5, 11.6, 33.9, 9.6),
+                                "Turkey": (35.8, 42.1, 26.0, 44.8, 39.0, 35.4),
+                                "Turkmenistan": (35.1, 42.8, 52.4, 66.7, 39.0, 59.6),
+                                "Uganda": (-1.5, 4.2, 29.6, 35.0, 1.4, 32.3),
+                                "Ukraine": (44.4, 52.4, 22.1, 40.2, 48.4, 31.2),
+                                "Uzbekistan": (37.2, 45.6, 55.9, 73.1, 41.4, 63.9),
+                                "Venezuela": (0.6, 12.2, -73.4, -59.8, 7.1, -66.6),
+                                "Vietnam": (8.6, 23.4, 102.1, 109.5, 16.0, 107.8),
+                                "Yemen": (12.1, 19.0, 42.5, 54.5, 15.6, 48.5),
+                                "Zambia": (-18.1, -8.2, 22.0, 33.7, -13.1, 27.8),
+                                "Zimbabwe": (-22.4, -15.6, 25.2, 33.1, -19.0, 29.4),
+                            }
+
                             # Per-country aggregates for in-map info panels
                             _country_data = {}
                             for _c, _cg in grouped.groupby("country"):
                                 _lats = _cg["centroid_latitude"]
                                 _lons = _cg["centroid_longitude"]
-                                # Use median for centroid — robust against outlier admin1 points
-                                _clat = float(_lats.median())
-                                _clon = float(_lons.median())
-                                # Strip admin1 centroids that are implausibly far from the median
-                                # before computing the bounding box (prevents bad ACLED coords
-                                # from zooming the map to the wrong continent)
-                                _ok = ((_lats - _clat).abs() <= 20) & ((_lons - _clon).abs() <= 30)
-                                _lats_c = _lats[_ok] if _ok.any() else _lats
-                                _lons_c = _lons[_ok] if _ok.any() else _lons
-                                _span = float(max(_lats_c.max()-_lats_c.min(), _lons_c.max()-_lons_c.min(), 0.5))
+                                # Prefer hardcoded bbox — ACLED centroid coords can be corrupted
+                                if _c in _COUNTRY_BBOX:
+                                    _bb = _COUNTRY_BBOX[_c]
+                                    _clat, _clon = _bb[4], _bb[5]
+                                    _minlat, _maxlat, _minlon, _maxlon = _bb[0], _bb[1], _bb[2], _bb[3]
+                                else:
+                                    # Fallback: filter obvious outliers then use median
+                                    _clat = float(_lats.median())
+                                    _clon = float(_lons.median())
+                                    _ok = ((_lats - _clat).abs() <= 15) & ((_lons - _clon).abs() <= 20)
+                                    _lats_c = _lats[_ok] if _ok.any() else _lats
+                                    _lons_c = _lons[_ok] if _ok.any() else _lons
+                                    _minlat = float(_lats_c.min())
+                                    _maxlat = float(_lats_c.max())
+                                    _minlon = float(_lons_c.min())
+                                    _maxlon = float(_lons_c.max())
+                                _span = float(max(_maxlat - _minlat, _maxlon - _minlon, 0.5))
                                 _zoom = float(max(1.5, min(6.0, 5.8 - np.log2(_span + 1))))
                                 _country_data[_c] = {
                                     "lat": _clat, "lon": _clon, "zoom": _zoom,
-                                    "minlat": float(_lats_c.min()), "maxlat": float(_lats_c.max()),
-                                    "minlon": float(_lons_c.min()), "maxlon": float(_lons_c.max()),
+                                    "minlat": _minlat, "maxlat": _maxlat,
+                                    "minlon": _minlon, "maxlon": _maxlon,
                                     "fatalities":   int(_cg["fatalities"].sum()),
                                     "battles":      int(_cg["battles"].sum()),
                                     "explosions":   int(_cg["explosions_remote_violence"].sum()),
