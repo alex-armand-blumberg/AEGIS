@@ -2779,7 +2779,7 @@ map2d.on('click', closePanel2d);
 *Examples: a militia executing villagers, armed groups abducting aid workers, sexual violence used as a weapon of war, a mob killing members of an ethnic minority.*
 
 **🔵 Strategic Developments** — Significant non-violent political or military actions that change the operational landscape. These events signal shifts in power or posture without direct fighting.
-*Examples: a rebel group seizing a government building peacefully, a ceasefire agreement being signed, armed forces withdrawing from a region, a faction announcing a merger or split.*
+*Examples: a rebel group seizing a government building peacefully, a ceasefire agreement being signed, armed forces withdrawing from or moving into a region, a faction announcing a merger or split.*
 
 **🟣 Protests** — Organized, primarily non-violent demonstrations by civilians expressing political or social grievances.
 *Examples: crowds marching against a government policy, a sit-in at a parliament building, a student demonstration demanding elections, a labor strike turning confrontational.*
