@@ -2784,7 +2784,7 @@ map2d.on('click', closePanel2d);
 **🟣 Protests** — Organized, primarily non-violent demonstrations by civilians expressing political or social grievances.
 *Examples: crowds marching against a government policy, a sit-in at a parliament building, a student demonstration demanding elections, a labor strike turning confrontational.*
 
-**🩷 Riots** — Violent, often spontaneous collective action by civilians — typically disorganized and not directed by a single command structure.
+**⚔️ Riots** — Violent, often spontaneous collective action by civilians — typically disorganized and not directed by a single command structure.
 *Examples: crowds attacking police after a disputed election, looting and arson following a fuel price hike, inter-communal street fighting between ethnic groups.*
 """)
 
