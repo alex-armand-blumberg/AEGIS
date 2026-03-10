@@ -1617,60 +1617,11 @@ if show_map and st.session_state.get("page") != "index":
                             "the same underlying conflict data."
                         )
 
-                        # ── Session state for focused country ─────────────
-                        if "map_focused_country" not in st.session_state:
-                            st.session_state["map_focused_country"] = None
-                        focused = st.session_state["map_focused_country"]
+                        focused = None  # selection handled in-map via JS
 
-                        # ── Country picker ────────────────────────────────
-                        country_list = sorted(grouped["country"].dropna().unique().tolist())
-                        col_pick, col_reset = st.columns([5, 1])
-                        with col_pick:
-                            sel = st.selectbox(
-                                "Select a country to zoom and see details",
-                                ["— World view —"] + country_list,
-                                index=(
-                                    0 if focused is None
-                                    else (country_list.index(focused) + 1 if focused in country_list else 0)
-                                ),
-                                label_visibility="collapsed",
-                                key=f"cpick_{selected_metric}_{start_dt}",
-                            )
-                            new_focus = None if sel == "— World view —" else sel
-                            if new_focus != focused:
-                                st.session_state["map_focused_country"] = new_focus
-                                focused = new_focus
-                                st.rerun()
-                        with col_reset:
-                            if focused and st.button("✕ Reset", use_container_width=True):
-                                st.session_state["map_focused_country"] = None
-                                focused = None
-                                st.rerun()
-
-                        # ── Map center / zoom ─────────────────────────────
-                        if focused:
-                            c_rows = grouped[grouped["country"] == focused]
-                            if not c_rows.empty:
-                                clat = (c_rows["centroid_latitude"].min() + c_rows["centroid_latitude"].max()) / 2
-                                clon = (c_rows["centroid_longitude"].min() + c_rows["centroid_longitude"].max()) / 2
-                                span = max(
-                                    c_rows["centroid_latitude"].max() - c_rows["centroid_latitude"].min(),
-                                    c_rows["centroid_longitude"].max() - c_rows["centroid_longitude"].min(),
-                                    0.5,
-                                )
-                                map_center = {"lat": float(clat), "lon": float(clon)}
-                                map_zoom   = float(max(1.5, min(6.0, 5.8 - np.log2(span + 1))))
-                            else:
-                                map_center, map_zoom = {"lat": 20, "lon": 10}, 1.0
-                        else:
-                            map_center, map_zoom = {"lat": 20, "lon": 10}, 1.0
-
-                        # ── Layout ────────────────────────────────────────
-                        if focused:
-                            map_col, panel_col = st.columns([3, 1], gap="small")
-                        else:
-                            map_col  = st.container()
-                            panel_col = None
+                        map_center, map_zoom = {"lat": 20, "lon": 10}, 1.0
+                        map_col  = st.container()
+                        panel_col = None
 
                         with map_col:
                             map_mode = st.radio(
@@ -1714,25 +1665,38 @@ if show_map and st.session_state.get("page") != "index":
                                     "metric":   int(row["metric_value"]),
                                     "fatalities": int(row.get("fatalities", 0)),
                                     "metric_name": metric_labels[selected_metric],
+                                    "country":    str(row["country"]),
                                 })
 
-                            # Camera position: if focused, fly to country
-                            if focused and not grouped[grouped["country"] == focused].empty:
-                                cr = grouped[grouped["country"] == focused]
-                                cam_lat = float((cr["centroid_latitude"].min() + cr["centroid_latitude"].max()) / 2)
-                                cam_lon = float((cr["centroid_longitude"].min() + cr["centroid_longitude"].max()) / 2)
-                                span = max(
-                                    float(cr["centroid_latitude"].max() - cr["centroid_latitude"].min()),
-                                    float(cr["centroid_longitude"].max() - cr["centroid_longitude"].min()),
-                                    1.0,
-                                )
-                                cam_alt = int(min(12_000_000, max(600_000, span * 120_000)))
-                            else:
-                                cam_lat, cam_lon, cam_alt = 20, 10, 18_000_000
+                            cam_lat, cam_lon = 20, 10
+
+                            # Per-country aggregates for in-map info panels
+                            _country_data = {}
+                            for _c, _cg in grouped.groupby("country"):
+                                _lats = _cg["centroid_latitude"]
+                                _lons = _cg["centroid_longitude"]
+                                _clat = float((_lats.min() + _lats.max()) / 2)
+                                _clon = float((_lons.min() + _lons.max()) / 2)
+                                _span = float(max(_lats.max()-_lats.min(), _lons.max()-_lons.min(), 0.5))
+                                _zoom = float(max(1.5, min(6.0, 5.8 - np.log2(_span + 1))))
+                                _country_data[_c] = {
+                                    "lat": _clat, "lon": _clon, "zoom": _zoom,
+                                    "fatalities":   int(_cg["fatalities"].sum()),
+                                    "battles":      int(_cg["battles"].sum()),
+                                    "explosions":   int(_cg["explosions_remote_violence"].sum()),
+                                    "civ_violence": int(_cg["violence_against_civilians"].sum()),
+                                    "strategic":    int(_cg["strategic_developments"].sum()),
+                                    "protests":     int(_cg["protests"].sum()),
+                                    "riots":        int(_cg["riots"].sum()),
+                                    "actors":       int(_cg["violent_actors"].sum()),
+                                    "metric_total": int(_cg["metric_value"].sum()),
+                                    "metric_name":  metric_labels[selected_metric],
+                                }
 
                             import json as _json
                             points_json = _json.dumps(cesium_points)
-                            map_h = 760 if focused else 790
+                            country_data_json = _json.dumps(_country_data)
+                            map_h = 790
 
                             if use_3d:
                                 globe_html = f"""<!DOCTYPE html>
@@ -1782,6 +1746,20 @@ if show_map and st.session_state.get("page") != "index":
   }}
   #rotatebtn.off .indicator{{background:#334;box-shadow:none;}}
   #rotatebtn.off{{color:rgba(255,255,255,0.35);}}
+  #infopanel{{
+    position:absolute;top:56px;right:16px;width:220px;
+    background:linear-gradient(160deg,rgba(2,8,25,0.97),rgba(8,18,45,0.97));
+    border:1px solid rgba(96,165,250,0.3);border-radius:10px;
+    padding:14px;color:white;display:none;z-index:50;
+    box-shadow:0 0 30px rgba(96,165,250,0.12);
+    animation:slideIn .2s ease;font-family:Inter,Arial,sans-serif;
+  }}
+  @keyframes slideIn{{from{{opacity:0;transform:translateX(10px)}}to{{opacity:1;transform:translateX(0)}}}}
+  #infopanel-close{{
+    position:absolute;top:9px;right:11px;cursor:pointer;
+    color:rgba(255,255,255,0.35);font-size:15px;line-height:1;transition:color .15s;
+  }}
+  #infopanel-close:hover{{color:white;}}
 </style>
 </head><body>
 <div id="title">&#9632;&nbsp; Current Conflict Hotspots</div>
@@ -1798,7 +1776,11 @@ if show_map and st.session_state.get("page") != "index":
   <div class="row"><div class="dot" style="background:#a78bfa"></div>Protests</div>
   <div class="row"><div class="dot" style="background:#f472b6"></div>Riots</div>
 </div>
-<div id="hint">DRAG TO ROTATE &nbsp;·&nbsp; SCROLL TO ZOOM</div>
+<div id="hint">DRAG TO ROTATE &nbsp;·&nbsp; SCROLL TO ZOOM &nbsp;·&nbsp; CLICK FOR DETAILS</div>
+<div id="infopanel">
+  <div id="infopanel-close" onclick="closePanel()">&#10005;</div>
+  <div id="infopanel-content"></div>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
@@ -1832,7 +1814,8 @@ scene.add(globe);
 const earthMat = new THREE.MeshPhongMaterial({{
   color: 0x0a1628, specular: 0x1a3a6a, shininess: 40,
 }});
-globe.add(new THREE.Mesh(new THREE.SphereGeometry(1, 64, 64), earthMat));
+const earth = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 64), earthMat);
+globe.add(earth);
 
 // Glow
 globe.add(new THREE.Mesh(
@@ -2186,6 +2169,67 @@ points.forEach(function(p){{
 const id = ll({cam_lat}, {cam_lon}, 1);
 globe.rotation.y = -Math.atan2(id.x, id.z);
 
+// Country data for info panels
+const countryData = {country_data_json};
+
+// ── Info panel ────────────────────────────────────────────────
+function infoRow(color, label, val){{
+  return '<div style="display:flex;justify-content:space-between;align-items:center;'
+    +'padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
+    +'<span style="color:rgba(255,255,255,0.55);font-size:11px;letter-spacing:.04em;">'+label+'</span>'
+    +'<span style="color:'+color+';font-weight:700;font-size:13px;">'+val.toLocaleString()+'</span>'
+    +'</div>';
+}}
+
+function showInfoPanel(name){{
+  const c = countryData[name];
+  if(!c) return;
+  document.getElementById('infopanel-content').innerHTML =
+    '<div style="font-size:15px;font-weight:800;margin-bottom:1px;padding-right:18px;">'+name+'</div>'
+    +'<div style="font-size:9px;color:rgba(255,255,255,0.3);letter-spacing:1.2px;margin-bottom:10px;">ACLED CONFLICT DATA</div>'
+    +infoRow('#ef4444','FATALITIES',    c.fatalities)
+    +infoRow('#f87171','BATTLES',       c.battles)
+    +infoRow('#f59e0b','EXPLOSIONS',    c.explosions)
+    +infoRow('#fde047','CIV. VIOLENCE', c.civ_violence)
+    +infoRow('#60a5fa','STRATEGIC',     c.strategic)
+    +infoRow('#a78bfa','PROTESTS',      c.protests)
+    +infoRow('#f472b6','RIOTS',         c.riots)
+    +'<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0 0;">'
+    +'<span style="color:rgba(255,255,255,0.45);font-size:10px;">'+c.metric_name.toUpperCase()+'</span>'
+    +'<span style="color:white;font-weight:700;font-size:13px;">'+c.metric_total.toLocaleString()+'</span>'
+    +'</div>';
+  document.getElementById('infopanel').style.display='block';
+}}
+
+function closePanel(){{
+  document.getElementById('infopanel').style.display='none';
+  tz = 2.6;
+  flyTarget = null;
+}}
+
+// ── Fly-to ────────────────────────────────────────────────────
+let flyTarget = null;
+
+function selectCountry(name){{
+  const c = countryData[name];
+  if(!c){{ closePanel(); return; }}
+  const pos = ll(c.lat, c.lon, 1);
+  let rotY = -Math.atan2(pos.x, pos.z);
+  const rotX = -Math.asin(Math.max(-0.99,Math.min(0.99,pos.y))) * 0.45;
+  let dy = rotY - globe.rotation.y;
+  while(dy>Math.PI) dy-=2*Math.PI;
+  while(dy<-Math.PI) dy+=2*Math.PI;
+  flyTarget = {{
+    rotY: globe.rotation.y+dy,
+    rotX: rotX,
+    z: Math.max(1.4, Math.min(2.4, 2.6-(c.zoom-1.0)*0.21)),
+  }};
+  showInfoPanel(name);
+  autoRotate=false;
+  document.getElementById('rotatebtn').classList.add('off');
+  document.getElementById('rotatelabel').textContent='AUTO-ROTATE OFF';
+}}
+
 // Auto-rotate state
 let autoRotate = true;
 function toggleRotate(){{
@@ -2201,11 +2245,49 @@ function toggleRotate(){{
   }}
 }}
 
-// Drag + scroll + inertia
+// Drag + scroll + inertia + click detection
 let drag=false, px=0, py=0, vx=0, vy=0, tz=2.6;
+let clickStartX=0, clickStartY=0;
 const cvs = renderer.domElement;
-cvs.addEventListener('mousedown', e=>{{ drag=true; px=e.clientX; py=e.clientY; vx=0; vy=0; }});
-window.addEventListener('mouseup', ()=>drag=false);
+const ray=new THREE.Raycaster(), mouse=new THREE.Vector2();
+
+cvs.addEventListener('mousedown', e=>{{
+  drag=true; px=e.clientX; py=e.clientY; vx=0; vy=0;
+  clickStartX=e.clientX; clickStartY=e.clientY;
+}});
+
+window.addEventListener('mouseup', e=>{{
+  drag=false;
+  const dx=e.clientX-clickStartX, dy2=e.clientY-clickStartY;
+  if(Math.sqrt(dx*dx+dy2*dy2)<6){{
+    const r=cvs.getBoundingClientRect();
+    mouse.x=((e.clientX-r.left)/r.width)*2-1;
+    mouse.y=-((e.clientY-r.top)/r.height)*2+1;
+    ray.setFromCamera(mouse,camera);
+    // Click on a dot → use its country
+    const dotHits=ray.intersectObjects(dotMeshes);
+    if(dotHits.length){{
+      selectCountry(dotData[dotMeshes.indexOf(dotHits[0].object)].country);
+    }} else {{
+      // Click on globe surface → nearest country centroid
+      const earthHits=ray.intersectObject(earth);
+      if(earthHits.length){{
+        const pt=earthHits[0].point.normalize();
+        const lat=Math.asin(Math.max(-1,Math.min(1,pt.y)))*180/Math.PI;
+        const lon=Math.atan2(pt.z,-pt.x)*180/Math.PI-180;
+        let best=null, bestD=Infinity;
+        for(const [cn,cd] of Object.entries(countryData)){{
+          const d=Math.sqrt(Math.pow(cd.lat-lat,2)+Math.pow(cd.lon-lon,2));
+          if(d<bestD){{bestD=d;best=cn;}}
+        }}
+        if(best&&bestD<28) selectCountry(best); else closePanel();
+      }} else {{
+        closePanel();
+      }}
+    }}
+  }}
+}});
+
 cvs.addEventListener('mousemove', e=>{{
   if(!drag) return;
   vy=(e.clientX-px)*0.004; vx=(e.clientY-py)*0.004;
@@ -2215,17 +2297,17 @@ cvs.addEventListener('mousemove', e=>{{
 }});
 cvs.addEventListener('wheel', e=>{{
   tz=Math.max(1.3, Math.min(5.0, tz+e.deltaY*0.003));
+  flyTarget=null;
   e.preventDefault();
 }}, {{passive:false}});
 
-// Tooltip
-const ray=new THREE.Raycaster(), mouse=new THREE.Vector2();
+// Hover tooltip
 const tip=document.getElementById('tooltip');
 cvs.addEventListener('mousemove', e=>{{
   const r=cvs.getBoundingClientRect();
   mouse.x=((e.clientX-r.left)/r.width)*2-1;
   mouse.y=-((e.clientY-r.top)/r.height)*2+1;
-  ray.setFromCamera(mouse, camera);
+  ray.setFromCamera(mouse,camera);
   const hits=ray.intersectObjects(dotMeshes);
   if(hits.length){{
     const p=dotData[dotMeshes.indexOf(hits[0].object)];
@@ -2236,7 +2318,11 @@ cvs.addEventListener('mousemove', e=>{{
       +'<span class="cat">'+p.category.toUpperCase()+'</span><br><br>'
       +p.metric_name+': <b>'+p.metric.toLocaleString()+'</b><br>'
       +'Fatalities: <b>'+p.fatalities.toLocaleString()+'</b>';
-  }} else {{ tip.style.display='none'; }}
+    cvs.style.cursor='pointer';
+  }} else {{
+    tip.style.display='none';
+    cvs.style.cursor='grab';
+  }}
 }});
 
 function animate(){{
@@ -2244,13 +2330,19 @@ function animate(){{
   if(!drag){{
     globe.rotation.y += vy*0.90; vy*=0.90;
     if(autoRotate) globe.rotation.y += 0.0008;
+    if(flyTarget){{
+      const spd=0.055;
+      globe.rotation.y+=(flyTarget.rotY-globe.rotation.y)*spd;
+      globe.rotation.x+=(flyTarget.rotX-globe.rotation.x)*spd;
+      tz+=(flyTarget.z-tz)*spd;
+      if(Math.abs(flyTarget.rotY-globe.rotation.y)<0.0005&&Math.abs(flyTarget.z-tz)<0.0005)
+        flyTarget=null;
+    }}
   }}
   camera.position.z += (tz-camera.position.z)*0.08;
   const cz = camera.position.z;
-  // Scale dots to stay same apparent size
   const zr = cz / BASE_CAM_Z;
   for(let i=0;i<dotMeshes.length;i++) dotMeshes[i].scale.set(zr,zr,zr);
-  // Show/hide country labels based on zoom level
   for(let i=0;i<countryLabelMeshes.length;i++){{
     countryLabelMeshes[i].visible = cz <= countryLabelMeshes[i].userData.maxCamZ;
   }}
@@ -2261,148 +2353,161 @@ animate();
                                 st.components.v1.html(globe_html, height=map_h, scrolling=False)
 
                             else:
-                                # ── 2D Flat Map ───────────────────────────────
-                                import plotly.express as _px
-                                _grouped2d = grouped[
-                                    ~((grouped["centroid_latitude"].abs() < 0.5) &
-                                      (grouped["centroid_longitude"].abs() < 0.5))
-                                ]
-                                fig2d = _px.scatter_mapbox(
-                                    _grouped2d,
-                                    lat="centroid_latitude",
-                                    lon="centroid_longitude",
-                                    color="dominant_category",
-                                    size="bubble_size",
-                                    size_max=size_max,
-                                    hover_name="hover_location",
-                                    hover_data={
-                                        "metric_value": ":,",
-                                        "fatalities": ":,",
-                                        "battles": ":,",
-                                        "explosions_remote_violence": ":,",
-                                        "violence_against_civilians": ":,",
-                                        "strategic_developments": ":,",
-                                        "protests": ":,",
-                                        "riots": ":,",
-                                        "violent_actors": ":,",
-                                        "centroid_latitude": False,
-                                        "centroid_longitude": False,
-                                        "admin1": False,
-                                        "country": False,
-                                        "bubble_size": False,
-                                        "dominant_category": False,
-                                    },
-                                    mapbox_style="carto-darkmatter",
-                                    center=map_center,
-                                    zoom=map_zoom,
-                                    title="Current Conflict-Related Hotspots",
-                                    color_discrete_map={
-                                        "Battles": "#ef4444",
-                                        "Explosions / remote violence": "#f59e0b",
-                                        "Violence against civilians": "#fde047",
-                                        "Strategic developments": "#60a5fa",
-                                        "Protests": "#a78bfa",
-                                        "Riots": "#f472b6",
-                                    },
-                                )
-                                fig2d.update_traces(
-                                    marker=dict(opacity=0.85),
-                                    hovertemplate=(
-                                        "<b style='font-size:15px'>%{hovertext}</b><br>"
-                                        + "<span style='color:rgba(255,255,255,0.55);font-size:12px;'>"
-                                        + "Dominant category: %{customdata[14]}</span><br><br>"
-                                        + f"{metric_labels[selected_metric]}: %{{customdata[0]:,}}<br>"
-                                        + "Fatalities: %{customdata[1]:,}"
-                                        + "<extra></extra>"
-                                    ),
-                                )
-                                fig2d.update_layout(
-                                    paper_bgcolor="#020617",
-                                    plot_bgcolor="#020617",
-                                    font=dict(color="white"),
-                                    title=dict(
-                                        text="Current Conflict-Related Hotspots",
-                                        x=0.5, xanchor="center",
-                                        y=0.98, yanchor="top",
-                                        font=dict(color="white", size=20),
-                                    ),
-                                    legend=dict(
-                                        title=dict(text="<b>Categories:</b>", side="top", font=dict(color="white", size=12)),
-                                        orientation="h",
-                                        yanchor="bottom", y=-0.10,
-                                        xanchor="left", x=0,
-                                        bgcolor="rgba(2,6,23,0)",
-                                        font=dict(color="white", size=12),
-                                    ),
-                                    margin=dict(l=0, r=0, t=55, b=75),
-                                    height=map_h,
-                                    hoverlabel=dict(bgcolor="rgba(20,20,20,0.95)", font_size=13, font_family="Arial"),
-                                )
-                                st.plotly_chart(fig2d, use_container_width=True, config={"scrollZoom": True})
+                                # ── 2D Leaflet Map ────────────────────────────
+                                leaflet_html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<style>
+  *{{margin:0;padding:0;box-sizing:border-box;}}
+  html,body{{width:100%;height:{map_h}px;background:#020617;overflow:hidden;font-family:'Inter',Arial,sans-serif;}}
+  #mapid{{width:100%;height:100%;}}
+  #title2d{{
+    position:absolute;top:14px;left:50%;transform:translateX(-50%);
+    color:#e2e8f0;font-size:16px;font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;z-index:1000;white-space:nowrap;
+    text-shadow:0 0 20px rgba(96,165,250,0.6);pointer-events:none;
+  }}
+  #legend2d{{
+    position:absolute;bottom:30px;left:16px;
+    background:rgba(2,8,20,0.88);color:#e2e8f0;
+    padding:12px 16px;border-radius:8px;font-size:12px;
+    border:1px solid rgba(96,165,250,0.2);z-index:1000;
+    box-shadow:0 0 20px rgba(0,0,0,0.5);
+  }}
+  #legend2d .ltitle{{font-weight:700;font-size:13px;margin-bottom:8px;color:#fff;letter-spacing:.06em;}}
+  #legend2d .row{{display:flex;align-items:center;gap:9px;margin:4px 0;}}
+  #legend2d .dot{{width:10px;height:10px;border-radius:50%;flex-shrink:0;}}
+  #hint2d{{position:absolute;bottom:30px;right:16px;color:rgba(255,255,255,0.25);font-size:11px;letter-spacing:.04em;z-index:1000;}}
+  #infopanel2d{{
+    position:absolute;top:56px;right:16px;width:220px;
+    background:linear-gradient(160deg,rgba(2,8,25,0.97),rgba(8,18,45,0.97));
+    border:1px solid rgba(96,165,250,0.3);border-radius:10px;
+    padding:14px;color:white;display:none;z-index:1000;
+    box-shadow:0 0 30px rgba(96,165,250,0.12);
+    animation:slideIn .2s ease;font-family:Inter,Arial,sans-serif;
+  }}
+  @keyframes slideIn{{from{{opacity:0;transform:translateX(10px)}}to{{opacity:1;transform:translateX(0)}}}}
+  #infopanel2d-close{{
+    position:absolute;top:9px;right:11px;cursor:pointer;
+    color:rgba(255,255,255,0.35);font-size:15px;line-height:1;transition:color .15s;
+  }}
+  #infopanel2d-close:hover{{color:white;}}
+  .leaflet-container{{background:#020617;}}
+  .leaflet-tile-pane{{opacity:1;}}
+  .dark-tip{{
+    background:rgba(2,8,20,0.97)!important;border:1px solid rgba(96,165,250,0.3)!important;
+    color:white!important;font-family:Inter,Arial,sans-serif!important;font-size:13px!important;
+    border-radius:8px!important;padding:10px 13px!important;
+    box-shadow:0 0 20px rgba(96,165,250,0.12)!important;
+  }}
+  .dark-tip.leaflet-tooltip-right::before{{border-right-color:rgba(96,165,250,0.3)!important;}}
+  .dark-tip.leaflet-tooltip-left::before{{border-left-color:rgba(96,165,250,0.3)!important;}}
+  .leaflet-control-zoom{{border:1px solid rgba(96,165,250,0.25)!important;}}
+  .leaflet-control-zoom a{{background:rgba(2,8,20,0.85)!important;color:#a0c4ff!important;border-bottom:1px solid rgba(96,165,250,0.15)!important;}}
+  .leaflet-control-zoom a:hover{{background:rgba(10,20,50,0.95)!important;color:white!important;}}
+</style>
+</head><body>
+<div id="title2d">&#9632;&nbsp; Current Conflict Hotspots</div>
+<div id="mapid"></div>
+<div id="legend2d">
+  <div class="ltitle">CATEGORIES</div>
+  <div class="row"><div class="dot" style="background:#ef4444"></div>Battles</div>
+  <div class="row"><div class="dot" style="background:#f59e0b"></div>Explosions / Remote Violence</div>
+  <div class="row"><div class="dot" style="background:#fde047"></div>Violence Against Civilians</div>
+  <div class="row"><div class="dot" style="background:#60a5fa"></div>Strategic Developments</div>
+  <div class="row"><div class="dot" style="background:#a78bfa"></div>Protests</div>
+  <div class="row"><div class="dot" style="background:#f472b6"></div>Riots</div>
+</div>
+<div id="hint2d">CLICK FOR DETAILS &nbsp;·&nbsp; SCROLL TO ZOOM</div>
+<div id="infopanel2d">
+  <div id="infopanel2d-close" onclick="closePanel2d()">&#10005;</div>
+  <div id="infopanel2d-content"></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const points2d = {points_json};
+const countryData2d = {country_data_json};
 
-                        # ── Country info panel ────────────────────────────
-                        if focused and panel_col is not None:
-                            with panel_col:
-                                country_rows = grouped[grouped["country"] == focused]
-                                if not country_rows.empty:
-                                    t = country_rows[[
-                                        "battles", "explosions_remote_violence", "protests",
-                                        "riots", "strategic_developments", "violence_against_civilians",
-                                        "violent_actors", "fatalities",
-                                    ]].sum()
+const map2d = L.map('mapid', {{
+  center: [20, 10], zoom: 2,
+  zoomControl: true, attributionControl: false,
+  minZoom: 1, maxZoom: 12,
+}});
 
-                                    def _card(color, bg, border, val, lbl):
-                                        return (
-                                            f'<div style="background:{bg};border:1px solid {border};'
-                                            f'border-radius:8px;padding:10px 6px;text-align:center;margin-bottom:8px;">'
-                                            f'<div style="font-size:20px;font-weight:800;color:{color};">{val:,}</div>'
-                                            f'<div style="font-size:9px;color:rgba(255,255,255,0.5);margin-top:3px;letter-spacing:.8px;">{lbl}</div>'
-                                            f'</div>'
-                                        )
+L.tileLayer('https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png', {{
+  subdomains: 'abcd', maxZoom: 19,
+}}).addTo(map2d);
 
-                                    panel_html = (
-                                        f'<div style="background:linear-gradient(160deg,rgba(10,18,38,0.97),rgba(22,35,60,0.97));'
-                                        f'border-left:3px solid #f59e0b;border-radius:10px;padding:16px 14px;'
-                                        f'font-family:Arial,sans-serif;color:white;">'
-                                        f'<div style="font-size:17px;font-weight:800;margin-bottom:2px;">&#127758; {focused}</div>'
-                                        f'<div style="font-size:9px;color:rgba(255,255,255,0.35);margin-bottom:14px;letter-spacing:1px;">ACLED CONFLICT DATA</div>'
-                                        + _card("#ef4444","rgba(239,68,68,0.13)","rgba(239,68,68,0.3)",    int(t["fatalities"]),               "FATALITIES")
-                                        + _card("#f59e0b","rgba(245,158,11,0.13)","rgba(245,158,11,0.3)",  int(t["explosions_remote_violence"]), "EXPLOSIONS")
-                                        + _card("#f87171","rgba(248,113,113,0.13)","rgba(248,113,113,0.3)",int(t["battles"]),                   "BATTLES")
-                                        + _card("#fde047","rgba(253,224,71,0.13)","rgba(253,224,71,0.3)",  int(t["violence_against_civilians"]), "CIV. VIOLENCE")
-                                        + _card("#60a5fa","rgba(96,165,250,0.13)","rgba(96,165,250,0.3)",  int(t["strategic_developments"]),    "STRATEGIC")
-                                        + _card("#a78bfa","rgba(167,139,250,0.13)","rgba(167,139,250,0.3)",int(t["protests"]),                  "PROTESTS")
-                                        + _card("#f472b6","rgba(244,114,182,0.13)","rgba(244,114,182,0.3)",int(t["riots"]),                     "RIOTS")
-                                        + _card("white","rgba(255,255,255,0.05)","rgba(255,255,255,0.1)",  int(t["violent_actors"]),            "ACTORS")
-                                        + '</div>'
-                                    )
-                                    st.markdown(panel_html, unsafe_allow_html=True)
+// Plot markers
+points2d.forEach(function(p) {{
+  if(Math.abs(p.lat)<0.5 && Math.abs(p.lon)<0.5) return;
+  const radius = 4 + 14*(p.size/28);
+  const circle = L.circleMarker([p.lat, p.lon], {{
+    radius: radius,
+    fillColor: p.color,
+    color: 'transparent',
+    weight: 0,
+    fillOpacity: 0.85,
+  }});
+  circle.bindTooltip(
+    '<b style="font-size:14px">'+p.label+'</b><br>'
+    +'<span style="color:rgba(255,255,255,0.5);font-size:11px">'+p.category+'</span><br><br>'
+    +p.metric_name+': <b>'+p.metric.toLocaleString()+'</b><br>'
+    +'Fatalities: <b>'+p.fatalities.toLocaleString()+'</b>',
+    {{className:'dark-tip', sticky:true}}
+  );
+  circle.on('click', function(e) {{
+    L.DomEvent.stopPropagation(e);
+    selectCountry2d(p.country);
+  }});
+  circle.addTo(map2d);
+}});
 
-                                    st.markdown(
-                                        '<div style="font-size:13px;font-weight:700;color:white;margin:14px 0 8px;">&#128240; Recent News</div>',
-                                        unsafe_allow_html=True,
-                                    )
-                                    try:
-                                        news = load_country_news(focused, max_items=5)
-                                        if news:
-                                            for article in news:
-                                                age = format_news_age(article["published_dt"])
-                                                meta = " · ".join(p for p in [article["source"], age] if p)
-                                                title_safe = article["title"]
-                                                link_safe  = article["link"]
-                                                st.markdown(
-                                                    f"[{title_safe}]({link_safe})  \n"
-                                                    f"<span style='opacity:0.45;font-size:10px;'>{meta}</span>",
-                                                    unsafe_allow_html=True,
-                                                )
-                                                st.markdown(
-                                                    "<hr style='border-color:rgba(255,255,255,0.06);margin:6px 0;'>",
-                                                    unsafe_allow_html=True,
-                                                )
-                                        else:
-                                            st.caption("No recent news found.")
-                                    except Exception:
-                                        st.caption("Could not load news.")
+function infoRow2d(color, label, val){{
+  return '<div style="display:flex;justify-content:space-between;align-items:center;'
+    +'padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.06);">'
+    +'<span style="color:rgba(255,255,255,0.55);font-size:11px;letter-spacing:.04em;">'+label+'</span>'
+    +'<span style="color:'+color+';font-weight:700;font-size:13px;">'+val.toLocaleString()+'</span>'
+    +'</div>';
+}}
+
+function showInfoPanel2d(name){{
+  const c = countryData2d[name];
+  if(!c) return;
+  document.getElementById('infopanel2d-content').innerHTML =
+    '<div style="font-size:15px;font-weight:800;margin-bottom:1px;padding-right:18px;">'+name+'</div>'
+    +'<div style="font-size:9px;color:rgba(255,255,255,0.3);letter-spacing:1.2px;margin-bottom:10px;">ACLED CONFLICT DATA</div>'
+    +infoRow2d('#ef4444','FATALITIES',    c.fatalities)
+    +infoRow2d('#f87171','BATTLES',       c.battles)
+    +infoRow2d('#f59e0b','EXPLOSIONS',    c.explosions)
+    +infoRow2d('#fde047','CIV. VIOLENCE', c.civ_violence)
+    +infoRow2d('#60a5fa','STRATEGIC',     c.strategic)
+    +infoRow2d('#a78bfa','PROTESTS',      c.protests)
+    +infoRow2d('#f472b6','RIOTS',         c.riots)
+    +'<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0 0;">'
+    +'<span style="color:rgba(255,255,255,0.45);font-size:10px;">'+c.metric_name.toUpperCase()+'</span>'
+    +'<span style="color:white;font-weight:700;font-size:13px;">'+c.metric_total.toLocaleString()+'</span>'
+    +'</div>';
+  document.getElementById('infopanel2d').style.display='block';
+}}
+
+function closePanel2d(){{
+  document.getElementById('infopanel2d').style.display='none';
+}}
+
+function selectCountry2d(name){{
+  const c = countryData2d[name];
+  if(!c){{ closePanel2d(); return; }}
+  const zoom = Math.round(Math.max(3, Math.min(7, c.zoom+1)));
+  map2d.flyTo([c.lat, c.lon], zoom, {{duration:1.0, easeLinearity:0.3}});
+  showInfoPanel2d(name);
+}}
+
+map2d.on('click', closePanel2d);
+</script></body></html>"""
+                                st.components.v1.html(leaflet_html, height=map_h, scrolling=False)
+
+                        # Country info panel now rendered in-map via JS
 
                         summary_cols = [
                             "country", "admin1", "metric_value", "fatalities",
