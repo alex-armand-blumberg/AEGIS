@@ -3377,6 +3377,11 @@ map2d.on('click', closePanel2d);
                                         if _map_idx.empty:
                                             st.warning("Could not compute index for this country.")
                                         else:
+                                            _map_idx["index_smoothed"] = (
+                                                _map_idx["escalation_index"]
+                                                .rolling(window=3, min_periods=1)
+                                                .mean()
+                                            )
                                             _ml = _map_idx.iloc[-1]
                                             _mp = _map_idx.tail(4).iloc[0]
                                             _mt = "rising" if _ml["index_smoothed"] > _mp["index_smoothed"] else "falling"
