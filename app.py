@@ -3382,7 +3382,7 @@ map2d.on('click', closePanel2d);
                         # ── Map AI Analysis ───────────────────────────
                         st.markdown("---")
                         st.markdown("<div id='map-ai-section'></div>", unsafe_allow_html=True)
-                        st.markdown("### 🤖 AI Map Intelligence")
+                        st.markdown("### AEGIS AI Map Intelligence")
                         st.caption("Enter any country visible on the map to get an AI-generated conflict summary.")
                         map_ai_country = st.text_input(
                             "Country name",
