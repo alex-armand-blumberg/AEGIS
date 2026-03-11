@@ -997,7 +997,7 @@ if st.session_state.get("page") == "map":
     )
 else:
     st.caption(
-        "PLEASE WAIT A COUPLE SECONDS FOR THE SOFTWARE TO LOAD. Enter a country name and click Generate plot to see the ACLED-based Escalation Index. "
+        "WAIT A COUPLE SECONDS FOR THE SOFTWARE TO LOAD. Enter a country name and click Generate plot to see the ACLED-based Escalation Index. "
         "The index combines five leading indicators — event frequency acceleration, explosions, "
         "strategic developments, civil unrest, and civilian targeting — into a single 0–100 score."
     )
@@ -1599,10 +1599,14 @@ if "aegis_plot" in st.session_state and st.session_state.get("page") != "map":
         f"fatalities={int(row.get('fatalities',0))}"
         for _, row in recent.iterrows()
     )
+    _data_latest = latest["event_month"].strftime("%b %Y")
     _ai_system = (
         "You are a concise geopolitical intelligence analyst. "
         "Write in plain English. Be specific and data-driven. No bullet lists — flowing prose only. "
-        "Do not mention ACLED by name. Do not use phrases like 'the data shows' — just state the finding directly."
+        "Do not mention ACLED by name. Do not use phrases like 'the data shows' — just state the finding directly. "
+        f"IMPORTANT: Your first sentence must always be a brief disclaimer that the data only extends to {_data_latest} "
+        "due to access limitations, so the analysis reflects that period, not the present day. "
+        "Keep this disclaimer to one short sentence, then continue with the analysis."
     )
 
     ai_tabs = st.tabs(["📊 Country Insight", "📈 Trend Interpretation", "⚖️ Comparative Analysis"])
@@ -1613,12 +1617,16 @@ if "aegis_plot" in st.session_state and st.session_state.get("page") != "map":
         if st.button("Generate Country Insight", key="ai_country_btn"):
             with st.spinner("Analyzing..."):
                 prompt = (
-                    f"Summarize the conflict situation in {selected_country} based on this escalation index data.\n\n"
+                    f"Analyze the conflict escalation situation in {selected_country} based on this index data.\n\n"
                     f"Overall trend: {trend_dir}. Peak index: {peak_val:.1f} in {peak_month}. "
                     f"Escalation flagged in {num_flagged} months. Pre-escalation warnings in {num_warned} months.\n\n"
                     f"Last 6 months of data:\n{recent_summary}\n\n"
-                    f"Write 3 sentences: (1) overall escalation status, (2) what's driving it based on the event types, "
-                    f"(3) what the trend suggests about near-term risk."
+                    f"Write 3 sentences after the disclaimer: "
+                    f"(1) State the escalation trend clearly and connect it to real-world events you know happened in {selected_country} "
+                    f"during this period — for example, a specific battle, ceasefire, peace deal, election, coup, or offensive "
+                    f"that explains why the numbers moved the way they did. Be specific with event names and dates where possible. "
+                    f"(2) Identify which event types (battles, explosions, protests, etc.) are driving the index and what that signals. "
+                    f"(3) Based on where the index stood at {_data_latest}, what was the near-term risk outlook at that time."
                 )
                 result = _call_claude(prompt, system=_ai_system, max_tokens=300)
                 st.markdown(
@@ -1638,9 +1646,11 @@ if "aegis_plot" in st.session_state and st.session_state.get("page") != "map":
                     f"Current smoothed index: {latest['index_smoothed']:.1f}. "
                     f"3 months ago: {prev3['index_smoothed']:.1f}.\n\n"
                     f"Last 6 months:\n{recent_summary}\n\n"
-                    f"In 2-3 sentences: (1) clearly state whether the country is escalating or de-escalating "
-                    f"and by how much, (2) identify which specific event types are driving the change, "
-                    f"(3) flag any warning signs or positive signals in the most recent month."
+                    f"Write 2-3 sentences after the disclaimer: (1) clearly state whether the country is escalating or "
+                    f"de-escalating and connect it to a specific real-world event or development you know occurred in "
+                    f"{selected_country} around this period — name it specifically. "
+                    f"(2) identify which event types are driving the change. "
+                    f"(3) flag any warning signs or positive signals in the most recent month of data."
                 )
                 result = _call_claude(prompt, system=_ai_system, max_tokens=300)
                 st.markdown(
