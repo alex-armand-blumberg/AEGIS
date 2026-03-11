@@ -1637,6 +1637,134 @@ document.querySelector('a[href="#ai-section"]').addEventListener('click', functi
         "Write each sentence as its own paragraph separated by a blank line."
     )
 
+    def _extract_question_month(question: str):
+        """Return a referenced month if the user mentions one explicitly."""
+        import re
+
+        month_map = {
+            "jan": 1, "january": 1,
+            "feb": 2, "february": 2,
+            "mar": 3, "march": 3,
+            "apr": 4, "april": 4,
+            "may": 5,
+            "jun": 6, "june": 6,
+            "jul": 7, "july": 7,
+            "aug": 8, "august": 8,
+            "sep": 9, "sept": 9, "september": 9,
+            "oct": 10, "october": 10,
+            "nov": 11, "november": 11,
+            "dec": 12, "december": 12,
+        }
+        match = re.search(
+            r"\b("
+            r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|"
+            r"jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|"
+            r"oct(?:ober)?|nov(?:ember)?|dec(?:ember)?"
+            r")\s+(?:of\s+)?(20\d{2})\b",
+            question,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            return None
+        month_key = match.group(1).lower()
+        year = int(match.group(2))
+        return pd.Timestamp(year=year, month=month_map[month_key], day=1)
+
+    def _format_month_snapshot(row: pd.Series) -> str:
+        return (
+            f"{row['event_month'].strftime('%b %Y')}: "
+            f"raw_index={row['escalation_index']:.1f}, "
+            f"smoothed_index={row['index_smoothed']:.1f}, "
+            f"battles={int(row.get('battles', 0))}, "
+            f"explosions={int(row.get('explosions_remote_violence', 0))}, "
+            f"strategic={int(row.get('strategic_developments', 0))}, "
+            f"protests={int(row.get('protests', 0))}, "
+            f"riots={int(row.get('riots', 0))}, "
+            f"civ_violence={int(row.get('violence_against_civilians', 0))}, "
+            f"fatalities={int(row.get('fatalities', 0))}"
+        )
+
+    def _build_question_context(question: str) -> str:
+        target_month = _extract_question_month(question)
+        if target_month is None:
+            return (
+                f"Relevant context window: latest 6 months in the plotted series.\n"
+                f"{recent_summary}\n\n"
+                f"If the user asks why the index moved, explain it using the event mix and the app's scoring logic."
+            )
+
+        target_rows = idx_df[
+            idx_df["event_month"].dt.to_period("M") == target_month.to_period("M")
+        ]
+        plot_start = idx_df["event_month"].min().strftime("%b %Y")
+        plot_end = idx_df["event_month"].max().strftime("%b %Y")
+        if target_rows.empty:
+            return (
+                f"Referenced month: {target_month.strftime('%b %Y')}.\n"
+                f"This month is outside the currently plotted range ({plot_start} to {plot_end}). "
+                f"If you mention that, do it briefly and then use the nearest available months."
+            )
+
+        target_row = target_rows.iloc[0]
+        prev_rows = idx_df[idx_df["event_month"] < target_month].tail(3)
+        next_rows = idx_df[idx_df["event_month"] > target_month].head(2)
+
+        prev_snapshot = "\n".join(
+            f"  {_format_month_snapshot(r)}"
+            for _, r in prev_rows.iterrows()
+        ) or "  None"
+        next_snapshot = "\n".join(
+            f"  {_format_month_snapshot(r)}"
+            for _, r in next_rows.iterrows()
+        ) or "  None"
+
+        is_flagged = bool(target_row["index_smoothed"] > escalation_threshold)
+        is_warning = bool(
+            (target_row["index_smoothed"] < escalation_threshold)
+            and (target_row["index_smoothed"] > escalation_threshold - 20)
+            and (
+                (target_row["c_strategic"] > 0.25)
+                or (target_row["c_explosion"] > 0.25)
+            )
+            and (target_row["_rising"] == 1)
+        )
+        if is_flagged:
+            status = "ESCALATION FLAGGED"
+        elif is_warning:
+            status = "PRE-ESCALATION WARNING"
+        else:
+            status = "BELOW THRESHOLD"
+
+        driver_scores = [
+            ("raw conflict intensity", float(target_row["c_intensity"] * 100)),
+            ("event acceleration", float(target_row["c_accel"] * 100)),
+            ("explosions / remote violence", float(target_row["c_explosion"] * 100)),
+            ("strategic developments", float(target_row["c_strategic"] * 100)),
+            ("civil unrest", float(target_row["c_unrest"] * 100)),
+            ("civilian targeting ratio", float(target_row["c_civilian"] * 100)),
+        ]
+        top_drivers = ", ".join(
+            f"{name} ({score:.0f}th percentile)"
+            for name, score in sorted(driver_scores, key=lambda x: x[1], reverse=True)[:3]
+        )
+
+        return (
+            f"Referenced month: {target_month.strftime('%b %Y')}.\n"
+            f"This month IS inside the plotted data range ({plot_start} to {plot_end}). "
+            f"Do not say it is unavailable, outside the range, or not directly evaluable.\n\n"
+            f"App rule: a pre-escalation warning fires when the smoothed index is below the alert threshold but within 20 points of it, "
+            f"the month is rising versus the prior month, and either strategic developments or explosions/remote violence is elevated.\n\n"
+            f"Status in {target_month.strftime('%b %Y')}: {status}.\n"
+            f"Threshold={escalation_threshold:.1f}, raw_index={target_row['escalation_index']:.1f}, "
+            f"smoothed_index={target_row['index_smoothed']:.1f}, rising_vs_prior_month={bool(target_row['_rising'] == 1)}, "
+            f"strategic_signal={target_row['c_strategic']:.2f}, explosion_signal={target_row['c_explosion']:.2f}.\n"
+            f"Top scoring components that month: {top_drivers}.\n"
+            f"Month snapshot: {_format_month_snapshot(target_row)}\n\n"
+            f"Three months before:\n{prev_snapshot}\n\n"
+            f"Two months after:\n{next_snapshot}\n\n"
+            f"If the user asks how the app 'predicted' something, explain that this is a quantitative warning signal based on rising plotted indicators, not a claim of causal certainty or foreknowledge."
+        )
+
     def _render_ai(result: str):
         """Render AI response with each sentence as a readable paragraph."""
         import re
@@ -1762,13 +1890,16 @@ document.querySelector('a[href="#ai-section"]').addEventListener('click', functi
         )
         if st.button("Get Answer", key="ai_freeform_btn") and user_question:
             with st.spinner("Analyzing..."):
+                question_context = _build_question_context(user_question)
                 prompt = (
                     f"The user is asking about {selected_country}'s conflict escalation data.\n\n"
                     f"Context — Overall trend: {trend_dir}. Peak index: {peak_val:.1f} in {peak_month}. "
                     f"Escalation flagged in {num_flagged} months.\n\n"
-                    f"Last 6 months:\n{recent_summary}\n\n"
+                    f"{question_context}\n\n"
                     f"User question: {user_question}\n\n"
-                    f"Answer in 2-3 sentences. Be specific and connect your answer to real-world events where relevant."
+                    f"Answer in 2-4 sentences. If the user referenced a specific month, answer that month directly and explain the plotted reasoning behind the signal. "
+                    f"When relevant, name whether it was a pre-escalation warning or a threshold breach, and explain which event types pushed it there. "
+                    f"Do not refuse or say the month is unavailable if it appears in the provided context."
                 )
                 result = _call_claude(prompt, system=_ai_system, max_tokens=350)
                 _render_ai(result)
