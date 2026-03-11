@@ -3188,6 +3188,7 @@ animate();
   .leaflet-control-zoom{{border:1px solid rgba(96,165,250,0.25)!important;}}
   .leaflet-control-zoom a{{background:rgba(2,8,20,0.85)!important;color:#a0c4ff!important;border-bottom:1px solid rgba(96,165,250,0.15)!important;}}
   .leaflet-control-zoom a:hover{{background:rgba(10,20,50,0.95)!important;color:white!important;}}
+  .leaflet-interactive:focus{{outline:none!important;}}
 </style>
 </head><body>
 <div id="title2d">&#9632;&nbsp; {date_label} Conflict Hotspots</div>
@@ -3241,10 +3242,18 @@ points2d.forEach(function(p) {{
     +'Fatalities: <b>'+p.fatalities.toLocaleString()+'</b>',
     {{className:'dark-tip', sticky:true}}
   );
-  circle.on('click', function(e) {{
+  function handleMarkerSelect(e) {{
     L.DomEvent.stopPropagation(e);
+    if (e.originalEvent && typeof e.originalEvent.preventDefault === 'function') {{
+      e.originalEvent.preventDefault();
+    }}
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {{
+      document.activeElement.blur();
+    }}
     selectCountry2d(p.country);
-  }});
+  }}
+  circle.on('mousedown', handleMarkerSelect);
+  circle.on('touchstart', handleMarkerSelect);
   circle.addTo(map2d);
 }});
 
