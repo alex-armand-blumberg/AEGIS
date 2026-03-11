@@ -718,8 +718,6 @@ with st.sidebar.expander("Background"):
 
 I've always had a deep love of Greek mythology — so when naming this project, the choice felt natural. In myth, the Aegis was the divine shield of Zeus and Athena: a symbol of protection, foreknowledge, and strategic power. Athena carried it into battle not just as armor, but as an instrument of clarity — it was said to inspire terror in enemies and confidence in allies.
 
-That felt like exactly the right metaphor. AEGIS the program is designed to do the same thing in the modern context: cut through the noise of global events, surface what matters, and give decision-makers the clarity to act before crises escalate. The shield doesn't fight the war — it tells you where the threat is coming from.
-
 **Why conflict data?**
 
 I've been fascinated by current affairs and geopolitics for as long as I can remember. Watching conflicts unfold in the news and wondering what the underlying patterns were — what signals preceded an escalation, what data existed but wasn't being surfaced — is what pushed me to build something that tries to answer those questions systematically.
