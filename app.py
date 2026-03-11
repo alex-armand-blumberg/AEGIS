@@ -10,6 +10,39 @@ import requests
 import streamlit as st
 import feedparser
 
+# ----------------------------
+# Claude AI helper
+# ----------------------------
+def _call_claude(prompt: str, system: str = "", max_tokens: int = 500) -> str:
+    """Call Claude claude-sonnet-4-20250514 via Anthropic API. Returns text or error string."""
+    try:
+        api_key = st.secrets["anthropic"]["api_key"]
+    except Exception:
+        return "⚠️ Anthropic API key not configured. Add it to .streamlit/secrets.toml as [anthropic] api_key = '...'"
+    try:
+        messages = [{"role": "user", "content": prompt}]
+        body = {
+            "model": "claude-sonnet-4-20250514",
+            "max_tokens": max_tokens,
+            "messages": messages,
+        }
+        if system:
+            body["system"] = system
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json=body,
+            timeout=30,
+        )
+        r.raise_for_status()
+        return r.json()["content"][0]["text"]
+    except Exception as e:
+        return f"⚠️ AI analysis unavailable: {e}"
+
 # Optional: used for the interactive map.
 try:
     import plotly.express as px
@@ -1543,6 +1576,132 @@ if "aegis_plot" in st.session_state and st.session_state.get("page") != "map":
         "All components normalised globally (0–1) across all ACLED countries and months. "
         "Source: ACLED via public ArcGIS layer (updated weekly)."
     )
+
+    # ── AI Analysis ───────────────────────────────
+    st.markdown("---")
+    st.markdown("### 🤖 AI Intelligence Analysis")
+
+    # Build a compact data summary to pass to Claude
+    recent = idx_df.tail(6)
+    latest = idx_df.iloc[-1]
+    prev3  = idx_df.tail(4).iloc[0]
+    trend_dir = "rising" if latest["index_smoothed"] > prev3["index_smoothed"] else "falling"
+    peak_month = idx_df.loc[idx_df["index_smoothed"].idxmax(), "event_month"].strftime("%b %Y")
+    peak_val   = idx_df["index_smoothed"].max()
+    num_flagged = len(esc_rows)
+    num_warned  = len(warn_rows)
+    recent_summary = "\n".join(
+        f"  {row['event_month'].strftime('%b %Y')}: index={row['index_smoothed']:.1f}, "
+        f"battles={int(row.get('battles',0))}, explosions={int(row.get('explosions_remote_violence',0))}, "
+        f"strategic={int(row.get('strategic_developments',0))}, protests={int(row.get('protests',0))}, "
+        f"riots={int(row.get('riots',0))}, civ_violence={int(row.get('violence_against_civilians',0))}, "
+        f"fatalities={int(row.get('fatalities',0))}"
+        for _, row in recent.iterrows()
+    )
+    _ai_system = (
+        "You are a concise geopolitical intelligence analyst. "
+        "Write in plain English. Be specific and data-driven. No bullet lists — flowing prose only. "
+        "Do not mention ACLED by name. Do not use phrases like 'the data shows' — just state the finding directly."
+    )
+
+    ai_tabs = st.tabs(["📊 Country Insight", "📈 Trend Interpretation", "⚖️ Comparative Analysis"])
+
+    # ── Tab 1: Country Insight ─────────────────────
+    with ai_tabs[0]:
+        st.caption(f"AI-generated summary of {selected_country}'s escalation profile.")
+        if st.button("Generate Country Insight", key="ai_country_btn"):
+            with st.spinner("Analyzing..."):
+                prompt = (
+                    f"Summarize the conflict situation in {selected_country} based on this escalation index data.\n\n"
+                    f"Overall trend: {trend_dir}. Peak index: {peak_val:.1f} in {peak_month}. "
+                    f"Escalation flagged in {num_flagged} months. Pre-escalation warnings in {num_warned} months.\n\n"
+                    f"Last 6 months of data:\n{recent_summary}\n\n"
+                    f"Write 3 sentences: (1) overall escalation status, (2) what's driving it based on the event types, "
+                    f"(3) what the trend suggests about near-term risk."
+                )
+                result = _call_claude(prompt, system=_ai_system, max_tokens=300)
+                st.markdown(
+                    f"<div style='background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;"
+                    f"padding:16px 20px;color:#e2e8f0;font-size:14px;line-height:1.7;'>{result}</div>",
+                    unsafe_allow_html=True,
+                )
+
+    # ── Tab 2: Trend Interpretation ───────────────
+    with ai_tabs[1]:
+        st.caption("Is this country escalating or de-escalating, and why?")
+        if st.button("Interpret Trend", key="ai_trend_btn"):
+            with st.spinner("Analyzing..."):
+                prompt = (
+                    f"Analyze the escalation trend for {selected_country}.\n\n"
+                    f"The index is currently {trend_dir}. "
+                    f"Current smoothed index: {latest['index_smoothed']:.1f}. "
+                    f"3 months ago: {prev3['index_smoothed']:.1f}.\n\n"
+                    f"Last 6 months:\n{recent_summary}\n\n"
+                    f"In 2-3 sentences: (1) clearly state whether the country is escalating or de-escalating "
+                    f"and by how much, (2) identify which specific event types are driving the change, "
+                    f"(3) flag any warning signs or positive signals in the most recent month."
+                )
+                result = _call_claude(prompt, system=_ai_system, max_tokens=300)
+                st.markdown(
+                    f"<div style='background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;"
+                    f"padding:16px 20px;color:#e2e8f0;font-size:14px;line-height:1.7;'>{result}</div>",
+                    unsafe_allow_html=True,
+                )
+
+    # ── Tab 3: Comparative Analysis ───────────────
+    with ai_tabs[2]:
+        st.caption("Compare this country's escalation profile against another.")
+        compare_country = st.text_input(
+            "Country to compare against",
+            placeholder="e.g. Nigeria, Sudan, Iraq",
+            key="ai_compare_input",
+        )
+        if st.button("Compare Countries", key="ai_compare_btn") and compare_country:
+            with st.spinner(f"Loading {compare_country} data and analyzing..."):
+                try:
+                    df_compare = fetch_acled_arcgis_monthly()
+                    df_compare = df_compare[
+                        df_compare["country"].str.strip().str.lower() == compare_country.strip().lower()
+                    ]
+                    if df_compare.empty:
+                        st.warning(f"No data found for '{compare_country}'. Check the spelling.")
+                    else:
+                        idx_compare = compute_escalation_index(df_compare, compare_country)
+                        if idx_compare.empty:
+                            st.warning(f"Could not compute escalation index for '{compare_country}'.")
+                        else:
+                            c_latest    = idx_compare.iloc[-1]
+                            c_prev3     = idx_compare.tail(4).iloc[0]
+                            c_trend     = "rising" if c_latest["index_smoothed"] > c_prev3["index_smoothed"] else "falling"
+                            c_peak      = idx_compare["index_smoothed"].max()
+                            c_flagged   = int((idx_compare["index_smoothed"] >= escalation_threshold).sum())
+                            c_recent    = idx_compare.tail(6)
+                            c_summary   = "\n".join(
+                                f"  {row['event_month'].strftime('%b %Y')}: index={row['index_smoothed']:.1f}, "
+                                f"battles={int(row.get('battles',0))}, explosions={int(row.get('explosions_remote_violence',0))}, "
+                                f"fatalities={int(row.get('fatalities',0))}"
+                                for _, row in c_recent.iterrows()
+                            )
+                            prompt = (
+                                f"Compare the conflict escalation situations in {selected_country} and {compare_country}.\n\n"
+                                f"{selected_country}: index {trend_dir}, current={latest['index_smoothed']:.1f}, "
+                                f"peak={peak_val:.1f} ({peak_month}), {num_flagged} flagged months.\n"
+                                f"Last 6 months:\n{recent_summary}\n\n"
+                                f"{compare_country}: index {c_trend}, current={c_latest['index_smoothed']:.1f}, "
+                                f"peak={c_peak:.1f}, {c_flagged} flagged months.\n"
+                                f"Last 6 months:\n{c_summary}\n\n"
+                                f"In 3 sentences: (1) which country has higher current escalation and by how much, "
+                                f"(2) what's driving each country's index — are the causes similar or different, "
+                                f"(3) which poses the greater near-term risk and why."
+                            )
+                            result = _call_claude(prompt, system=_ai_system, max_tokens=400)
+                            st.markdown(
+                                f"<div style='background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;"
+                                f"padding:16px 20px;color:#e2e8f0;font-size:14px;line-height:1.7;'>{result}</div>",
+                                unsafe_allow_html=True,
+                            )
+                except Exception as e:
+                    st.error(f"Comparison failed: {e}")
 elif not run_btn and st.session_state.get("page") != "map":
     st.info(
         "Enter a country name in the sidebar (e.g. **Ukraine**, **Sudan**, **Myanmar**) "
@@ -2907,6 +3066,70 @@ map2d.on('click', closePanel2d);
 
                         with st.expander("Top hotspots in the current view"):
                             st.dataframe(top_hotspots, use_container_width=True)
+
+                        # ── Map AI Analysis ───────────────────────────
+                        st.markdown("---")
+                        st.markdown("### 🤖 AI Map Intelligence")
+                        st.caption("Enter any country visible on the map to get an AI-generated conflict summary.")
+                        map_ai_country = st.text_input(
+                            "Country name",
+                            placeholder="e.g. Libya, Sudan, Ukraine",
+                            key="map_ai_country",
+                        )
+                        if st.button("Analyze Country", key="map_ai_btn") and map_ai_country:
+                            with st.spinner(f"Analyzing {map_ai_country}..."):
+                                try:
+                                    _map_ai_df = fetch_acled_arcgis_monthly()
+                                    _map_ai_df = _map_ai_df[
+                                        _map_ai_df["country"].str.strip().str.lower()
+                                        == map_ai_country.strip().lower()
+                                    ]
+                                    if _map_ai_df.empty:
+                                        st.warning(f"No data found for '{map_ai_country}'.")
+                                    else:
+                                        _map_idx = compute_escalation_index(_map_ai_df, map_ai_country)
+                                        if _map_idx.empty:
+                                            st.warning("Could not compute index for this country.")
+                                        else:
+                                            _ml = _map_idx.iloc[-1]
+                                            _mp = _map_idx.tail(4).iloc[0]
+                                            _mt = "rising" if _ml["index_smoothed"] > _mp["index_smoothed"] else "falling"
+                                            _mr = _map_idx.tail(3)
+                                            _ms = "\n".join(
+                                                f"  {r['event_month'].strftime('%b %Y')}: index={r['index_smoothed']:.1f}, "
+                                                f"battles={int(r.get('battles',0))}, explosions={int(r.get('explosions_remote_violence',0))}, "
+                                                f"fatalities={int(r.get('fatalities',0))}, "
+                                                f"strategic={int(r.get('strategic_developments',0))}"
+                                                for _, r in _mr.iterrows()
+                                            )
+                                            _map_prompt = (
+                                                f"Give a 2-sentence intelligence briefing on the current conflict situation "
+                                                f"in {map_ai_country}. The escalation index is {_mt}, "
+                                                f"currently at {_ml['index_smoothed']:.1f}/100.\n\n"
+                                                f"Recent data:\n{_ms}\n\n"
+                                                f"Sentence 1: current situation and dominant conflict type. "
+                                                f"Sentence 2: trajectory and key risk."
+                                            )
+                                            _map_result = _call_claude(
+                                                _map_prompt,
+                                                system=(
+                                                    "You are a concise geopolitical intelligence analyst. "
+                                                    "Plain English, no bullet points, no mention of ACLED. "
+                                                    "Be direct and specific."
+                                                ),
+                                                max_tokens=200,
+                                            )
+                                            st.markdown(
+                                                f"<div style='background:#0f172a;border:1px solid #1e3a5f;"
+                                                f"border-radius:8px;padding:16px 20px;color:#e2e8f0;"
+                                                f"font-size:14px;line-height:1.7;'>"
+                                                f"<b style='color:#60a5fa;font-size:13px;letter-spacing:.06em;'>"
+                                                f"{map_ai_country.upper()} — INTELLIGENCE BRIEF</b><br><br>"
+                                                f"{_map_result}</div>",
+                                                unsafe_allow_html=True,
+                                            )
+                                except Exception as e:
+                                    st.error(f"Map AI analysis failed: {e}")
 
                         if auto_refresh_map:
                             refresh_ms = int(refresh_minutes) * 60 * 1000
