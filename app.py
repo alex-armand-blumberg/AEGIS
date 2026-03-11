@@ -833,6 +833,7 @@ st.sidebar.header("Inputs")
 country_name = st.sidebar.text_input(
     "Country (exact match)",
     "",
+    placeholder="Try 'Israel' or 'Ukraine'",
     help="Must match the country name in ACLED exactly (e.g. 'Ukraine', 'Sudan', 'Myanmar').",
 )
 
