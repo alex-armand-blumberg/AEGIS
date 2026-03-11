@@ -38,7 +38,8 @@ def _call_claude(prompt: str, system: str = "", max_tokens: int = 500) -> str:
             json=body,
             timeout=30,
         )
-        r.raise_for_status()
+        if not r.ok:
+            return f"⚠️ API error {r.status_code}: {r.text}"
         return r.json()["content"][0]["text"]
     except Exception as e:
         return f"⚠️ AI analysis unavailable: {e}"
