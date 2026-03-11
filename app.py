@@ -1634,24 +1634,6 @@ document.querySelector('a[href="#ai-section"]').addEventListener('click', functi
         f"fatalities={int(row.get('fatalities',0))}"
         for _, row in idx_df.iterrows()
     )
-    flagged_summary = "\n".join(
-        f"  {row['event_month'].strftime('%b %Y')}: smoothed={row['index_smoothed']:.1f}, "
-        f"raw={row['escalation_index']:.1f}, battles={int(row.get('battles',0))}, "
-        f"explosions={int(row.get('explosions_remote_violence',0))}, "
-        f"strategic={int(row.get('strategic_developments',0))}, protests={int(row.get('protests',0))}, "
-        f"riots={int(row.get('riots',0))}, civ_violence={int(row.get('violence_against_civilians',0))}, "
-        f"fatalities={int(row.get('fatalities',0))}"
-        for _, row in esc_rows.iterrows()
-    ) or "  None"
-    warning_summary = "\n".join(
-        f"  {row['event_month'].strftime('%b %Y')}: smoothed={row['index_smoothed']:.1f}, "
-        f"raw={row['escalation_index']:.1f}, battles={int(row.get('battles',0))}, "
-        f"explosions={int(row.get('explosions_remote_violence',0))}, "
-        f"strategic={int(row.get('strategic_developments',0))}, protests={int(row.get('protests',0))}, "
-        f"riots={int(row.get('riots',0))}, civ_violence={int(row.get('violence_against_civilians',0))}, "
-        f"fatalities={int(row.get('fatalities',0))}"
-        for _, row in warn_rows.iterrows()
-    ) or "  None"
     _data_latest = latest["event_month"].strftime("%b %Y")
     _ai_system = (
         "You are a concise geopolitical intelligence analyst. "
@@ -1863,33 +1845,6 @@ document.querySelector('a[href="#ai-section"]').addEventListener('click', functi
         )
         return "\n\n".join([base_sentence, signal_sentence, detail_sentence])
 
-    def _make_report_filename(country: str) -> str:
-        import re
-
-        country_slug = re.sub(r"[^a-z0-9]+", "-", country.lower()).strip("-") or "country"
-        start_label = idx_df["event_month"].min().strftime("%Y-%m")
-        end_label = idx_df["event_month"].max().strftime("%Y-%m")
-        return f"aegis-report-{country_slug}-{start_label}-to-{end_label}.md"
-
-    def _build_report_markdown(ai_body: str) -> str:
-        plot_start = idx_df["event_month"].min().strftime("%B %Y")
-        plot_end = idx_df["event_month"].max().strftime("%B %Y")
-        return (
-            f"# AEGIS Intelligence Report: {selected_country}\n\n"
-            f"Plot range: {plot_start} to {plot_end}\n"
-            f"Alert threshold: {escalation_threshold}\n"
-            f"Smoothing window: {w} months\n"
-            f"Current smoothed index: {latest['index_smoothed']:.1f}\n"
-            f"Peak smoothed index: {peak_val:.1f} in {peak_month}\n"
-            f"Escalation-flagged months: {num_flagged}\n"
-            f"Pre-escalation warning months: {num_warned}\n\n"
-            f"## Plot Snapshot\n\n"
-            f"Trend direction: {trend_dir}\n"
-            f"Latest data month: {_data_latest}\n"
-            f"Data source shown in app: {data_label}\n\n"
-            f"{ai_body.strip()}\n\n"
-        )
-
     def _render_ai(result: str):
         """Render AI response with each sentence as a readable paragraph."""
         import re
@@ -1904,7 +1859,7 @@ document.querySelector('a[href="#ai-section"]').addEventListener('click', functi
             unsafe_allow_html=True,
         )
 
-    ai_tabs = st.tabs(["Country Insight", "Trend Interpretation", "Comparative Analysis", "Generate Report", "Ask a Question"])
+    ai_tabs = st.tabs(["Country Insight", "Trend Interpretation", "Comparative Analysis", "Ask a Question"])
 
     # ── Tab 1: Country Insight ─────────────────────
     with ai_tabs[0]:
@@ -2004,46 +1959,8 @@ document.querySelector('a[href="#ai-section"]').addEventListener('click', functi
                 except Exception as e:
                     st.error(f"Comparison failed: {e}")
 
-    # ── Tab 4: Generate Report ────────────────────
+    # ── Tab 4: Ask a Question ─────────────────────
     with ai_tabs[3]:
-        st.caption(f"Generate a downloadable report for {selected_country} using the currently plotted data.")
-        report_key = f"aegis_report_{selected_country}_{idx_df['event_month'].min().strftime('%Y%m')}_{idx_df['event_month'].max().strftime('%Y%m')}"
-        if st.button("Generate Report", key="ai_report_btn"):
-            with st.spinner("Generating report..."):
-                report_prompt = (
-                    f"Write a concise geopolitical intelligence report in markdown for {selected_country}.\n\n"
-                    f"Use only the plotted period from {idx_df['event_month'].min().strftime('%b %Y')} to {idx_df['event_month'].max().strftime('%b %Y')}.\n"
-                    f"Current smoothed index: {latest['index_smoothed']:.1f}. Peak smoothed index: {peak_val:.1f} in {peak_month}. "
-                    f"Trend direction: {trend_dir}. Escalation-flagged months: {num_flagged}. Pre-escalation warning months: {num_warned}.\n\n"
-                    f"Escalation-flagged months:\n{flagged_summary}\n\n"
-                    f"Pre-escalation warning months:\n{warning_summary}\n\n"
-                    f"Full monthly series:\n{full_series_summary}\n\n"
-                    "Return markdown with these section headings only: "
-                    "`## Executive Summary`, `## What Drove the Signal`, `## Warning Interpretation`, `## Outlook`. "
-                    "Do not use code fences. Keep it specific to the supplied plotted data and explain the signal mechanics clearly."
-                )
-                report_system = (
-                    "You are a concise geopolitical intelligence analyst. "
-                    "Write in clean markdown prose. Be specific and data-driven. "
-                    "Do not mention ACLED by name. Do not invent periods outside the supplied range. "
-                    f"Your first sentence must briefly note that the plotted data runs from {idx_df['event_month'].min().strftime('%B %Y')} "
-                    f"to {_data_latest} due to access limitations."
-                )
-                report_body = _call_claude(report_prompt, system=report_system, max_tokens=900)
-                st.session_state[report_key] = _build_report_markdown(report_body)
-
-        if report_key in st.session_state:
-            st.markdown(st.session_state[report_key])
-            st.download_button(
-                "Download report",
-                data=st.session_state[report_key],
-                file_name=_make_report_filename(selected_country),
-                mime="text/markdown",
-                key="ai_report_download",
-            )
-
-    # ── Tab 5: Ask a Question ─────────────────────
-    with ai_tabs[4]:
         st.caption(f"Ask anything about {selected_country}'s conflict data and escalation index.")
         user_question = st.text_area(
             "Your question",
