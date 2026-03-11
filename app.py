@@ -42,54 +42,11 @@ if st.session_state["page"] == "landing":
                  object-fit:cover;opacity:0.42;
                  filter:grayscale(55%) contrast(1.1);z-index:0;pointer-events:none;">
           <source src="data:video/mp4;base64,{v64}" type="video/mp4">
-        </video>
-        <div id="aegis-video-controls" style="
-            position:fixed;bottom:18px;right:18px;z-index:100;
-            display:flex;align-items:center;gap:10px;
-        ">
-          <button id="aegis-pause-btn" onclick="aegisToggleVideo()" style="
-              background:rgba(2,8,20,0.70);border:1px solid rgba(255,255,255,0.18);
-              color:rgba(255,255,255,0.55);font-size:11px;letter-spacing:0.08em;
-              padding:5px 11px;border-radius:5px;cursor:pointer;
-              font-family:-apple-system,Inter,sans-serif;
-              transition:border-color .2s,color .2s;
-          ">⏸ PAUSE</button>
-          <div style="width:110px;height:3px;background:rgba(255,255,255,0.12);border-radius:2px;overflow:hidden;">
-            <div id="aegis-progress-bar" style="
-                height:100%;width:0%;
-                background:rgba(255,255,255,0.35);
-                border-radius:2px;transition:width 0.25s linear;
-            "></div>
-          </div>
-        </div>
-        <script>
-        (function() {{
-          const vid = document.getElementById('aegis-bg-video');
-          const bar = document.getElementById('aegis-progress-bar');
-          const btn = document.getElementById('aegis-pause-btn');
-          let paused = false;
-          function updateBar() {{
-            if(vid.duration) bar.style.width = (vid.currentTime / vid.duration * 100) + '%';
-            requestAnimationFrame(updateBar);
-          }}
-          requestAnimationFrame(updateBar);
-          window.aegisToggleVideo = function() {{
-            paused = !paused;
-            if(paused) {{ vid.pause(); btn.textContent = '▶ PLAY'; }}
-            else {{ vid.play(); btn.textContent = '⏸ PAUSE'; }}
-          }};
-          btn.addEventListener('mouseenter', function() {{
-            btn.style.borderColor = 'rgba(255,255,255,0.45)';
-            btn.style.color = 'rgba(255,255,255,0.85)';
-          }});
-          btn.addEventListener('mouseleave', function() {{
-            btn.style.borderColor = 'rgba(255,255,255,0.18)';
-            btn.style.color = 'rgba(255,255,255,0.55)';
-          }});
-        }})();
-        </script>"""
+        </video>"""
+        has_video = True
     else:
         video_tag = ""
+        has_video = False
 
     st.markdown(
         f"""
@@ -211,11 +168,51 @@ if st.session_state["page"] == "landing":
     )
 
     st.markdown(
-    '<div style="position:fixed;bottom:12px;left:16px;font-size:9px;color:rgba(255,255,255,0.25);'
-    'font-family:-apple-system,Inter,sans-serif;letter-spacing:0.05em;z-index:10;">'
-    'Background footage: Public Domain (CC0)</div>',
-    unsafe_allow_html=True,
-)
+        '<div style="position:fixed;bottom:36px;left:16px;z-index:100;display:flex;align-items:center;gap:10px;">'
+        '<button id="aegis-pause-btn" style="'
+        'background:rgba(2,8,20,0.70);border:1px solid rgba(255,255,255,0.18);'
+        'color:rgba(255,255,255,0.55);font-size:11px;letter-spacing:0.08em;'
+        'padding:5px 11px;border-radius:5px;cursor:pointer;'
+        'font-family:-apple-system,Inter,sans-serif;">⏸ PAUSE</button>'
+        '<div style="width:90px;height:3px;background:rgba(255,255,255,0.12);border-radius:2px;overflow:hidden;">'
+        '<div id="aegis-progress-bar" style="height:100%;width:0%;background:rgba(255,255,255,0.35);border-radius:2px;"></div>'
+        '</div></div>'
+        '<div style="position:fixed;bottom:14px;left:16px;font-size:9px;color:rgba(255,255,255,0.25);'
+        'font-family:-apple-system,Inter,sans-serif;letter-spacing:0.05em;z-index:10;">'
+        'Background footage: Public Domain (CC0)</div>',
+        unsafe_allow_html=True,
+    )
+
+    if has_video:
+        st.components.v1.html("""
+<script>
+(function poll() {
+  const vid = window.parent.document.getElementById('aegis-bg-video');
+  const bar = window.parent.document.getElementById('aegis-progress-bar');
+  const btn = window.parent.document.getElementById('aegis-pause-btn');
+  if (!vid || !bar || !btn) { setTimeout(poll, 100); return; }
+  let paused = false;
+  function updateBar() {
+    if (vid.duration) bar.style.width = (vid.currentTime / vid.duration * 100) + '%';
+    requestAnimationFrame(updateBar);
+  }
+  requestAnimationFrame(updateBar);
+  btn.onclick = function() {
+    paused = !paused;
+    if (paused) { vid.pause(); btn.textContent = '▶ PLAY'; }
+    else { vid.play(); btn.textContent = '⏸ PAUSE'; }
+  };
+  btn.onmouseenter = function() {
+    btn.style.borderColor = 'rgba(255,255,255,0.45)';
+    btn.style.color = 'rgba(255,255,255,0.85)';
+  };
+  btn.onmouseleave = function() {
+    btn.style.borderColor = 'rgba(255,255,255,0.18)';
+    btn.style.color = 'rgba(255,255,255,0.55)';
+  };
+})();
+</script>
+""", height=0, scrolling=False)
     
     st.stop()
 
