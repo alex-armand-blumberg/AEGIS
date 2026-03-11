@@ -2021,6 +2021,7 @@ if show_map and st.session_state.get("page") != "index":
             if df_map.empty:
                 st.warning("No ACLED map data was returned from the public layer.")
             else:
+                df_map_full_history = df_map.copy()
                 violent_cols = [
                     "battles", "explosions_remote_violence",
                     "violence_against_civilians", "strategic_developments",
@@ -2305,6 +2306,17 @@ if show_map and st.session_state.get("page") != "index":
                             }
 
                             # Per-country aggregates for in-map info panels
+                            _country_index_lookup = {}
+                            for _c in grouped["country"].dropna().unique():
+                                _country_idx = compute_escalation_index(df_map_full_history, _c)
+                                if not _country_idx.empty:
+                                    _country_idx["index_smoothed"] = (
+                                        _country_idx["escalation_index"]
+                                        .rolling(window=3, min_periods=1)
+                                        .mean()
+                                    )
+                                    _country_index_lookup[_c] = float(_country_idx["index_smoothed"].iloc[-1])
+
                             _country_data = {}
                             for _c, _cg in grouped.groupby("country"):
                                 _lats = _cg["centroid_latitude"]
@@ -2339,6 +2351,7 @@ if show_map and st.session_state.get("page") != "index":
                                     "protests":     int(_cg["protests"].sum()),
                                     "riots":        int(_cg["riots"].sum()),
                                     "actors":       int(_cg["violent_actors"].sum()),
+                                    "escalation_index": round(float(_country_index_lookup.get(_c, 0.0)), 1),
                                     "metric_total": int(_cg["metric_value"].sum()),
                                     "metric_name":  metric_labels[selected_metric],
                                 }
@@ -2868,6 +2881,7 @@ function showInfoPanel(name){{
     +infoRow('#60a5fa','STRATEGIC',     c.strategic)
     +infoRow('#a78bfa','PROTESTS',      c.protests)
     +infoRow('#f472b6','RIOTS',         c.riots)
+    +infoRow('#e2e8f0','ESC. INDEX',    c.escalation_index)
     +'<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0 0;">'
     +'<span style="color:rgba(255,255,255,0.45);font-size:10px;">'+c.metric_name.toUpperCase()+'</span>'
     +'<span style="color:white;font-weight:700;font-size:13px;">'+c.metric_total.toLocaleString()+'</span>'
@@ -3270,6 +3284,7 @@ function showInfoPanel2d(name){{
     +infoRow2d('#60a5fa','STRATEGIC',     c.strategic)
     +infoRow2d('#a78bfa','PROTESTS',      c.protests)
     +infoRow2d('#f472b6','RIOTS',         c.riots)
+    +infoRow2d('#e2e8f0','ESC. INDEX',    c.escalation_index)
     +'<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0 0;">'
     +'<span style="color:rgba(255,255,255,0.45);font-size:10px;">'+c.metric_name.toUpperCase()+'</span>'
     +'<span style="color:white;font-weight:700;font-size:13px;">'+c.metric_total.toLocaleString()+'</span>'
