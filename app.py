@@ -997,7 +997,7 @@ if st.session_state.get("page") == "map":
     )
 else:
     st.caption(
-        "WAIT A COUPLE SECONDS FOR THE SOFTWARE TO LOAD. Enter a country name and click Generate plot to see the ACLED-based Escalation Index. "
+        "PLEASE WAIT A COUPLE SECONDS FOR THE SOFTWARE TO LOAD. Enter a country name and click Generate plot to see the ACLED-based Escalation Index. "
         "The index combines five leading indicators — event frequency acceleration, explosions, "
         "strategic developments, civil unrest, and civilian targeting — into a single 0–100 score."
     )
