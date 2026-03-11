@@ -1345,6 +1345,29 @@ if "aegis_plot" in st.session_state and st.session_state.get("page") != "map":
         except Exception:
             pass
 
+    st.components.v1.html("""
+<div style="text-align:center;margin:4px 0 8px 0;">
+  <a href="#ai-section" style="
+    display:inline-block;
+    background:rgba(30,58,95,0.7);
+    border:1px solid rgba(96,165,250,0.35);
+    color:#a0c4ff;
+    font-size:12px;
+    font-family:-apple-system,Inter,sans-serif;
+    letter-spacing:0.07em;
+    padding:6px 18px;
+    border-radius:6px;
+    text-decoration:none;
+  ">&#8595;&nbsp; VIEW AI ANALYSIS</a>
+</div>
+<script>
+document.querySelector('a[href="#ai-section"]').addEventListener('click', function(e) {
+  e.preventDefault();
+  window.parent.document.getElementById('ai-section').scrollIntoView({behavior:'smooth'});
+});
+</script>
+""", height=44, scrolling=False)
+
     # ── How to read the signals ───────────────────
     with st.expander("How to read the signals", expanded=False):
         st.markdown(
@@ -1580,9 +1603,13 @@ if "aegis_plot" in st.session_state and st.session_state.get("page") != "map":
 
     # ── AI Analysis ───────────────────────────────
     st.markdown("---")
-    st.markdown("### 🤖 AI Intelligence Analysis")
+    st.markdown(
+        "<div id='ai-section'></div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown("### AI Intelligence Analysis")
 
-    # Build a compact data summary to pass to Claude
+    # Build a compact data summary to pass to Groq
     recent = idx_df.tail(6)
     latest = idx_df.iloc[-1]
     prev3  = idx_df.tail(4).iloc[0]
@@ -1606,10 +1633,25 @@ if "aegis_plot" in st.session_state and st.session_state.get("page") != "map":
         "Do not mention ACLED by name. Do not use phrases like 'the data shows' — just state the finding directly. "
         f"IMPORTANT: Your first sentence must always be a brief disclaimer that the data only extends to {_data_latest} "
         "due to access limitations, so the analysis reflects that period, not the present day. "
-        "Keep this disclaimer to one short sentence, then continue with the analysis."
+        "Keep this disclaimer to one short sentence, then continue with the analysis. "
+        "Write each sentence as its own paragraph separated by a blank line."
     )
 
-    ai_tabs = st.tabs(["📊 Country Insight", "📈 Trend Interpretation", "⚖️ Comparative Analysis"])
+    def _render_ai(result: str):
+        """Render AI response with each sentence as a readable paragraph."""
+        import re
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', result.strip()) if s.strip()]
+        paragraphs = "".join(
+            f"<p style='margin:0 0 10px 0;color:#e2e8f0;font-size:14px;line-height:1.75;'>{s}</p>"
+            for s in sentences
+        )
+        st.markdown(
+            f"<div style='background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;"
+            f"padding:18px 22px;'>{paragraphs}</div>",
+            unsafe_allow_html=True,
+        )
+
+    ai_tabs = st.tabs(["Country Insight", "Trend Interpretation", "Comparative Analysis", "Ask a Question"])
 
     # ── Tab 1: Country Insight ─────────────────────
     with ai_tabs[0]:
@@ -1629,11 +1671,7 @@ if "aegis_plot" in st.session_state and st.session_state.get("page") != "map":
                     f"(3) Based on where the index stood at {_data_latest}, what was the near-term risk outlook at that time."
                 )
                 result = _call_claude(prompt, system=_ai_system, max_tokens=300)
-                st.markdown(
-                    f"<div style='background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;"
-                    f"padding:16px 20px;color:#e2e8f0;font-size:14px;line-height:1.7;'>{result}</div>",
-                    unsafe_allow_html=True,
-                )
+                _render_ai(result)
 
     # ── Tab 2: Trend Interpretation ───────────────
     with ai_tabs[1]:
@@ -1653,11 +1691,7 @@ if "aegis_plot" in st.session_state and st.session_state.get("page") != "map":
                     f"(3) flag any warning signs or positive signals in the most recent month of data."
                 )
                 result = _call_claude(prompt, system=_ai_system, max_tokens=300)
-                st.markdown(
-                    f"<div style='background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;"
-                    f"padding:16px 20px;color:#e2e8f0;font-size:14px;line-height:1.7;'>{result}</div>",
-                    unsafe_allow_html=True,
-                )
+                _render_ai(result)
 
     # ── Tab 3: Comparative Analysis ───────────────
     with ai_tabs[2]:
@@ -1681,6 +1715,12 @@ if "aegis_plot" in st.session_state and st.session_state.get("page") != "map":
                         if idx_compare.empty:
                             st.warning(f"Could not compute escalation index for '{compare_country}'.")
                         else:
+                            # Apply smoothing — same window as main index
+                            idx_compare["index_smoothed"] = (
+                                idx_compare["escalation_index"]
+                                .rolling(window=int(smooth_window), min_periods=1)
+                                .mean()
+                            )
                             c_latest    = idx_compare.iloc[-1]
                             c_prev3     = idx_compare.tail(4).iloc[0]
                             c_trend     = "rising" if c_latest["index_smoothed"] > c_prev3["index_smoothed"] else "falling"
@@ -1701,18 +1741,37 @@ if "aegis_plot" in st.session_state and st.session_state.get("page") != "map":
                                 f"{compare_country}: index {c_trend}, current={c_latest['index_smoothed']:.1f}, "
                                 f"peak={c_peak:.1f}, {c_flagged} flagged months.\n"
                                 f"Last 6 months:\n{c_summary}\n\n"
-                                f"In 3 sentences: (1) which country has higher current escalation and by how much, "
-                                f"(2) what's driving each country's index — are the causes similar or different, "
+                                f"In 3 sentences after the disclaimer: (1) which country has higher current escalation and by how much, "
+                                f"connecting each to a specific real-world event or conflict driving their index. "
+                                f"(2) what's driving each country's index — are the causes similar or different. "
                                 f"(3) which poses the greater near-term risk and why."
                             )
                             result = _call_claude(prompt, system=_ai_system, max_tokens=400)
-                            st.markdown(
-                                f"<div style='background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;"
-                                f"padding:16px 20px;color:#e2e8f0;font-size:14px;line-height:1.7;'>{result}</div>",
-                                unsafe_allow_html=True,
-                            )
+                            _render_ai(result)
                 except Exception as e:
                     st.error(f"Comparison failed: {e}")
+
+    # ── Tab 4: Ask a Question ─────────────────────
+    with ai_tabs[3]:
+        st.caption(f"Ask anything about {selected_country}'s conflict data and escalation index.")
+        user_question = st.text_area(
+            "Your question",
+            placeholder=f"e.g. Why did the index spike in {peak_month}? What does the protest trend suggest?",
+            key="ai_freeform_input",
+            height=80,
+        )
+        if st.button("Get Answer", key="ai_freeform_btn") and user_question:
+            with st.spinner("Analyzing..."):
+                prompt = (
+                    f"The user is asking about {selected_country}'s conflict escalation data.\n\n"
+                    f"Context — Overall trend: {trend_dir}. Peak index: {peak_val:.1f} in {peak_month}. "
+                    f"Escalation flagged in {num_flagged} months.\n\n"
+                    f"Last 6 months:\n{recent_summary}\n\n"
+                    f"User question: {user_question}\n\n"
+                    f"Answer in 2-3 sentences. Be specific and connect your answer to real-world events where relevant."
+                )
+                result = _call_claude(prompt, system=_ai_system, max_tokens=350)
+                _render_ai(result)
 elif not run_btn and st.session_state.get("page") != "map":
     st.info(
         "Enter a country name in the sidebar (e.g. **Ukraine**, **Sudan**, **Myanmar**) "
