@@ -1848,12 +1848,11 @@ document.querySelector('a[href="#ai-section"]').addEventListener('click', functi
             for s in sentences
         )
         attribution = (
-            "<p style='margin:12px 0 0 0;font-size:11px;color:rgba(255,255,255,0.28);"
-            "letter-spacing:0.04em;border-top:1px solid rgba(255,255,255,0.07);padding-top:10px;'>"
-            "AI-generated analysis using conflict data sourced from "
-            "<a href='https://acleddata.com' target='_blank' "
-            "style='color:rgba(255,255,255,0.4);text-decoration:underline;'>ACLED (acleddata.com)</a>. "
-            "Not a substitute for ACLED's own analysis.</p>"
+            "<p style='margin:12px 0 0 0;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08);"
+            "color:rgba(255,255,255,0.35);font-size:11px;letter-spacing:0.04em;'>"
+            "AI analysis generated using conflict data from <a href='https://acleddata.com' target='_blank' "
+            "style='color:rgba(255,255,255,0.45);text-decoration:underline;'>ACLED (acleddata.com)</a>. "
+            "All underlying data is the property of ACLED.</p>"
         )
         st.markdown(
             f"<div style='background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;"
@@ -3439,7 +3438,14 @@ map2d.on('click', closePanel2d);
                                                 f"font-size:14px;line-height:1.7;'>"
                                                 f"<b style='color:#60a5fa;font-size:13px;letter-spacing:.06em;'>"
                                                 f"{map_ai_country.upper()} — INTELLIGENCE BRIEF</b><br><br>"
-                                                f"{_map_result}</div>",
+                                                f"{_map_result}"
+                                                f"<p style='margin:12px 0 0 0;font-size:11px;color:rgba(255,255,255,0.28);"
+                                                f"letter-spacing:0.04em;border-top:1px solid rgba(255,255,255,0.07);padding-top:10px;'>"
+                                                f"AI-generated analysis using conflict data sourced from "
+                                                f"<a href='https://acleddata.com' target='_blank' "
+                                                f"style='color:rgba(255,255,255,0.4);text-decoration:underline;'>ACLED (acleddata.com)</a>. "
+                                                f"Not a substitute for ACLED's own analysis.</p>"
+                                                f"</div>",
                                                 unsafe_allow_html=True,
                                             )
                                 except Exception as e:
