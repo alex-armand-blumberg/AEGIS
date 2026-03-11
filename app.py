@@ -1609,6 +1609,7 @@ document.querySelector('a[href="#ai-section"]').addEventListener('click', functi
         unsafe_allow_html=True,
     )
     st.markdown("### AI Intelligence Analysis")
+    st.caption("AI analysis is based on AEGIS's derived escalation index. Underlying conflict event data sourced from ACLED (acleddata.com).")
 
     # Build a compact data summary to pass to Groq
     recent = idx_df.tail(6)
@@ -1620,19 +1621,11 @@ document.querySelector('a[href="#ai-section"]').addEventListener('click', functi
     num_flagged = len(esc_rows)
     num_warned  = len(warn_rows)
     recent_summary = "\n".join(
-        f"  {row['event_month'].strftime('%b %Y')}: index={row['index_smoothed']:.1f}, "
-        f"battles={int(row.get('battles',0))}, explosions={int(row.get('explosions_remote_violence',0))}, "
-        f"strategic={int(row.get('strategic_developments',0))}, protests={int(row.get('protests',0))}, "
-        f"riots={int(row.get('riots',0))}, civ_violence={int(row.get('violence_against_civilians',0))}, "
-        f"fatalities={int(row.get('fatalities',0))}"
+        f"  {row['event_month'].strftime('%b %Y')}: escalation_index={row['index_smoothed']:.1f}"
         for _, row in recent.iterrows()
     )
     full_series_summary = "\n".join(
-        f"  {row['event_month'].strftime('%b %Y')}: index={row['index_smoothed']:.1f}, "
-        f"battles={int(row.get('battles',0))}, explosions={int(row.get('explosions_remote_violence',0))}, "
-        f"strategic={int(row.get('strategic_developments',0))}, protests={int(row.get('protests',0))}, "
-        f"riots={int(row.get('riots',0))}, civ_violence={int(row.get('violence_against_civilians',0))}, "
-        f"fatalities={int(row.get('fatalities',0))}"
+        f"  {row['event_month'].strftime('%b %Y')}: escalation_index={row['index_smoothed']:.1f}"
         for _, row in idx_df.iterrows()
     )
     _data_latest = latest["event_month"].strftime("%b %Y")
@@ -1937,9 +1930,7 @@ document.querySelector('a[href="#ai-section"]').addEventListener('click', functi
                             c_flagged   = int((idx_compare["index_smoothed"] >= escalation_threshold).sum())
                             c_recent    = idx_compare.tail(6)
                             c_summary   = "\n".join(
-                                f"  {row['event_month'].strftime('%b %Y')}: index={row['index_smoothed']:.1f}, "
-                                f"battles={int(row.get('battles',0))}, explosions={int(row.get('explosions_remote_violence',0))}, "
-                                f"fatalities={int(row.get('fatalities',0))}"
+                                f"  {row['event_month'].strftime('%b %Y')}: escalation_index={row['index_smoothed']:.1f}"
                                 for _, row in c_recent.iterrows()
                             )
                             prompt = (
@@ -3382,7 +3373,7 @@ map2d.on('click', closePanel2d);
                         # ── Map AI Analysis ───────────────────────────
                         st.markdown("---")
                         st.markdown("<div id='map-ai-section'></div>", unsafe_allow_html=True)
-                        st.markdown("### AEGIS-AI Map Intelligence")
+                        st.markdown("### 🤖 AI Map Intelligence")
                         st.caption("Enter any country visible on the map to get an AI-generated conflict summary.")
                         map_ai_country = st.text_input(
                             "Country name",
@@ -3414,18 +3405,15 @@ map2d.on('click', closePanel2d);
                                             _mt = "rising" if _ml["index_smoothed"] > _mp["index_smoothed"] else "falling"
                                             _mr = _map_idx.tail(3)
                                             _ms = "\n".join(
-                                                f"  {r['event_month'].strftime('%b %Y')}: index={r['index_smoothed']:.1f}, "
-                                                f"battles={int(r.get('battles',0))}, explosions={int(r.get('explosions_remote_violence',0))}, "
-                                                f"fatalities={int(r.get('fatalities',0))}, "
-                                                f"strategic={int(r.get('strategic_developments',0))}"
+                                                f"  {r['event_month'].strftime('%b %Y')}: escalation_index={r['index_smoothed']:.1f}"
                                                 for _, r in _mr.iterrows()
                                             )
                                             _map_prompt = (
                                                 f"Give a 2-sentence intelligence briefing on the current conflict situation "
                                                 f"in {map_ai_country}. The escalation index is {_mt}, "
                                                 f"currently at {_ml['index_smoothed']:.1f}/100.\n\n"
-                                                f"Recent data:\n{_ms}\n\n"
-                                                f"Sentence 1: current situation and dominant conflict type. "
+                                                f"Recent escalation index values:\n{_ms}\n\n"
+                                                f"Sentence 1: current situation and dominant conflict type based on your knowledge of this country. "
                                                 f"Sentence 2: trajectory and key risk."
                                             )
                                             _map_result = _call_claude(
