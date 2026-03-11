@@ -2154,13 +2154,30 @@ if show_map and st.session_state.get("page") != "index":
                         panel_col = None
 
                         with map_col:
-                            map_mode = st.radio(
-                                "Map view",
-                                ["🗺️  2D Map (Reccomended)", "🌐  3D Globe"],
-                                horizontal=True,
-                                label_visibility="collapsed",
-                                key="map_mode_toggle",
-                            )
+                            map_mode_col, map_ai_jump_col = st.columns([5, 1.3])
+                            with map_mode_col:
+                                map_mode = st.radio(
+                                    "Map view",
+                                    ["🗺️  2D Map (Reccomended)", "🌐  3D Globe"],
+                                    horizontal=True,
+                                    label_visibility="collapsed",
+                                    key="map_mode_toggle",
+                                )
+                            with map_ai_jump_col:
+                                st.markdown("<div style='height:2px;'></div>", unsafe_allow_html=True)
+                                if st.button("AI Analysis", key="map_ai_jump_btn", use_container_width=True):
+                                    st.components.v1.html(
+                                        """
+                                        <script>
+                                        const el = window.parent.document.getElementById('map-ai-section');
+                                        if (el) {
+                                            el.scrollIntoView({behavior:'smooth', block:'start'});
+                                        }
+                                        </script>
+                                        """,
+                                        height=0,
+                                        width=0,
+                                    )
                             use_3d = map_mode == "🌐  3D Globe"
 
                             # ── CesiumJS 3D Globe ─────────────────────────
@@ -3355,6 +3372,7 @@ map2d.on('click', closePanel2d);
 
                         # ── Map AI Analysis ───────────────────────────
                         st.markdown("---")
+                        st.markdown("<div id='map-ai-section'></div>", unsafe_allow_html=True)
                         st.markdown("### 🤖 AI Map Intelligence")
                         st.caption("Enter any country visible on the map to get an AI-generated conflict summary.")
                         map_ai_country = st.text_input(
