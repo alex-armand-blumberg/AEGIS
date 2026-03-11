@@ -2871,7 +2871,8 @@ function showInfoPanel(name){{
     +'<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0 0;">'
     +'<span style="color:rgba(255,255,255,0.45);font-size:10px;">'+c.metric_name.toUpperCase()+'</span>'
     +'<span style="color:white;font-weight:700;font-size:13px;">'+c.metric_total.toLocaleString()+'</span>'
-    +'</div>';
+    +'</div>'
+    +'<div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.07);font-size:9px;color:rgba(255,255,255,0.28);letter-spacing:0.04em;">Source: <a href="https://acleddata.com" target="_blank" style="color:rgba(255,255,255,0.38);text-decoration:underline;">ACLED (acleddata.com)</a></div>';
   document.getElementById('infopanel').style.display='block';
 }}
 
@@ -3242,16 +3243,9 @@ points2d.forEach(function(p) {{
   );
   function handleMarkerSelect(e) {{
     L.DomEvent.stopPropagation(e);
-    if (e.originalEvent && typeof e.originalEvent.preventDefault === 'function') {{
-      e.originalEvent.preventDefault();
-    }}
-    if (document.activeElement && typeof document.activeElement.blur === 'function') {{
-      document.activeElement.blur();
-    }}
     selectCountry2d(p.country);
   }}
-  circle.on('mousedown', handleMarkerSelect);
-  circle.on('touchstart', handleMarkerSelect);
+  circle.on('click', handleMarkerSelect);
   circle.addTo(map2d);
 }});
 
@@ -3279,7 +3273,8 @@ function showInfoPanel2d(name){{
     +'<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0 0;">'
     +'<span style="color:rgba(255,255,255,0.45);font-size:10px;">'+c.metric_name.toUpperCase()+'</span>'
     +'<span style="color:white;font-weight:700;font-size:13px;">'+c.metric_total.toLocaleString()+'</span>'
-    +'</div>';
+    +'</div>'
+    +'<div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.07);font-size:9px;color:rgba(255,255,255,0.28);letter-spacing:0.04em;">Source: <a href="https://acleddata.com" target="_blank" style="color:rgba(255,255,255,0.38);text-decoration:underline;">ACLED (acleddata.com)</a></div>';
   document.getElementById('infopanel2d').style.display='block';
 }}
 
