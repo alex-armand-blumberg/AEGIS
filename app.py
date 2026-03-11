@@ -1626,6 +1626,14 @@ document.querySelector('a[href="#ai-section"]').addEventListener('click', functi
         f"fatalities={int(row.get('fatalities',0))}"
         for _, row in recent.iterrows()
     )
+    full_series_summary = "\n".join(
+        f"  {row['event_month'].strftime('%b %Y')}: index={row['index_smoothed']:.1f}, "
+        f"battles={int(row.get('battles',0))}, explosions={int(row.get('explosions_remote_violence',0))}, "
+        f"strategic={int(row.get('strategic_developments',0))}, protests={int(row.get('protests',0))}, "
+        f"riots={int(row.get('riots',0))}, civ_violence={int(row.get('violence_against_civilians',0))}, "
+        f"fatalities={int(row.get('fatalities',0))}"
+        for _, row in idx_df.iterrows()
+    )
     _data_latest = latest["event_month"].strftime("%b %Y")
     _ai_system = (
         "You are a concise geopolitical intelligence analyst. "
@@ -1688,8 +1696,9 @@ document.querySelector('a[href="#ai-section"]').addEventListener('click', functi
         target_month = _extract_question_month(question)
         if target_month is None:
             return (
-                f"Relevant context window: latest 6 months in the plotted series.\n"
-                f"{recent_summary}\n\n"
+                f"Relevant context window: full plotted series from {idx_df['event_month'].min().strftime('%b %Y')} "
+                f"to {idx_df['event_month'].max().strftime('%b %Y')}.\n"
+                f"{full_series_summary}\n\n"
                 f"If the user asks why the index moved, explain it using the event mix and the app's scoring logic."
             )
 
@@ -1764,6 +1773,77 @@ document.querySelector('a[href="#ai-section"]').addEventListener('click', functi
             f"Two months after:\n{next_snapshot}\n\n"
             f"If the user asks how the app 'predicted' something, explain that this is a quantitative warning signal based on rising plotted indicators, not a claim of causal certainty or foreknowledge."
         )
+
+    def _build_direct_question_answer(question: str) -> str | None:
+        target_month = _extract_question_month(question)
+        if target_month is None:
+            return None
+
+        target_rows = idx_df[
+            idx_df["event_month"].dt.to_period("M") == target_month.to_period("M")
+        ]
+        if target_rows.empty:
+            return None
+
+        target_row = target_rows.iloc[0]
+        prev_rows = idx_df[idx_df["event_month"] < target_month].tail(2)
+        prev_vals = prev_rows["index_smoothed"].round(1).tolist()
+        prev_text = " -> ".join(str(v) for v in prev_vals + [round(float(target_row["index_smoothed"]), 1)])
+
+        is_flagged = bool(target_row["index_smoothed"] > escalation_threshold)
+        is_warning = bool(
+            (target_row["index_smoothed"] < escalation_threshold)
+            and (target_row["index_smoothed"] > escalation_threshold - 20)
+            and (
+                (target_row["c_strategic"] > 0.25)
+                or (target_row["c_explosion"] > 0.25)
+            )
+            and (target_row["_rising"] == 1)
+        )
+
+        driver_scores = [
+            ("raw conflict intensity", float(target_row["c_intensity"])),
+            ("event acceleration", float(target_row["c_accel"])),
+            ("explosions / remote violence", float(target_row["c_explosion"])),
+            ("strategic developments", float(target_row["c_strategic"])),
+            ("civil unrest", float(target_row["c_unrest"])),
+            ("civilian targeting ratio", float(target_row["c_civilian"])),
+        ]
+        top_driver_names = [name for name, _ in sorted(driver_scores, key=lambda x: x[1], reverse=True)[:3]]
+
+        target_label = target_month.strftime("%B %Y")
+        base_sentence = (
+            f"The data does include {target_label}: the plotted series runs from "
+            f"{idx_df['event_month'].min().strftime('%B %Y')} to {idx_df['event_month'].max().strftime('%B %Y')}."
+        )
+        if is_warning:
+            signal_sentence = (
+                f"AEGIS raised a pre-escalation warning in {target_label} because the smoothed index was "
+                f"{target_row['index_smoothed']:.1f}, which was below the {escalation_threshold:.0f} threshold but within the warning band, "
+                f"it was rising versus prior months ({prev_text}), and the strongest components were "
+                f"{', '.join(top_driver_names)}."
+            )
+        elif is_flagged:
+            signal_sentence = (
+                f"{target_label} was not just a warning month but an escalation-flagged month: the smoothed index reached "
+                f"{target_row['index_smoothed']:.1f}, above the {escalation_threshold:.0f} threshold, with the strongest components coming from "
+                f"{', '.join(top_driver_names)}."
+            )
+        else:
+            signal_sentence = (
+                f"{target_label} was in range but did not meet the app's warning rule: the smoothed index was "
+                f"{target_row['index_smoothed']:.1f} against a threshold of {escalation_threshold:.0f}, and the strongest components were "
+                f"{', '.join(top_driver_names)}."
+            )
+        detail_sentence = (
+            f"That month's event mix was battles={int(target_row.get('battles', 0))}, "
+            f"explosions={int(target_row.get('explosions_remote_violence', 0))}, "
+            f"strategic developments={int(target_row.get('strategic_developments', 0))}, "
+            f"protests={int(target_row.get('protests', 0))}, riots={int(target_row.get('riots', 0))}, "
+            f"violence against civilians={int(target_row.get('violence_against_civilians', 0))}, "
+            f"fatalities={int(target_row.get('fatalities', 0))}, so the app was signaling measurable escalation pressure rather than claiming foreknowledge of the October 7 attack itself."
+        )
+        return "\n\n".join([base_sentence, signal_sentence, detail_sentence])
 
     def _render_ai(result: str):
         """Render AI response with each sentence as a readable paragraph."""
@@ -1890,18 +1970,22 @@ document.querySelector('a[href="#ai-section"]').addEventListener('click', functi
         )
         if st.button("Get Answer", key="ai_freeform_btn") and user_question:
             with st.spinner("Analyzing..."):
-                question_context = _build_question_context(user_question)
-                prompt = (
-                    f"The user is asking about {selected_country}'s conflict escalation data.\n\n"
-                    f"Context — Overall trend: {trend_dir}. Peak index: {peak_val:.1f} in {peak_month}. "
-                    f"Escalation flagged in {num_flagged} months.\n\n"
-                    f"{question_context}\n\n"
-                    f"User question: {user_question}\n\n"
-                    f"Answer in 2-4 sentences. If the user referenced a specific month, answer that month directly and explain the plotted reasoning behind the signal. "
-                    f"When relevant, name whether it was a pre-escalation warning or a threshold breach, and explain which event types pushed it there. "
-                    f"Do not refuse or say the month is unavailable if it appears in the provided context."
-                )
-                result = _call_claude(prompt, system=_ai_system, max_tokens=350)
+                direct_answer = _build_direct_question_answer(user_question)
+                if direct_answer is not None:
+                    result = direct_answer
+                else:
+                    question_context = _build_question_context(user_question)
+                    prompt = (
+                        f"The user is asking about {selected_country}'s conflict escalation data.\n\n"
+                        f"Context — Overall trend: {trend_dir}. Peak index: {peak_val:.1f} in {peak_month}. "
+                        f"Escalation flagged in {num_flagged} months.\n\n"
+                        f"{question_context}\n\n"
+                        f"User question: {user_question}\n\n"
+                        f"Answer in 2-4 sentences. If the user referenced a specific month, answer that month directly and explain the plotted reasoning behind the signal. "
+                        f"When relevant, name whether it was a pre-escalation warning or a threshold breach, and explain which event types pushed it there. "
+                        f"Do not refuse or say the month is unavailable if it appears in the provided context."
+                    )
+                    result = _call_claude(prompt, system=_ai_system, max_tokens=450)
                 _render_ai(result)
 elif not run_btn and st.session_state.get("page") != "map":
     st.info(
