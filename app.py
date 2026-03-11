@@ -1631,7 +1631,7 @@ document.querySelector('a[href="#ai-section"]').addEventListener('click', functi
         "You are a concise geopolitical intelligence analyst. "
         "Write in plain English. Be specific and data-driven. No bullet lists — flowing prose only. "
         "Do not mention ACLED by name. Do not use phrases like 'the data shows' — just state the finding directly. "
-        f"IMPORTANT: Your first sentence must always be a brief disclaimer that the data only extends to {_data_latest} "
+        f"IMPORTANT: Your first sentence must always be a brief disclaimer that the data only extends from Jan 2018 to {_data_latest} "
         "due to access limitations, so the analysis reflects that period, not the present day. "
         "Keep this disclaimer to one short sentence, then continue with the analysis. "
         "Write each sentence as its own paragraph separated by a blank line."
