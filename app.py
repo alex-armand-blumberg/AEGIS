@@ -22,7 +22,7 @@ def _call_claude(prompt: str, system: str = "", max_tokens: int = 500) -> str:
     try:
         messages = [{"role": "user", "content": prompt}]
         body = {
-            "model": "claude-sonnet-4-20250514",
+            "model": "claude-haiku-4-5-20251001",
             "max_tokens": max_tokens,
             "messages": messages,
         }
