@@ -37,12 +37,57 @@ if st.session_state["page"] == "landing":
     if LANDING_VIDEO.exists():
         v64 = base64.b64encode(open(LANDING_VIDEO, "rb").read()).decode()
         video_tag = f"""
-        <video autoplay loop muted playsinline
+        <video id="aegis-bg-video" autoplay loop muted playsinline
           style="position:fixed;inset:0;width:100%;height:100%;
                  object-fit:cover;opacity:0.42;
                  filter:grayscale(55%) contrast(1.1);z-index:0;pointer-events:none;">
           <source src="data:video/mp4;base64,{v64}" type="video/mp4">
-        </video>"""
+        </video>
+        <div id="aegis-video-controls" style="
+            position:fixed;bottom:18px;right:18px;z-index:100;
+            display:flex;align-items:center;gap:10px;
+        ">
+          <button id="aegis-pause-btn" onclick="aegisToggleVideo()" style="
+              background:rgba(2,8,20,0.70);border:1px solid rgba(255,255,255,0.18);
+              color:rgba(255,255,255,0.55);font-size:11px;letter-spacing:0.08em;
+              padding:5px 11px;border-radius:5px;cursor:pointer;
+              font-family:-apple-system,Inter,sans-serif;
+              transition:border-color .2s,color .2s;
+          ">⏸ PAUSE</button>
+          <div style="width:110px;height:3px;background:rgba(255,255,255,0.12);border-radius:2px;overflow:hidden;">
+            <div id="aegis-progress-bar" style="
+                height:100%;width:0%;
+                background:rgba(255,255,255,0.35);
+                border-radius:2px;transition:width 0.25s linear;
+            "></div>
+          </div>
+        </div>
+        <script>
+        (function() {{
+          const vid = document.getElementById('aegis-bg-video');
+          const bar = document.getElementById('aegis-progress-bar');
+          const btn = document.getElementById('aegis-pause-btn');
+          let paused = false;
+          function updateBar() {{
+            if(vid.duration) bar.style.width = (vid.currentTime / vid.duration * 100) + '%';
+            requestAnimationFrame(updateBar);
+          }}
+          requestAnimationFrame(updateBar);
+          window.aegisToggleVideo = function() {{
+            paused = !paused;
+            if(paused) {{ vid.pause(); btn.textContent = '▶ PLAY'; }}
+            else {{ vid.play(); btn.textContent = '⏸ PAUSE'; }}
+          }};
+          btn.addEventListener('mouseenter', function() {{
+            btn.style.borderColor = 'rgba(255,255,255,0.45)';
+            btn.style.color = 'rgba(255,255,255,0.85)';
+          }});
+          btn.addEventListener('mouseleave', function() {{
+            btn.style.borderColor = 'rgba(255,255,255,0.18)';
+            btn.style.color = 'rgba(255,255,255,0.55)';
+          }});
+        }})();
+        </script>"""
     else:
         video_tag = ""
 
