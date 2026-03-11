@@ -14,25 +14,25 @@ import feedparser
 # Claude AI helper
 # ----------------------------
 def _call_claude(prompt: str, system: str = "", max_tokens: int = 500) -> str:
-    """Call Claude claude-sonnet-4-20250514 via Anthropic API. Returns text or error string."""
+    """Call Groq (Llama 3) API. Returns text or error string."""
     try:
-        api_key = st.secrets["anthropic"]["api_key"]
+        api_key = st.secrets["groq"]["api_key"]
     except Exception:
-        return "⚠️ Anthropic API key not configured. Add it to .streamlit/secrets.toml as [anthropic] api_key = '...'"
+        return "⚠️ Groq API key not configured. Add it to .streamlit/secrets.toml as [groq] api_key = '...'"
     try:
-        messages = [{"role": "user", "content": prompt}]
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
         body = {
-            "model": "claude-haiku-4-5-20251001",
+            "model": "llama-3.1-8b-instant",
             "max_tokens": max_tokens,
             "messages": messages,
         }
-        if system:
-            body["system"] = system
         r = requests.post(
-            "https://api.anthropic.com/v1/messages",
+            "https://api.groq.com/openai/v1/chat/completions",
             headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
+                "Authorization": f"Bearer {api_key}",
                 "content-type": "application/json",
             },
             json=body,
@@ -40,7 +40,7 @@ def _call_claude(prompt: str, system: str = "", max_tokens: int = 500) -> str:
         )
         if not r.ok:
             return f"⚠️ API error {r.status_code}: {r.text}"
-        return r.json()["content"][0]["text"]
+        return r.json()["choices"][0]["message"]["content"]
     except Exception as e:
         return f"⚠️ AI analysis unavailable: {e}"
 
