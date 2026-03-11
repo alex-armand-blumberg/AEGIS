@@ -1847,9 +1847,17 @@ document.querySelector('a[href="#ai-section"]').addEventListener('click', functi
             f"<p style='margin:0 0 10px 0;color:#e2e8f0;font-size:14px;line-height:1.75;'>{s}</p>"
             for s in sentences
         )
+        attribution = (
+            "<p style='margin:12px 0 0 0;font-size:11px;color:rgba(255,255,255,0.28);"
+            "letter-spacing:0.04em;border-top:1px solid rgba(255,255,255,0.07);padding-top:10px;'>"
+            "AI-generated analysis using conflict data sourced from "
+            "<a href='https://acleddata.com' target='_blank' "
+            "style='color:rgba(255,255,255,0.4);text-decoration:underline;'>ACLED (acleddata.com)</a>. "
+            "Not a substitute for ACLED's own analysis.</p>"
+        )
         st.markdown(
             f"<div style='background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;"
-            f"padding:18px 22px;'>{paragraphs}</div>",
+            f"padding:18px 22px;'>{paragraphs}{attribution}</div>",
             unsafe_allow_html=True,
         )
 
