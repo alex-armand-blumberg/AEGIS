@@ -120,6 +120,15 @@ if st.session_state["page"] == "landing":
         [data-testid="stButton"] button:hover {{
             transform: translateY(-2px) !important; opacity: 0.90 !important;
         }}
+
+        /* Page fade-in */
+        @keyframes aegis-fadein {{
+            from {{ opacity: 0; }}
+            to   {{ opacity: 1; }}
+        }}
+        [data-testid="stMain"] > div {{
+            animation: aegis-fadein 0.35s ease forwards;
+        }}
         </style>
         {video_tag}
         """,
@@ -718,6 +727,8 @@ with st.sidebar.expander("Background"):
 
 I've always had a deep love of Greek mythology — so when naming this project, the choice felt natural. In myth, the Aegis was the divine shield of Zeus and Athena: a symbol of protection, foreknowledge, and strategic power. Athena carried it into battle not just as armor, but as an instrument of clarity — it was said to inspire terror in enemies and confidence in allies.
 
+That felt like exactly the right metaphor. AEGIS the program is designed to do the same thing in the modern context: cut through the noise of global events, surface what matters, and give decision-makers the clarity to act before crises escalate. The shield doesn't fight the war — it tells you where the threat is coming from.
+
 **Why conflict data?**
 
 I've been fascinated by current affairs and geopolitics for as long as I can remember. Watching conflicts unfold in the news and wondering what the underlying patterns were — what signals preceded an escalation, what data existed but wasn't being surfaced — is what pushed me to build something that tries to answer those questions systematically.
@@ -843,6 +854,18 @@ else:
 # ----------------------------
 # Main header
 # ----------------------------
+st.markdown("""
+<style>
+@keyframes aegis-fadein {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+[data-testid="stMain"] > div {
+    animation: aegis-fadein 0.35s ease forwards;
+}
+</style>
+""", unsafe_allow_html=True)
+
 if st.button("← Back to Home", key="back_btn"):
     st.session_state["page"] = "landing"
     st.rerun()
@@ -898,7 +921,7 @@ if st.session_state.get("page") == "map":
     )
 else:
     st.caption(
-        "PLEASE WAIT A COUPLE SECONDS FOR THE SOFTWARE TO LOAD. Enter a country name and click Generate plot to see the ACLED-based Escalation Index. "
+        "WAIT A COUPLE SECONDS FOR THE SOFTWARE TO LOAD. Enter a country name and click Generate plot to see the ACLED-based Escalation Index. "
         "The index combines five leading indicators — event frequency acceleration, explosions, "
         "strategic developments, civil unrest, and civilian targeting — into a single 0–100 score."
     )
